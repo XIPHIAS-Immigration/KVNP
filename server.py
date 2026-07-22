@@ -594,15 +594,27 @@ def process_image(image_bytes, profile, options):
     # Country law: the selected programme's allowedEdits gates every correction,
     # REGARDLESS of what the client asked for. Clamped requests are reported so
     # the UI can say "disabled by <country> policy" instead of silently ignoring.
-    allowed = dict(profile.get("allowedEdits") or {})
+    official_allowed = dict(profile.get("allowedEdits") or {})
     policy = edit_policy(profile)
+    if policy["strict"]:
+        for key in ("straighten", "tone", "lighting", "background", "enhance", "rescue"):
+            official_allowed[key] = False
+    allowed = dict(official_allowed)
+    # Editing preview is the only escape hatch from a programme policy lock. It
+    # is deliberately enforced on the server and always produces a conspicuous
+    # watermark, so a client cannot request a clean altered submission photo.
+    preview_mode = bool(options.get("previewMode", False))
+    if preview_mode:
+        for key in ("straighten", "tone", "lighting", "background", "enhance"):
+            allowed[key] = True
+        allowed["rescue"] = False
     # Authorities that require an original/unaltered capture get a hard server
     # lock. Client flags are untrusted and can never re-enable pixel edits.
-    if policy["strict"]:
+    if policy["strict"] and not preview_mode:
         for key in ("straighten", "tone", "lighting", "background", "enhance", "rescue"):
             allowed[key] = False
     policy_clamped = []
-    if policy["strict"] and has_manual:
+    if policy["strict"] and has_manual and not preview_mode:
         has_manual = False
         policy_clamped.append("manual_geometry")
 
@@ -673,7 +685,13 @@ def process_image(image_bytes, profile, options):
         landmarks=None if has_manual else landmarks,
     )
     if matte is not None and not has_manual:
-        face = refine_head_from_matte(face, matte, width, height)
+        face = refine_head_from_matte(
+            face,
+            matte,
+            width,
+            height,
+            measure=profile.get("head", {}).get("measure", "chin_to_top_of_head"),
+        )
 
     # When the background is replaced we can pad the canvas with background to
     # compose exactly to spec (head size + margins) even from a tightly-framed
@@ -724,8 +742,9 @@ def process_image(image_bytes, profile, options):
         dpi_final = round(output_spec["widthPx"] / (output_spec["printWidthMm"] / 25.4))
     else:
         dpi_final = 300
-    final_bytes = set_jpeg_dpi(encode_jpeg(final, profile), dpi_final)
-    overlay = build_overlay(source, landmarks, crop)
+    output_final = add_preview_watermark(final) if preview_mode else final
+    final_bytes = set_jpeg_dpi(encode_jpeg(output_final, profile), dpi_final)
+    overlay = build_overlay(source, landmarks, crop, matte=matte, face=face)
     overlay_bytes = encode_jpeg_bytes(overlay, 88)
     # "Before": the original capture framed to the same output size with no
     # correction/matte/enhancement, for an honest before/after comparison.
@@ -767,8 +786,26 @@ def process_image(image_bytes, profile, options):
         enhancement_mode,
         corrections,
     )
+    if preview_mode:
+        checks.insert(
+            0,
+            check(
+                "preview_only",
+                "Output mode",
+                "warning",
+                "watermarked editing preview",
+                "not valid for submission",
+            ),
+        )
     pipeline = build_pipeline_report(replace_background, mask_stats, enhance, enhancement_mode)
     decision = build_decision(source_quality, checks, pipeline)
+    if preview_mode:
+        decision = {
+            **decision,
+            "status": "review",
+            "title": "Editing preview",
+            "message": "Cleanup tools are active. This watermarked result is for visual evaluation only, not submission.",
+        }
 
     return {
         "ok": True,
@@ -785,7 +822,9 @@ def process_image(image_bytes, profile, options):
         "checks": checks,
         "corrections": corrections,
         "policyClamped": policy_clamped,
-        "allowedEdits": allowed,
+        "allowedEdits": official_allowed,
+        "effectiveEdits": allowed,
+        "previewOnly": preview_mode,
         "profileAuthority": profile_authority,
         "outputBytes": len(final_bytes),
         "source": {"width": width, "height": height},
@@ -887,7 +926,7 @@ def measure_face(points, face_count):
     }
 
 
-def refine_head_from_matte(face, mask, width, height):
+def refine_head_from_matte(face, mask, width, height, measure="chin_to_top_of_head"):
     """Measure the true crown (top of head/hair) from the person matte instead of
     extrapolating it from facial landmarks. Head height = chin-to-crown then
     reflects reality (tall/voluminous hair, head coverings, bald heads), which is
@@ -913,6 +952,13 @@ def refine_head_from_matte(face, mask, width, height):
     if crown_y >= chin_y or new_head < head * 0.7 or new_head > head * 1.9:
         return face
     refined = dict(face)
+    refined["silhouetteTopY"] = round(crown_y, 2)
+    # Crown-based specifications measure the anatomical skull, not the top of
+    # voluminous hair. Keep Face Landmarker geometry for the measurement while
+    # retaining the matte top so calculate_crop can still avoid clipping hair.
+    if measure in {"chin_to_crown", "face_area_estimate"}:
+        refined["headSource"] = "landmark-crown+matte-silhouette"
+        return refined
     refined["headHeight"] = round(new_head, 2)
     refined["centerY"] = round(chin_y - new_head / 2.0, 2)
     refined["headSource"] = "matte-crown"
@@ -926,6 +972,7 @@ def calculate_crop(width, height, face, profile, allow_pad=False):
     crop_width = crop_height * aspect
 
     head_top = face["centerY"] - face["headHeight"] / 2
+    visible_top = min(head_top, float(face.get("silhouetteTopY", head_top)))
     eye_rule = profile["head"].get("eye")
     eye_y = face.get("eyeY")
 
@@ -944,9 +991,10 @@ def calculate_crop(width, height, face, profile, allow_pad=False):
             if not allow_pad:
                 # Without padding we cannot invent headroom, so never let the crown
                 # clip: keep at least a sliver of margin above the top of the head.
-                top = min(top, head_top - ch * 0.015)
+                top = min(top, visible_top - ch * 0.015)
             return top
-        return head_top - ch * (profile["head"]["topMarginPercent"] / 100)
+        top = head_top - ch * (profile["head"]["topMarginPercent"] / 100)
+        return min(top, visible_top - ch * 0.015)
 
     crop_x = face["centerX"] - crop_width / 2
     crop_y = vertical_top(crop_height)
@@ -2342,26 +2390,162 @@ def extract_face_quality_region(source_bgr, face):
     return image[y1:y2, x1:x2]
 
 
-def build_overlay(source_bgr, points, crop):
-    overlay = source_bgr.copy()
-    dim = overlay.copy()
-    cv2.rectangle(dim, (0, 0), (overlay.shape[1], overlay.shape[0]), (10, 24, 39), thickness=-1)
-    overlay = cv2.addWeighted(dim, 0.28, overlay, 0.72, 0)
+def head_outline_from_matte(mask, points, face, width, height):
+    """Return a visible head silhouette: hair + ears from the person matte and
+    the lower jaw from Face Landmarker. MediaPipe's built-in FACE_OVAL traces
+    facial skin, so presenting it as a head outline is misleading.
+    """
+    if mask is None or face is None or len(points) <= max(FACE_OVAL):
+        return None
+
+    matte = np.asarray(mask, dtype=np.float32)
+    if matte.shape[:2] != (height, width):
+        matte = cv2.resize(matte, (width, height), interpolation=cv2.INTER_LINEAR)
+    binary = (matte > 0.34).astype(np.uint8)
+    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
+    if count <= 1:
+        return None
+
+    cx = int(clamp(float(face["centerX"]), 0, width - 1))
+    cy = int(clamp(float(face["centerY"]), 0, height - 1))
+    radius = max(3, int(round(float(face.get("faceWidth", face["headHeight"] * 0.55)) * 0.12)))
+    patch = labels[max(0, cy - radius) : min(height, cy + radius + 1), max(0, cx - radius) : min(width, cx + radius + 1)]
+    candidates = patch[patch > 0]
+    if candidates.size:
+        component_label = int(np.bincount(candidates).argmax())
+    else:
+        component_label = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    component = labels == component_label
+
+    head_height = float(face["headHeight"])
+    face_width = float(face.get("faceWidth", head_height * 0.58))
+    half_roi = max(face_width * 0.92, head_height * 0.66)
+    roi_x1 = int(clamp(cx - half_roi, 0, width - 1))
+    roi_x2 = int(clamp(cx + half_roi, roi_x1 + 1, width))
+    # Join below the ears so their full outer edge comes from the matte; below
+    # these landmarks the Face Landmarker jaw is more stable than the body mask.
+    right_join = points[288]
+    left_join = points[58]
+    scan_bottom = int(clamp(max(right_join["y"], left_join["y"]), 1, height - 1))
+    expected_crown = float(face["centerY"]) - head_height / 2.0
+    scan_top = int(clamp(expected_crown - head_height * 0.08, 0, scan_bottom - 1))
+
+    rows = []
+    for row_y in range(scan_top, scan_bottom + 1):
+        xs = np.flatnonzero(component[row_y, roi_x1:roi_x2])
+        if xs.size >= 2:
+            rows.append((row_y, float(roi_x1 + xs[0]), float(roi_x1 + xs[-1])))
+    if len(rows) < 10:
+        return None
+
+    # Ignore isolated pixels above the real crown, then smooth segmentation
+    # stair-steps without rounding away curls or ears.
+    first_run = 0
+    for index in range(len(rows) - 3):
+        if rows[index + 3][0] - rows[index][0] <= 4:
+            first_run = index
+            break
+    rows = rows[first_run:]
+    step = max(2, int(round(head_height / 110.0)))
+    sampled = rows[::step]
+    if sampled[-1] != rows[-1]:
+        sampled.append(rows[-1])
+
+    ys = np.array([item[0] for item in sampled], dtype=np.float32)
+    left_x = np.array([item[1] for item in sampled], dtype=np.float32)
+    right_x = np.array([item[2] for item in sampled], dtype=np.float32)
+
+    def smooth(values):
+        if len(values) < 5:
+            return values
+        kernel = np.array([1, 2, 3, 2, 1], dtype=np.float32)
+        kernel /= kernel.sum()
+        return np.convolve(np.pad(values, (2, 2), mode="edge"), kernel, mode="valid")
+
+    left_x = smooth(left_x)
+    right_x = smooth(right_x)
+    left_side = [(int(round(left_x[i])), int(round(ys[i]))) for i in range(len(ys) - 1, -1, -1)]
+    right_side = [(int(round(right_x[i])), int(round(ys[i]))) for i in range(len(ys))]
+
+    right_pos = FACE_OVAL.index(288)
+    left_pos = FACE_OVAL.index(58)
+    jaw = [
+        (int(round(points[index]["x"])), int(round(points[index]["y"])))
+        for index in FACE_OVAL[right_pos : left_pos + 1]
+    ]
+    polygon = np.array(left_side + right_side + jaw, dtype=np.int32)
+    return polygon if len(polygon) >= 12 else None
+
+
+def add_preview_watermark(image_bgr):
+    result = ensure_bgr(image_bgr).copy()
+    height, width = result.shape[:2]
+    band_height = max(34, int(round(height * 0.09)))
+    band = result.copy()
+    cv2.rectangle(band, (0, height - band_height), (width, height), (12, 15, 19), thickness=-1)
+    result = cv2.addWeighted(band, 0.82, result, 0.18, 0)
+    label = "EDITING PREVIEW - NOT FOR SUBMISSION"
+    scale = max(0.38, min(0.9, width / 720.0))
+    thickness = max(1, int(round(scale * 2)))
+    text_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, scale, thickness)[0]
+    while text_size[0] > width - 20 and scale > 0.3:
+        scale -= 0.04
+        text_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, scale, thickness)[0]
+    origin = (max(10, (width - text_size[0]) // 2), height - max(9, (band_height - text_size[1]) // 2))
+    cv2.putText(result, label, origin, cv2.FONT_HERSHEY_SIMPLEX, scale, (64, 186, 255), thickness, cv2.LINE_AA)
+    return result
+
+
+def build_overlay(source_bgr, points, crop, matte=None, face=None):
+    source = ensure_bgr(source_bgr)
+    dim = source.copy()
+    cv2.rectangle(dim, (0, 0), (source.shape[1], source.shape[0]), (10, 24, 39), thickness=-1)
+    overlay = cv2.addWeighted(dim, 0.36, source, 0.64, 0)
 
     x = int(round(crop["x"]))
     y = int(round(crop["y"]))
     w = int(round(crop["width"]))
     h = int(round(crop["height"]))
-    cv2.rectangle(overlay, (x, y), (x + w, y + h), (46, 204, 113), 5, lineType=cv2.LINE_AA)
+    x1, y1 = max(0, x), max(0, y)
+    x2, y2 = min(source.shape[1], x + w), min(source.shape[0], y + h)
+    if x2 > x1 and y2 > y1:
+        overlay[y1:y2, x1:x2] = source[y1:y2, x1:x2]
 
-    oval = np.array([[int(points[index]["x"]), int(points[index]["y"])] for index in FACE_OVAL], dtype=np.int32)
-    cv2.polylines(overlay, [oval], isClosed=True, color=(255, 178, 36), thickness=4, lineType=cv2.LINE_AA)
+    crop_thickness = max(3, int(round(max(source.shape[:2]) / 420)))
+    cv2.rectangle(overlay, (x, y), (x + w, y + h), (46, 204, 113), crop_thickness, lineType=cv2.LINE_AA)
 
-    for index in FACE_OVAL[::2]:
-        point = points[index]
-        cv2.circle(overlay, (int(point["x"]), int(point["y"])), 2, (255, 235, 173), -1, lineType=cv2.LINE_AA)
+    head_outline = head_outline_from_matte(matte, points, face, source.shape[1], source.shape[0])
+    if head_outline is None:
+        head_outline = np.array(
+            [[int(points[index]["x"]), int(points[index]["y"])] for index in FACE_OVAL],
+            dtype=np.int32,
+        )
+    cv2.polylines(
+        overlay,
+        [head_outline],
+        isClosed=True,
+        color=(255, 178, 36),
+        thickness=max(2, crop_thickness - 1),
+        lineType=cv2.LINE_AA,
+    )
 
     cv2.line(overlay, (x + w // 2, y), (x + w // 2, y + h), (60, 105, 255), 2, lineType=cv2.LINE_AA)
+    font_scale = max(0.42, min(0.78, max(source.shape[:2]) / 1500.0))
+    label_y = max(22, y + 27)
+    cv2.putText(overlay, "FINAL CROP", (max(8, x + 10), label_y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (46, 204, 113), 2, cv2.LINE_AA)
+    outline_anchor = tuple(head_outline[np.argmin(head_outline[:, 1])])
+    cv2.putText(
+        overlay,
+        "HEAD + EARS",
+        (max(8, int(outline_anchor[0]) - 45), max(22, int(outline_anchor[1]) - 10)),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        font_scale,
+        (255, 178, 36),
+        2,
+        cv2.LINE_AA,
+    )
     return overlay
 
 
@@ -2516,7 +2700,7 @@ def build_checks(face, crop, profile, stats, background_stats_result, output_byt
 
     checks = [
         check("face_detection", "Face detection", "pass" if face["faceCount"] == 1 else "fail", f'{face["faceCount"]} face / Python FaceMesh', "1 clear face"),
-        check("face_outline", "Face outline", "pass", "Face oval mapped", "shape contour"),
+        check("face_outline", "Head outline", "pass", "hair, ears and jaw mapped", "visible head silhouette"),
         check("head_size", "Head size", range_status(head_percent, profile["head"]["minPercent"], profile["head"]["maxPercent"]), f"{head_percent:.1f}%", f'{profile["head"]["minPercent"]}-{profile["head"]["maxPercent"]}%'),
         check("head_center", "Horizontal center", threshold_status(center_offset, 5, 8), f"{center_offset:.1f}% offset", "<= 5%"),
         check("top_margin", "Top margin", top_margin_status, f"{top_margin:.1f}%", f'{profile["head"]["topMarginPercent"]}% target'),
@@ -2645,7 +2829,7 @@ def build_pipeline_report(background_replaced, mask_stats, enhanced, enhancement
             "label": "Geometry",
             "engine": "MediaPipe Face Landmarker",
             "status": "pass",
-            "detail": "478-point face mesh, pose, mouth, crop placement",
+            "detail": "478-point face mesh plus matte head silhouette, pose, mouth, crop placement",
         },
         {
             "id": "matting",

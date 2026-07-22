@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>KVNP Passport Studio</title>
-    <link rel="stylesheet" href="src/styles.css?v=kvnp-studio-25" />
+    <link rel="stylesheet" href="src/styles.css?v=kvnp-studio-26" />
   </head>
   <body>
     <!-- ============ AUTH ============ -->
@@ -137,7 +137,7 @@
               <div id="empty-state" class="empty-state">
                 <div class="empty-glyph">⬡</div>
                 <strong>Load a portrait photo</strong>
-                <span>The crop frame and face trace appear here.</span>
+                <span>Green marks the final crop. Cyan traces the visible head, including hair and ears.</span>
               </div>
               <div id="country-gate" class="country-gate">
                 <div class="country-gate-inner">
@@ -188,6 +188,16 @@
 
             <div class="section-label policy-title">What this country allows</div>
             <div id="policy-list" class="policy-list"></div>
+            <div class="preview-mode-card">
+              <div>
+                <strong>Need to test the cleanup tools?</strong>
+                <span>Editing preview enables them with a permanent not-for-submission watermark.</span>
+              </div>
+              <label class="mini-toggle" for="preview-mode">
+                <input id="preview-mode" type="checkbox" />
+                Editing preview
+              </label>
+            </div>
             <div id="source-links" class="source-links"></div>
 
             <div class="section-divider"></div>
@@ -387,8 +397,8 @@
       </div>
     </div>
 
-    <script src="src/vendor/gsap.min.js?v=kvnp-studio-25"></script>
-    <script src="src/motion.js?v=kvnp-studio-25"></script>
-    <script type="module" src="src/app.js?v=kvnp-studio-25"></script>
+    <script src="src/vendor/gsap.min.js?v=kvnp-studio-26"></script>
+    <script src="src/motion.js?v=kvnp-studio-26"></script>
+    <script type="module" src="src/app.js?v=kvnp-studio-26"></script>
   </body>
 </html>

@@ -1,5 +1,5 @@
-import { COUNTRIES, RULE_PROFILES, getDefaultProfile, getProfilesForCountry } from "./rules.js?v=kvnp-studio-25";
-import { initCoach, analyzeFrame, coachAvailable } from "./capture.js?v=kvnp-studio-25";
+import { COUNTRIES, RULE_PROFILES, getDefaultProfile, getProfilesForCountry } from "./rules.js?v=kvnp-studio-26";
+import { initCoach, analyzeFrame, coachAvailable } from "./capture.js?v=kvnp-studio-26";
 
 const elements = {
   fileInput: document.querySelector("#file-input"),
@@ -55,6 +55,7 @@ const elements = {
   countryGate: document.querySelector("#country-gate"),
   gateConfirm: document.querySelector("#gate-confirm"),
   policyList: document.querySelector("#policy-list"),
+  previewMode: document.querySelector("#preview-mode"),
   sheetDpi: document.querySelector("#sheet-dpi"),
   sheetCopies: document.querySelector("#sheet-copies"),
   touchupToggle: document.querySelector("#touchup-toggle"),
@@ -158,6 +159,7 @@ const state = {
   outputScale: 1,
   outputDpi: 300,
   outputQuality: 92,
+  previewMode: false,
 };
 
 let adjustBakeTimer = 0;
@@ -215,6 +217,7 @@ function bindEvents() {
   elements.autoStraighten.addEventListener("change", handleRenderOptionChange);
   elements.autoTone.addEventListener("change", handleRenderOptionChange);
   elements.autoLighting.addEventListener("change", handleRenderOptionChange);
+  elements.previewMode.addEventListener("change", handlePreviewModeChange);
   elements.gateConfirm.addEventListener("click", confirmProgramme);
   elements.checksList.addEventListener("click", handleHumanCheckClick);
   elements.backgroundCleanup.addEventListener("change", handleRenderOptionChange);
@@ -347,6 +350,8 @@ function updateQueueBadge() {
 function handleProfileChange() {
   confirmProgramme();
   state.profile = RULE_PROFILES.find((profile) => profile.id === elements.profileSelect.value) ?? getDefaultProfile();
+  state.previewMode = false;
+  elements.previewMode.checked = false;
   applyProfileAutomationDefaults();
   renderProfile();
   renderVisionStatus();
@@ -363,6 +368,8 @@ function handleCountryChange() {
   confirmProgramme();
   const profiles = getProfilesForCountry(elements.countrySelect.value);
   state.profile = profiles[0] ?? getDefaultProfile();
+  state.previewMode = false;
+  elements.previewMode.checked = false;
   populateProgrammeSelect(state.profile.country);
   applyProfileAutomationDefaults();
   renderProfile();
@@ -407,6 +414,33 @@ function handleRenderOptionChange() {
   }
 }
 
+function handlePreviewModeChange() {
+  state.previewMode = elements.previewMode.checked;
+  if (state.previewMode) {
+    state.autoStraighten = true;
+    state.autoTone = true;
+    state.autoLighting = true;
+    state.backgroundReplaced = true;
+    state.enhanceOutput = true;
+    state.enhancementMode = "natural";
+    state.backgroundCleanup = "balanced";
+    elements.autoStraighten.checked = true;
+    elements.autoTone.checked = true;
+    elements.autoLighting.checked = true;
+    elements.backgroundReplace.checked = true;
+    elements.enhanceOutput.checked = true;
+    elements.enhancementMode.value = state.enhancementMode;
+    elements.backgroundCleanup.value = state.backgroundCleanup;
+    applyPolicyControlGate();
+  } else {
+    applyProfileAutomationDefaults();
+  }
+  renderPolicyList();
+  updateOutputNote();
+  if (state.originalFile) scheduleServerProcessing();
+  else scheduleAnalysis();
+}
+
 function applyProfileAutomationDefaults() {
   const automation = state.profile.automation ?? {};
   state.backgroundReplaced = automation.backgroundReplacement !== false;
@@ -429,7 +463,12 @@ function applyProfileAutomationDefaults() {
   elements.backgroundCleanup.value = state.backgroundCleanup;
   syncOutputControls();
 
-  // Country law gates the controls: what the programme forbids is off + locked.
+  applyPolicyControlGate();
+}
+
+function applyPolicyControlGate() {
+  // Submission mode follows programme policy. Editing preview can exercise the
+  // pipeline because the server permanently watermarks that result.
   const allowed = state.profile.allowedEdits ?? {};
   const gates = [
     ["autoStraighten", "straighten"],
@@ -439,7 +478,7 @@ function applyProfileAutomationDefaults() {
     ["enhanceOutput", "enhance"],
   ];
   for (const [el, key] of gates) {
-    const banned = allowed[key] === false;
+    const banned = allowed[key] === false && !state.previewMode;
     elements[el].disabled = banned;
     if (banned) {
       elements[el].checked = false;
@@ -448,11 +487,11 @@ function applyProfileAutomationDefaults() {
       elements[el].title = "";
     }
   }
-  if (allowed.straighten === false) state.autoStraighten = false;
-  if (allowed.tone === false) state.autoTone = false;
-  if (allowed.lighting === false) state.autoLighting = false;
-  if (allowed.background === false) state.backgroundReplaced = false;
-  if (allowed.enhance === false) state.enhanceOutput = false;
+  if (!state.previewMode && allowed.straighten === false) state.autoStraighten = false;
+  if (!state.previewMode && allowed.tone === false) state.autoTone = false;
+  if (!state.previewMode && allowed.lighting === false) state.autoLighting = false;
+  if (!state.previewMode && allowed.background === false) state.backgroundReplaced = false;
+  if (!state.previewMode && allowed.enhance === false) state.enhanceOutput = false;
   // Generative "strong"/rescue restore is not offered in the UI (it would alter the
   // face). If a stale preset ever carries it, fall back to a non-generative mode.
   if (state.enhancementMode === "strong") {
@@ -460,9 +499,9 @@ function applyProfileAutomationDefaults() {
     elements.enhancementMode.value = "studio";
   }
 
-  elements.enhancementMode.disabled = allowed.enhance === false;
-  elements.backgroundCleanup.disabled = allowed.background === false;
-  elements.backgroundColor.disabled = allowed.background === false;
+  elements.enhancementMode.disabled = allowed.enhance === false && !state.previewMode;
+  elements.backgroundCleanup.disabled = allowed.background === false && !state.previewMode;
+  elements.backgroundColor.disabled = allowed.background === false && !state.previewMode;
   applyAdjustmentPolicyGate();
 
   // Touch-up paints over the background, so it is gated by the same background policy.
@@ -482,6 +521,11 @@ function syncOutputControls() {
 
 function updateOutputNote() {
   if (!elements.outputNote) return;
+  if (state.previewMode) {
+    elements.outputNote.classList.add("warning");
+    elements.outputNote.textContent = "Watermarked editing preview. Switch back to Submission mode for the application file.";
+    return;
+  }
   const labels = {
     "image/jpeg": "JPEG",
     "image/png": "PNG",
@@ -504,7 +548,7 @@ function isValidationOnlyProfile() {
 }
 
 function applyAdjustmentPolicyGate() {
-  const validationOnly = isValidationOnlyProfile();
+  const validationOnly = isValidationOnlyProfile() && !state.previewMode;
   if (validationOnly) {
     for (const key of Object.keys(state.adjust)) state.adjust[key] = 0;
   }
@@ -523,7 +567,7 @@ function applyAdjustmentPolicyGate() {
 
 function applyTouchupGate() {
   if (!elements.touchupToggle) return;
-  const banned = state.profile?.allowedEdits?.background === false;
+  const banned = state.profile?.allowedEdits?.background === false && !state.previewMode;
   if (banned) {
     elements.touchupToggle.disabled = true;
     elements.touchupToggle.title = `Not permitted for ${state.profile.countryName} — ${state.profile.programme}`;
@@ -566,12 +610,14 @@ function renderPolicyList() {
     elements.policyList.innerHTML = "";
     return;
   }
-  const mode = isValidationOnlyProfile()
-    ? `<div class="policy-mode validation"><strong>Validation only</strong><span>We measure and format the original capture. Capture defects require a retake.</span></div>`
+  const mode = state.previewMode
+    ? `<div class="policy-mode preview"><strong>Editing preview active</strong><span>Identity-preserving cleanup tools are enabled. The result is watermarked and cannot be mistaken for a submission file.</span></div>`
+    : isValidationOnlyProfile()
+    ? `<div class="policy-mode validation"><strong>Submission mode: validation only</strong><span>This programme does not permit the listed pixel edits. We crop, size and check the original capture; defects require a retake.</span></div>`
     : `<div class="policy-mode assisted"><strong>Assisted editing</strong><span>Only the operations listed below can be applied.</span></div>`;
   const chips = Object.keys(EDIT_LABELS)
     .map((key) => {
-      const ok = allowed[key] !== false;
+      const ok = allowed[key] !== false || (state.previewMode && key !== "rescue");
       return `<span class="policy-chip ${ok ? "ok" : "no"}">${ok ? "✓" : "✗"} ${escapeHtml(EDIT_LABELS[key])}</span>`;
     })
     .join("");
@@ -716,6 +762,9 @@ async function processOnServer() {
     state.decision = result.decision ?? null;
     state.corrections = result.corrections ?? [];
     state.policyClamped = result.policyClamped ?? [];
+    state.previewMode = Boolean(result.previewOnly);
+    elements.previewMode.checked = state.previewMode;
+    applyPolicyControlGate();
     state.beforeDataUrl = result.beforeDataUrl ?? null;
     state.checks = state.serverChecks;
     clearTouchUp();
@@ -790,6 +839,7 @@ function getProcessingOptions() {
     autoTone: state.autoTone,
     autoLighting: state.autoLighting,
     backgroundCleanup: state.backgroundCleanup,
+    previewMode: state.previewMode,
   };
 
   if (state.manualOverride && state.face) {
@@ -1499,7 +1549,7 @@ function buildBrowserPipeline() {
           ? state.enhancementMode === "strong"
             ? "rescue mode, verify likeness"
             : "bounded, identity-faithful cleanup"
-          : isValidationOnlyProfile()
+          : isValidationOnlyProfile() && !state.previewMode
             ? "disabled by programme policy"
             : "disabled",
       },
@@ -2125,7 +2175,7 @@ function renderChecks() {
     : "Looks ready";
   const className = failCount ? "fail" : unresolvedReviews ? "review" : warningCount ? "warning" : "pass";
 
-  elements.resultSummary.textContent = `${state.profile.label} / ${state.profile.output.widthPx} x ${state.profile.output.heightPx}px`;
+  elements.resultSummary.textContent = `${state.profile.label} / ${state.profile.output.widthPx} x ${state.profile.output.heightPx}px${state.previewMode ? " / editing preview" : ""}`;
   elements.overallStatus.textContent = unresolvedReviews ? `${status} / ${unresolvedReviews} to confirm` : `${status}`;
   elements.overallStatus.className = `overall-status ${className}`;
   const photoReady = failCount === 0 && unresolvedReviews === 0 && Boolean(state.exportBlob);
@@ -2136,7 +2186,7 @@ function renderChecks() {
   elements.sheetCopies.disabled = !photoReady;
   // Touch-up needs a generated photo with a clean-background pass available.
   const hasPhoto = Boolean(state.processedImage && state.backendResult?.ok);
-  const touchupBanned = state.profile?.allowedEdits?.background === false;
+  const touchupBanned = state.profile?.allowedEdits?.background === false && !state.previewMode;
   elements.touchupToggle.disabled = !hasPhoto || touchupBanned;
   applyTouchupGate();
   elements.toggleGuides.disabled = !hasPhoto;
@@ -2569,7 +2619,7 @@ async function downloadPhoto() {
       "application/pdf": "pdf",
     };
     const extension = extensions[state.outputFormat] ?? "jpg";
-    const filename = `${slugify(state.profile.label)}-${state.outputScale}x-${Date.now()}.${extension}`;
+    const filename = `${slugify(state.profile.label)}${state.previewMode ? "-editing-preview" : ""}-${state.outputScale}x-${Date.now()}.${extension}`;
     downloadBlob(blob, filename);
     const width = response.headers.get("X-KVNP-Width") ?? "?";
     const height = response.headers.get("X-KVNP-Height") ?? "?";
@@ -2611,10 +2661,10 @@ async function autoFix() {
       failing("background_uniformity") || failing("background_cleanup") || failing("source_background_path");
 
     const lawful = state.profile.allowedEdits ?? {};
-    state.autoStraighten = lawful.straighten !== false;
-    state.autoTone = lawful.tone !== false;
-    state.enhanceOutput = lawful.enhance !== false;
-    state.backgroundReplaced = lawful.background !== false;
+    state.autoStraighten = state.previewMode || lawful.straighten !== false;
+    state.autoTone = state.previewMode || lawful.tone !== false;
+    state.enhanceOutput = state.previewMode || lawful.enhance !== false;
+    state.backgroundReplaced = state.previewMode || lawful.background !== false;
     state.backgroundCleanup = bgTrouble ? "strong" : state.backgroundCleanup === "balanced" ? "balanced" : state.backgroundCleanup;
     state.backgroundColor = state.profile.automation?.backgroundColor || "#ffffff";
     if (state.enhancementMode === "strong") state.enhancementMode = "natural";
@@ -2801,7 +2851,7 @@ function paintTouchUp(event) {
 
 function toggleTouchUp() {
   if (!state.processedImage || !state.backendResult?.ok) return;
-  if (state.profile?.allowedEdits?.background === false) return;
+  if (state.profile?.allowedEdits?.background === false && !state.previewMode) return;
   if (state.touchUp.active) {
     finishTouchUp();
     return;
@@ -2957,7 +3007,7 @@ function applyAdjustments() {
   adjustCtx.clearRect(0, 0, width, height);
   adjustCtx.drawImage(state.processedImage, 0, 0, width, height);
 
-  if (adjustmentsActive() && !isValidationOnlyProfile()) {
+  if (adjustmentsActive() && (!isValidationOnlyProfile() || state.previewMode)) {
     const image = adjustCtx.getImageData(0, 0, width, height);
     applyTone(image.data, state.adjust);
     adjustCtx.putImageData(image, 0, 0);

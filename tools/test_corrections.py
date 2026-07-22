@@ -6,6 +6,7 @@ flip the relevant compliance check from fail to pass. Run with:
 
     python tools/test_corrections.py
 """
+import base64
 import sys
 from pathlib import Path
 
@@ -171,6 +172,31 @@ def test_strict_programme_clamps_every_pixel_edit():
     print("test_strict_programme_clamps_every_pixel_edit", PASS)
 
 
+def test_strict_programme_preview_is_watermarked():
+    """Preview may exercise locked tools, but the server must mark the pixels."""
+    options = {
+        "previewMode": True,
+        "backgroundReplaced": True,
+        "enhanceOutput": True,
+        "autoStraighten": True,
+        "autoTone": True,
+        "autoLighting": True,
+    }
+    result = server.process_image(_jpeg_bytes(_portrait()), US_PASSPORT, options)
+    assert result["previewOnly"] is True
+    assert result["allowedEdits"]["background"] is False
+    assert result["effectiveEdits"]["background"] is True
+    assert result["decision"]["title"] == "Editing preview"
+    assert next(c for c in result["checks"] if c["id"] == "preview_only")["status"] == "warning"
+
+    encoded = base64.b64decode(result["finalDataUrl"].split(",", 1)[1])
+    image = cv2.imdecode(np.frombuffer(encoded, np.uint8), cv2.IMREAD_COLOR)
+    strip = image[int(image.shape[0] * 0.91) :, :, :]
+    orange_text = (strip[:, :, 2] > 210) & (strip[:, :, 1] > 110) & (strip[:, :, 0] < 150)
+    assert int(orange_text.sum()) > 20, "preview watermark text is missing"
+    print("test_strict_programme_preview_is_watermarked", PASS)
+
+
 def main():
     tests = [
         test_straighten_levels_tilt,
@@ -180,6 +206,7 @@ def main():
         test_manual_override_keeps_corrections_and_placement,
         test_clipping_capture_fails_lighting_even_after_tone,
         test_strict_programme_clamps_every_pixel_edit,
+        test_strict_programme_preview_is_watermarked,
     ]
     for test in tests:
         test()

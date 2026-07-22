@@ -686,6 +686,16 @@ input[type="color"] {
 }
 .switch-row:hover { border-color: var(--line-strong); }
 .switch-row input { width: 16px; height: 16px; accent-color: var(--stamp); }
+.switch-row:has(input:disabled) { cursor: not-allowed; opacity: 0.48; }
+.switch-row:has(input:disabled)::after {
+  content: "Locked by programme";
+  margin-left: auto;
+  color: var(--warn);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
 
 .manual-details {
   margin: 0 18px;
@@ -1321,8 +1331,22 @@ input[type="range"] { width: 100%; accent-color: var(--stamp); }
 }
 .policy-mode.validation { border-left-color: var(--warn); }
 .policy-mode.assisted { border-left-color: var(--pass); }
+.policy-mode.preview { border-left-color: var(--stamp); }
 .policy-mode strong { color: var(--text); font-size: 12px; }
 .policy-mode span { color: var(--mut); font-size: 11px; line-height: 1.45; }
+.preview-mode-card {
+  display: grid;
+  gap: 10px;
+  margin: 10px 18px 0;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--stamp);
+  background: var(--ink-2);
+  padding: 11px 12px;
+}
+.preview-mode-card > div { display: grid; gap: 3px; }
+.preview-mode-card strong { color: var(--text); font-size: 12px; }
+.preview-mode-card span { color: var(--mut); font-size: 11px; line-height: 1.45; }
+.preview-mode-card .mini-toggle { color: var(--stamp-ink); }
 .policy-chip {
   display: inline-flex;
   align-items: center;

@@ -181,6 +181,50 @@ def test_output_trimap_rejects_halo_but_keeps_dark_curl():
     print("test_output_trimap_rejects_halo_but_keeps_dark_curl", PASS)
 
 
+def test_head_outline_includes_hair_and_ears():
+    """The operator overlay must trace the visible head, not FaceMesh's skin oval."""
+    height = width = 200
+    matte = np.zeros((height, width), np.float32)
+    cv2.ellipse(matte, (100, 90), (48, 60), 0, 0, 360, 1.0, -1)
+    cv2.ellipse(matte, (48, 96), (10, 17), 0, 0, 360, 1.0, -1)
+    cv2.ellipse(matte, (152, 96), (10, 17), 0, 0, 360, 1.0, -1)
+    matte[135:200, 70:131] = 1.0
+
+    points = [{"x": 100.0, "y": 95.0, "z": 0.0} for _ in range(478)]
+    for pos, landmark in enumerate(server.FACE_OVAL):
+        angle = -np.pi / 2.0 + (2.0 * np.pi * pos / len(server.FACE_OVAL))
+        points[landmark] = {
+            "x": float(100 + 34 * np.cos(angle)),
+            "y": float(95 + 50 * np.sin(angle)),
+            "z": 0.0,
+        }
+    face = {"headHeight": 120.0, "faceWidth": 68.0, "centerX": 100.0, "centerY": 90.0}
+    outline = server.head_outline_from_matte(matte, points, face, width, height)
+    assert outline is not None
+    assert int(outline[:, 0].min()) <= 43, outline[:, 0].min()
+    assert int(outline[:, 0].max()) >= 157, outline[:, 0].max()
+    assert int(outline[:, 1].min()) <= 32, outline[:, 1].min()
+    print("test_head_outline_includes_hair_and_ears", PASS)
+
+
+def test_crown_measure_preserves_skull_size_and_hair_headroom():
+    matte = np.zeros((160, 120), np.float32)
+    cv2.ellipse(matte, (60, 55), (32, 45), 0, 0, 360, 1.0, -1)
+    face = {"headHeight": 70.0, "faceWidth": 46.0, "centerX": 60.0, "centerY": 55.0}
+    refined = server.refine_head_from_matte(face, matte, 120, 160, measure="chin_to_crown")
+    assert refined["headHeight"] == face["headHeight"]
+    assert refined["centerY"] == face["centerY"]
+    assert refined["silhouetteTopY"] <= 11
+
+    profile = {
+        "output": {"widthPx": 600, "heightPx": 600},
+        "head": {"targetPercent": 60, "topMarginPercent": 8},
+    }
+    crop = server.calculate_crop(120, 160, refined, profile, allow_pad=True)
+    assert crop["y"] < refined["silhouetteTopY"], crop
+    print("test_crown_measure_preserves_skull_size_and_hair_headroom", PASS)
+
+
 def test_modnet_path_with_synthetic_model():
     """Validate the MODNet ONNX code path end to end with a tiny stand-in model."""
     import onnx
@@ -262,6 +306,8 @@ def main():
         test_head_guard_restores_ears_and_neck,
         test_soft_hair_edge_removes_old_background_spill,
         test_output_trimap_rejects_halo_but_keeps_dark_curl,
+        test_head_outline_includes_hair_and_ears,
+        test_crown_measure_preserves_skull_size_and_hair_headroom,
         test_modnet_path_with_synthetic_model,
         test_real_portrait_clean_matte,
     ]
