@@ -11,6 +11,8 @@ RUN apt-get update \
         ca-certificates \
         curl \
         libgl1 \
+        libgles2 \
+        libegl1 \
         libglib2.0-0 \
         libgomp1 \
     && rm -rf /var/lib/apt/lists/*
@@ -22,7 +24,7 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
 COPY . ./
-RUN mkdir -p /app/data /app/models
+RUN mkdir -p /app/data /app/models /app/screenshots
 
 EXPOSE 4173
 

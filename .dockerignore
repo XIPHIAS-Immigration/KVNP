@@ -12,8 +12,17 @@ data/*.db
 data/*.db-*
 data/secret.key
 
-# generated screenshots/reports; keep source fixtures out of Docker for prod
-screenshots
+# generated screenshots/reports; include only assets used by the landing page
+screenshots/*
+!screenshots/app-shell.png
+!screenshots/country-programme-ui.png
+!screenshots/landing/
+!screenshots/landing/**
+!screenshots/eval/
+screenshots/eval/*
+!screenshots/eval/raw/
+screenshots/eval/raw/*
+!screenshots/eval/raw/px_220453.jpg
 
 # heavy optional model/runtime downloads
 models/*.pth

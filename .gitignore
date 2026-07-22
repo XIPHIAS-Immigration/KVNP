@@ -16,6 +16,15 @@ data/secret.key
 # Generated logs and visual outputs
 *.log
 screenshots/*
+!screenshots/app-shell.png
+!screenshots/country-programme-ui.png
+!screenshots/landing/
+!screenshots/landing/**
+!screenshots/eval/
+screenshots/eval/*
+!screenshots/eval/raw/
+screenshots/eval/raw/*
+!screenshots/eval/raw/px_220453.jpg
 !screenshots/test-inputs/
 !screenshots/test-inputs/**
 !screenshots/reference-video/
