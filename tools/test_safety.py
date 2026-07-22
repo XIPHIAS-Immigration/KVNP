@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT))
 import server  # noqa: E402
 
 PASS = "  ok"
+EXPORTABLE = {"ready", "review", "policy_review"}
 
 
 def _expect_detection_error(image, phrase):
@@ -62,12 +63,53 @@ def test_faithful_enhancement_has_bounded_pixel_delta():
     print("test_faithful_enhancement_has_bounded_pixel_delta", PASS)
 
 
+def test_iris_gaze_detects_looking_away():
+    points = [{"x": 0.0, "y": 0.0, "z": 0.0} for _ in range(478)]
+    eye_specs = [
+        (server.LEFT_EYE, server.LEFT_EYE_INNER, server.LEFT_EYE_TOP, server.LEFT_EYE_BOTTOM, server.LEFT_IRIS_CENTER, 20, 60),
+        (server.RIGHT_EYE, server.RIGHT_EYE_INNER, server.RIGHT_EYE_TOP, server.RIGHT_EYE_BOTTOM, server.RIGHT_IRIS_CENTER, 80, 120),
+    ]
+    for outer, inner, top, bottom, iris, x1, x2 in eye_specs:
+        points[outer].update(x=float(x1), y=50.0)
+        points[inner].update(x=float(x2), y=50.0)
+        points[top].update(x=float((x1 + x2) / 2), y=40.0)
+        points[bottom].update(x=float((x1 + x2) / 2), y=60.0)
+        points[iris].update(x=float((x1 + x2) / 2), y=48.9)
+
+    centered = server.estimate_eye_gaze(points, yaw_proxy=0.0)
+    assert centered["gazeOffsetPercent"] < 0.2, centered
+    points[server.LEFT_IRIS_CENTER]["x"] -= 4.0
+    points[server.RIGHT_IRIS_CENTER]["x"] -= 4.0
+    away = server.estimate_eye_gaze(points, yaw_proxy=0.0)
+    assert away["gazeOffsetPercent"] > 4.5, away
+    print("test_iris_gaze_detects_looking_away", PASS)
+
+
+def test_extreme_lighting_and_blur_are_blocked():
+    portrait = cv2.imread(str(ROOT / "screenshots" / "eval" / "raw" / "px_1681010.jpg"))
+    assert portrait is not None
+    dark = np.clip(portrait.astype(np.float32) * 0.10, 0, 255).astype(np.uint8)
+    clipped = np.clip(portrait.astype(np.float32) * 2.5 + 95, 0, 255).astype(np.uint8)
+    blurred = cv2.GaussianBlur(portrait, (0, 0), 7.0)
+    profile = server.PROFILE_REGISTRY["us-passport-print-2026-06"]
+
+    for label, image in (("dark", dark), ("clipped", clipped), ("blurred", blurred)):
+        ok, encoded = cv2.imencode(".jpg", image, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+        assert ok
+        result = server.process_image(encoded.tobytes(), profile, {})
+        status = result["decision"]["status"]
+        assert status not in EXPORTABLE, f"{label} source was incorrectly exportable: {status}"
+    print("test_extreme_lighting_and_blur_are_blocked", PASS)
+
+
 def main():
     tests = [
         test_non_portrait_is_rejected,
         test_occluded_face_is_rejected,
         test_multiple_faces_are_rejected,
         test_faithful_enhancement_has_bounded_pixel_delta,
+        test_iris_gaze_detects_looking_away,
+        test_extreme_lighting_and_blur_are_blocked,
     ]
     for test in tests:
         test()

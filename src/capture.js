@@ -37,6 +37,8 @@ const L = {
   rightEyeTop: 386,
   rightEyeBottom: 374,
   rightEyeInner: 362,
+  leftIris: 468,
+  rightIris: 473,
 };
 
 // Calibrated on 40 real frontal portraits: nose position within the eye->chin
@@ -156,6 +158,37 @@ function dist(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
+function estimateEyeGaze(points, yaw) {
+  const specs = [
+    [L.leftEyeOuter, L.leftEyeInner, L.leftEyeTop, L.leftEyeBottom, L.leftIris],
+    [L.rightEyeOuter, L.rightEyeInner, L.rightEyeTop, L.rightEyeBottom, L.rightIris],
+  ];
+  const positions = [];
+  for (const [outerIndex, innerIndex, topIndex, bottomIndex, irisIndex] of specs) {
+    const outer = points[outerIndex];
+    const inner = points[innerIndex];
+    const top = points[topIndex];
+    const bottom = points[bottomIndex];
+    const iris = points[irisIndex];
+    if (!outer || !inner || !top || !bottom || !iris) return null;
+    const x1 = Math.min(outer.x, inner.x);
+    const x2 = Math.max(outer.x, inner.x);
+    const y1 = Math.min(top.y, bottom.y);
+    const y2 = Math.max(top.y, bottom.y);
+    if (x2 - x1 < 0.001 || y2 - y1 < 0.001) return null;
+    positions.push({ x: (iris.x - x1) / (x2 - x1), y: (iris.y - y1) / (y2 - y1) });
+  }
+  const meanX = (positions[0].x + positions[1].x) / 2;
+  const meanY = (positions[0].y + positions[1].y) / 2;
+  const horizontal = (meanX - 0.5) * 100 + yaw * 0.6;
+  const vertical = (meanY - 0.5) * 100 + 5.5;
+  return {
+    horizontal,
+    vertical,
+    offset: Math.max(Math.abs(horizontal), Math.abs(vertical)),
+  };
+}
+
 // Score one factor: 1 inside the dead-zone, falling linearly to 0 at `worst`.
 function factorScore(excess, worst) {
   if (excess <= 0) return 1;
@@ -233,6 +266,7 @@ export function analyzeFrame(video, timestampMs, profileOpts = {}) {
 
   const roll = (Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x) * 180) / Math.PI;
   const yaw = ((nose.x - centerX) / Math.max(0.01, faceWidth)) * 100; // signed %
+  const gaze = estimateEyeGaze(p, yaw);
   const pitch = (nose.y - eyeMid.y) / Math.max(0.001, chin.y - eyeMid.y); // ~0.38 neutral
   const ear =
     (dist(get("leftEyeTop"), get("leftEyeBottom")) / Math.max(0.001, dist(leftEye, get("leftEyeInner"))) +
@@ -244,40 +278,46 @@ export function analyzeFrame(video, timestampMs, profileOpts = {}) {
   const distErr = Math.abs(headFrac - idealFrac);
   const pitchErr = Math.abs(pitch - PITCH_NEUTRAL);
 
-  // Weighted factors -> capture score. Weights sum to 100.
+  // Weighted factors -> capture score. Weights sum to 100. Iris alignment is
+  // separate from head direction: a level, frontal head can still look away.
   const factors = [
     {
-      id: "center", label: "Centered", weight: 10,
+      id: "center", label: "Centered", weight: 9,
       s: factorScore(centerErr - 0.05, 0.25),
       hint: "Center your face in the frame",
     },
     {
-      id: "distance", label: "Distance", weight: 18,
+      id: "distance", label: "Distance", weight: 16,
       s: factorScore(distErr - 0.05, 0.25),
       hint: headFrac < idealFrac ? "Move a little closer" : "Move back — too close distorts your face",
     },
     {
-      id: "level", label: "Head level", weight: 16,
+      id: "level", label: "Head level", weight: 15,
       s: factorScore(Math.abs(roll) - 2.0, 8),
       hint: `Straighten your head (${Math.abs(roll).toFixed(0)}°) — follow the arc`,
     },
     {
-      id: "straight", label: "Facing camera", weight: 20,
+      id: "straight", label: "Facing camera", weight: 18,
       s: factorScore(Math.abs(yaw) - 3.0, 10),
       hint: "Turn your face toward the arrow",
     },
     {
-      id: "pitch", label: "Chin level", weight: 11,
+      id: "pitch", label: "Chin level", weight: 10,
       s: factorScore(pitchErr - PITCH_BAND, 0.14),
       hint: pitch > PITCH_NEUTRAL ? "Raise your chin slightly" : "Lower your chin slightly",
     },
     {
-      id: "eyes", label: "Eyes open", weight: 10,
+      id: "eyes", label: "Eyes open", weight: 8,
       s: ear > 0.17 ? 1 : ear > 0.12 ? 0.5 : 0,
       hint: "Open your eyes normally",
     },
     {
-      id: "neutral", label: "Neutral mouth", weight: 15,
+      id: "gaze", label: "Look at lens", weight: 12,
+      s: gaze ? factorScore(gaze.offset - 2.0, 4) : 0,
+      hint: "Look directly into the camera lens",
+    },
+    {
+      id: "neutral", label: "Neutral mouth", weight: 12,
       s: factorScore(mouthGap - 1.6, 3.5),
       hint: "Relax — neutral expression, mouth closed",
     },
@@ -296,7 +336,8 @@ export function analyzeFrame(video, timestampMs, profileOpts = {}) {
     const loss = f.weight * (1 - f.s);
     if (!worst || loss > worst.loss) worst = { f, loss };
   }
-  const ready = score >= 88;
+  const criticalIds = new Set(["level", "straight", "pitch", "eyes", "gaze"]);
+  const ready = score >= 88 && factors.filter((factor) => criticalIds.has(factor.id)).every((factor) => factor.ok);
   const instruction = ready ? "Hold still…" : worst && worst.loss > 1.5 ? worst.f.hint : "Almost — hold steady";
 
   // Geometric arrow for the dominant ANGLE error (drawn by the app in display
@@ -329,6 +370,9 @@ export function analyzeFrame(video, timestampMs, profileOpts = {}) {
     faceBox,
     target,
     angles: { roll, yaw, pitch },
+    gaze,
+    eyeLine: { left: leftEye, right: rightEye },
+    headAxis: { top: forehead, bottom: chin },
     headFrac,
     headCenter: { x: centerX, y: centerY },
   };

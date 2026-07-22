@@ -46,11 +46,12 @@ def _no_duplicate_keys(pairs):
     return seen
 
 
-def test_loads_as_nonempty_list_of_10():
+def test_loads_verified_catalogue():
     data = _load()
     assert isinstance(data, list), "profiles.json must be a JSON array"
-    assert len(data) == 10, f"expected 10 profiles, got {len(data)}"
-    print("test_loads_as_nonempty_list_of_10", PASS)
+    assert len(data) == 22, f"expected 22 profiles, got {len(data)}"
+    assert len({p["country"] for p in data}) == 17, "expected 17 countries"
+    print("test_loads_verified_catalogue", PASS)
 
 
 def test_no_duplicate_keys():
@@ -156,6 +157,18 @@ def test_strict_profiles_are_validation_only():
         "canada-trv-print-2026-06",
         "australia-passport-print-2026-06",
         "france-schengen-visa-print-2026-06",
+        "netherlands-passport-id-print-2026-07",
+        "ireland-passport-print-2026-07",
+        "ireland-visa-print-2026-07",
+        "italy-passport-print-2026-07",
+        "japan-passport-print-2026-07",
+        "singapore-passport-digital-2026-07",
+        "new-zealand-passport-digital-2026-07",
+        "switzerland-passport-id-print-2026-07",
+        "china-visa-digital-2026-07",
+        "hong-kong-passport-digital-2026-07",
+        "south-korea-passport-digital-2026-07",
+        "malaysia-evisa-digital-2026-07",
     }
     profiles = {p["id"]: p for p in _load()}
     edit_keys = ("straighten", "tone", "lighting", "background", "enhance", "rescue")
@@ -197,6 +210,48 @@ def test_india_icao_square():
         assert out["widthPx"] == out["heightPx"], \
             f"{p['id']}: ICAO output must be square"
     print("test_india_icao_square", PASS)
+
+
+def test_new_catalogue_dimensions():
+    profiles = {p["id"]: p for p in _load()}
+    nl = profiles["netherlands-passport-id-print-2026-07"]
+    assert (nl["output"]["printWidthMm"], nl["output"]["printHeightMm"]) == (35, 45)
+    assert (nl["head"]["minMm"], nl["head"]["maxMm"]) == (26, 30)
+
+    sg = profiles["singapore-passport-digital-2026-07"]
+    assert (sg["output"]["widthPx"], sg["output"]["heightPx"]) == (400, 514)
+    assert sg["file"]["maxBytes"] == 8_000_000
+
+    nz = profiles["new-zealand-passport-digital-2026-07"]
+    assert (nz["output"]["widthPx"], nz["output"]["heightPx"]) == (900, 1200)
+    assert (nz["file"]["minBytes"], nz["file"]["maxBytes"]) == (250_000, 5_000_000)
+
+    ch = profiles["switzerland-passport-id-print-2026-07"]
+    assert (ch["head"]["minMm"], ch["head"]["maxMm"]) == (29, 34)
+
+    cn = profiles["china-visa-digital-2026-07"]
+    assert (cn["output"]["widthPx"], cn["output"]["heightPx"]) == (354, 472)
+    assert (cn["file"]["minBytes"], cn["file"]["maxBytes"]) == (40_000, 120_000)
+
+    hk = profiles["hong-kong-passport-digital-2026-07"]
+    assert (hk["output"]["widthPx"], hk["output"]["heightPx"]) == (1280, 1600)
+    assert hk["file"]["maxBytes"] == 5_000_000
+
+    kr = profiles["south-korea-passport-digital-2026-07"]
+    assert (kr["output"]["widthPx"], kr["output"]["heightPx"]) == (413, 531)
+
+    my = profiles["malaysia-evisa-digital-2026-07"]
+    assert (my["output"]["printWidthMm"], my["output"]["printHeightMm"]) == (35, 50)
+    print("test_new_catalogue_dimensions", PASS)
+
+
+def test_sources_are_reviewable():
+    for profile in _load():
+        assert profile.get("lastReviewed"), f"{profile['id']}: missing lastReviewed"
+        for source in profile["sources"]:
+            assert source["url"].startswith("https://"), f"{profile['id']}: non-HTTPS source"
+            assert source.get("label"), f"{profile['id']}: source label missing"
+    print("test_sources_are_reviewable", PASS)
 
 
 def test_drift_guard_ids_in_frontend():
@@ -242,7 +297,7 @@ def test_drift_guard_deep_equal_with_node():
 
 def main():
     tests = [
-        test_loads_as_nonempty_list_of_10,
+        test_loads_verified_catalogue,
         test_no_duplicate_keys,
         test_unique_ids,
         test_required_keys_present,
@@ -255,6 +310,8 @@ def main():
         test_automation_defaults_respect_policy,
         test_enhance_disabled_no_aggressive_enhancement_mode,
         test_india_icao_square,
+        test_new_catalogue_dimensions,
+        test_sources_are_reviewable,
         test_drift_guard_ids_in_frontend,
         test_drift_guard_deep_equal_with_node,
     ]

@@ -1,5 +1,5 @@
-import { COUNTRIES, RULE_PROFILES, getDefaultProfile, getProfilesForCountry } from "./rules.js?v=kvnp-studio-26";
-import { initCoach, analyzeFrame, coachAvailable } from "./capture.js?v=kvnp-studio-26";
+import { COUNTRIES, RULE_PROFILES, getDefaultProfile, getProfilesForCountry } from "./rules.js?v=kvnp-studio-31";
+import { initCoach, analyzeFrame, coachAvailable } from "./capture.js?v=kvnp-studio-31";
 
 const elements = {
   fileInput: document.querySelector("#file-input"),
@@ -50,6 +50,7 @@ const elements = {
   autoTone: document.querySelector("#auto-tone"),
   autoLighting: document.querySelector("#auto-lighting"),
   backgroundCleanup: document.querySelector("#background-cleanup"),
+  backgroundPolicyNote: document.querySelector("#background-policy-note"),
   correctionsCard: document.querySelector("#corrections-card"),
   queueStrip: document.querySelector("#queue-strip"),
   countryGate: document.querySelector("#country-gate"),
@@ -81,6 +82,12 @@ const elements = {
   presetSelect: document.querySelector("#preset-select"),
   presetSave: document.querySelector("#preset-save"),
   presetDelete: document.querySelector("#preset-delete"),
+  uploadDropzone: document.querySelector("#upload-dropzone"),
+  programmeOutput: document.querySelector("#programme-output"),
+  programmeBackground: document.querySelector("#programme-background"),
+  programmeReviewed: document.querySelector("#programme-reviewed"),
+  catalogueCount: document.querySelector("#catalogue-count"),
+  workflowSteps: Array.from(document.querySelectorAll("[data-workflow-step]")),
 };
 
 const ADJUST_CONTROLS = [
@@ -143,6 +150,7 @@ const state = {
   backgroundCleanup: "balanced",
   corrections: [],
   policyClamped: [],
+  effectiveEdits: {},
   manualTouchup: false,
   processing: false,
   beforeDataUrl: null,
@@ -195,6 +203,7 @@ function init() {
   checkBackendHealth();
   renderSourceQuality();
   renderQueue();
+  renderWorkflowProgress();
 }
 
 function bindEvents() {
@@ -230,6 +239,32 @@ function bindEvents() {
 
   for (const input of [elements.centerX, elements.centerY, elements.headHeight]) {
     input.addEventListener("input", handleManualChange);
+  }
+
+  for (const step of elements.workflowSteps) {
+    step.addEventListener("click", () => {
+      document.getElementById(step.dataset.target)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  if (elements.uploadDropzone) {
+    for (const eventName of ["dragenter", "dragover"]) {
+      elements.uploadDropzone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        if (state.programmeConfirmed) elements.uploadDropzone.classList.add("dragging");
+      });
+    }
+    for (const eventName of ["dragleave", "drop"]) {
+      elements.uploadDropzone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        elements.uploadDropzone.classList.remove("dragging");
+      });
+    }
+    elements.uploadDropzone.addEventListener("drop", (event) => {
+      if (!state.programmeConfirmed) return;
+      const files = Array.from(event.dataTransfer?.files ?? []).filter((file) => file.type.startsWith("image/"));
+      if (files.length) addFilesToQueue(files);
+    });
   }
 }
 
@@ -506,6 +541,24 @@ function applyPolicyControlGate() {
 
   // Touch-up paints over the background, so it is gated by the same background policy.
   applyTouchupGate();
+  updateBackgroundPolicyNote();
+}
+
+function updateBackgroundPolicyNote() {
+  if (!elements.backgroundPolicyNote || !state.profile) return;
+  const required = describeBackground(state.profile.background?.mode ?? "plain light background");
+  const banned = state.profile.allowedEdits?.background === false && !state.previewMode;
+  elements.backgroundPolicyNote.className = `control-guidance ${state.previewMode ? "preview" : banned ? "locked" : "allowed"}`;
+  if (state.previewMode) {
+    elements.backgroundPolicyNote.textContent =
+      `Editing Preview: background removal is available, but the result is permanently watermarked and is not a submission file. Required appearance: ${required}.`;
+  } else if (banned) {
+    elements.backgroundPolicyNote.textContent =
+      `Required in the original capture: ${required}. Digital background removal is not permitted for this submission profile; retake against that background.`;
+  } else {
+    elements.backgroundPolicyNote.textContent =
+      `Background replacement is available for this profile. Required appearance: ${required}.`;
+  }
 }
 
 function syncOutputControls() {
@@ -561,7 +614,7 @@ function applyAdjustmentPolicyGate() {
   manualDetails?.classList.toggle("policy-locked", validationOnly);
   for (const input of manualDetails?.querySelectorAll("input") ?? []) input.disabled = validationOnly;
   if (validationOnly) state.manualOverride = false;
-  if (elements.autoFix) elements.autoFix.textContent = validationOnly ? "Recheck photo" : "Auto-fix";
+  if (elements.autoFix) elements.autoFix.textContent = validationOnly ? "Recheck photo" : "Prepare photo";
   syncAdjustControls();
 }
 
@@ -579,6 +632,7 @@ function applyTouchupGate() {
 function confirmProgramme() {
   state.programmeConfirmed = true;
   updateCountryGate();
+  renderWorkflowProgress();
 }
 
 function updateCountryGate() {
@@ -591,6 +645,24 @@ function updateCountryGate() {
   document.querySelector('label[for="file-input"]')?.classList.toggle("btn-locked", gated);
   if (elements.gateConfirm && state.profile) {
     elements.gateConfirm.textContent = `Continue with ${state.profile.countryName} — ${state.profile.programme}`;
+  }
+}
+
+function renderWorkflowProgress() {
+  let current = 1;
+  if (state.programmeConfirmed) current = 2;
+  if (state.image) current = 3;
+  if (state.image && state.decision && !state.processing) {
+    const { failCount, warningCount, unresolvedReviews } = computeLiveCounts();
+    current = failCount > 0 || state.decision.status === "retake" ? 3 : 4;
+    if (state.exportBlob && failCount === 0 && unresolvedReviews === 0 && warningCount === 0) current = 5;
+  }
+
+  for (const step of elements.workflowSteps) {
+    const index = Number(step.dataset.workflowStep);
+    step.classList.toggle("active", index === current);
+    step.classList.toggle("complete", index < current);
+    step.setAttribute("aria-current", index === current ? "step" : "false");
   }
 }
 
@@ -661,11 +733,13 @@ async function loadImageFile(file) {
   state.processingError = null;
   state.corrections = [];
   state.policyClamped = [];
+  state.effectiveEdits = {};
   state.manualTouchup = false;
   state.beforeDataUrl = null;
   state.manualOverride = false;
   setResultView("result");
   setZoom(1);
+  renderWorkflowProgress();
 
   configureDefaultFace();
   syncManualControls();
@@ -762,6 +836,7 @@ async function processOnServer() {
     state.decision = result.decision ?? null;
     state.corrections = result.corrections ?? [];
     state.policyClamped = result.policyClamped ?? [];
+    state.effectiveEdits = result.effectiveEdits ?? {};
     state.previewMode = Boolean(result.previewOnly);
     elements.previewMode.checked = state.previewMode;
     applyPolicyControlGate();
@@ -790,6 +865,7 @@ async function processOnServer() {
     state.processedImage = null;
     state.sourceOverlayImage = null;
     state.corrections = [];
+    state.effectiveEdits = {};
     state.beforeDataUrl = null;
     state.processingError = error.message || "The photo could not be analyzed.";
     state.sourceQuality = [
@@ -865,7 +941,11 @@ function normalizeServerFace(face) {
     faceCount: face.faceCount,
     rollDegrees: face.rollDegrees,
     yawProxy: face.yawProxy,
+    gazeHorizontalPercent: face.gazeHorizontalPercent,
+    gazeVerticalPercent: face.gazeVerticalPercent,
+    gazeOffsetPercent: face.gazeOffsetPercent,
     mouthGapPercent: face.mouthGapPercent,
+    eyeOpenness: face.eyeOpenness,
     expressionScore: 0,
     bounds: face.bounds,
   };
@@ -952,6 +1032,15 @@ function renderProfile() {
   elements.countrySelect.value = profile.country;
   elements.profileSelect.value = profile.id;
   elements.profileSummary.textContent = `${profile.countryName} / ${profile.programme} / ${output} / ${head}`;
+  const physical = profile.output.printWidthMm && profile.output.printHeightMm
+    ? ` / ${profile.output.printWidthMm} x ${profile.output.printHeightMm} mm`
+    : "";
+  if (elements.programmeOutput) elements.programmeOutput.textContent = `${output}${physical}`;
+  if (elements.programmeBackground) {
+    elements.programmeBackground.textContent = describeBackground(profile.background?.mode ?? "plain_light");
+  }
+  if (elements.programmeReviewed) elements.programmeReviewed.textContent = profile.lastReviewed ?? "Review pending";
+  if (elements.catalogueCount) elements.catalogueCount.textContent = `${RULE_PROFILES.length} programmes / ${COUNTRIES.length} countries`;
   elements.requirementsList.innerHTML = "";
 
   for (const requirement of profile.requirements ?? []) {
@@ -1288,6 +1377,29 @@ function runChecks() {
     target: `${profile.head.topMarginPercent}% target`,
   });
 
+  const shoulderRoom = 100 - topMarginPercent - headPercent;
+  const targetShoulderRoom = 100 - profile.head.topMarginPercent - profile.head.targetPercent;
+  const shoulderDelta = shoulderRoom - targetShoulderRoom;
+  const shoulderStatus = shoulderRoom < 6
+    ? "fail"
+    : Math.abs(shoulderDelta) <= 8
+    ? "pass"
+    : Math.abs(shoulderDelta) <= 12
+    ? "warning"
+    : "fail";
+  const shoulderNote = shoulderDelta > 8
+    ? "too much upper body"
+    : shoulderDelta < -8
+    ? "shoulders too tight"
+    : "balanced upper shoulders";
+  checks.push({
+    id: "shoulder_framing",
+    label: "Shoulder framing",
+    status: shoulderStatus,
+    value: `${shoulderRoom.toFixed(1)}% below chin / ${shoulderNote}`,
+    target: `about ${targetShoulderRoom.toFixed(0)}% / head and upper shoulders only`,
+  });
+
   checks.push({
     id: "pose_roll",
     label: "Head tilt",
@@ -1298,11 +1410,21 @@ function runChecks() {
 
   checks.push({
     id: "pose_yaw",
-    label: "Face direction",
+    label: "Head direction",
     status: getPoseStatus(Math.abs(state.face.yawProxy ?? 0), 9, 14),
     value: `${Math.abs(state.face.yawProxy ?? 0).toFixed(1)}% nose offset`,
-    target: "facing camera",
+    target: "head facing camera",
   });
+
+  if (state.face.gazeOffsetPercent != null) {
+    checks.push({
+      id: "eye_gaze",
+      label: "Eye gaze",
+      status: getPoseStatus(Math.abs(state.face.gazeOffsetPercent), 3, 4),
+      value: `${Math.abs(state.face.gazeOffsetPercent).toFixed(1)}% iris offset`,
+      target: "both eyes looking into camera",
+    });
+  }
 
   checks.push({
     id: "expression",
@@ -1384,6 +1506,10 @@ function getHeadPercent() {
 function getTopMarginPercent() {
   const headTop = state.face.centerY - state.face.headHeight / 2;
   return ((headTop - state.crop.y) / state.crop.height) * 100;
+}
+
+function getShoulderRoomPercent() {
+  return 100 - getTopMarginPercent() - getHeadPercent();
 }
 
 function getFaceDetectionStatus() {
@@ -1779,6 +1905,9 @@ function buildReport() {
       faceCount: state.face?.faceCount ?? null,
       rollDegrees: round(state.face?.rollDegrees),
       yawProxy: round(state.face?.yawProxy),
+      gazeHorizontalPercent: round(state.face?.gazeHorizontalPercent),
+      gazeVerticalPercent: round(state.face?.gazeVerticalPercent),
+      gazeOffsetPercent: round(state.face?.gazeOffsetPercent),
       mouthGapPercent: round(state.face?.mouthGapPercent),
       expressionScore: round(state.face?.expressionScore),
     },
@@ -1793,11 +1922,13 @@ function buildReport() {
       height: state.profile.output.heightPx,
       mime: state.profile.output.mime,
       bytes: state.exportBlob?.size ?? null,
-      backgroundReplaced: state.backgroundReplaced,
+      backgroundReplaced: state.effectiveEdits?.background === true,
       backgroundColor: state.backgroundColor,
-      enhanced: state.enhanceOutput,
+      enhanced: state.effectiveEdits?.enhance === true,
       enhancementMode: state.enhancementMode,
     },
+    effectiveEdits: state.effectiveEdits,
+    policyClamped: state.policyClamped,
     sourceQuality: state.sourceQuality,
     decision: state.decision,
     pipeline: state.pipeline,
@@ -1828,6 +1959,7 @@ function renderMeasurements() {
     ["Face source", source],
     ["Head in frame", headMm ? `${headMm.toFixed(1)}mm / ${headPercent.toFixed(1)}%` : `${headPercent.toFixed(1)}%`],
     ["Top margin", `${getTopMarginPercent().toFixed(1)}%`],
+    ["Shoulder room", `${getShoulderRoomPercent().toFixed(1)}% below chin`],
     ["Pose", describePoseMeasurement()],
     ["Background", describeBackgroundCleanup()],
     ["Input quality", describeQualitySummary()],
@@ -1935,6 +2067,7 @@ function renderPipeline() {
 function renderDecision() {
   if (!elements.decisionCard) return;
   const decision = state.decision ?? (state.image ? buildBrowserDecision() : null);
+  renderWorkflowProgress();
 
   if (!decision) {
     elements.decisionCard.className = "decision-card pending";
@@ -1973,40 +2106,106 @@ function renderCorrections() {
   const corrections = [...(state.corrections ?? [])];
   if (state.manualTouchup) corrections.push(MANUAL_TOUCHUP_ENTRY);
 
-  if (!state.image || !corrections.length) {
+  if (!state.image) {
     elements.correctionsCard.hidden = true;
     elements.correctionsCard.innerHTML = "";
     return;
   }
 
-  const items = corrections
+  const effective = state.effectiveEdits ?? {};
+  const audit = [
+    {
+      kind: "measured",
+      label: "Face, gaze and framing",
+      detail: "landmarks, eye direction, head level, crop and shoulder room measured; source pixels unchanged",
+    },
+    {
+      kind: "measured",
+      label: "Background and image quality",
+      detail: "background uniformity, focus, grain, lighting and contrast measured; source pixels unchanged",
+    },
+    {
+      kind: "formatted",
+      label: "Programme output",
+      detail: `cropped and resized to ${state.profile.output.widthPx} x ${state.profile.output.heightPx}px; face shape unchanged`,
+    },
+  ];
+
+  for (const item of corrections) {
+    audit.push({
+      kind: "changed",
+      label: item.label ?? item.id ?? "Correction",
+      detail: item.detail ?? "pixel change applied",
+    });
+  }
+  if (effective.background && !corrections.some((item) => item.id === "background")) {
+    audit.push({
+      kind: "changed",
+      label: "Background replacement",
+      detail: `person matte composited onto ${state.backgroundColor}; editing-preview watermark applied`,
+    });
+  }
+  if (effective.enhance && !corrections.some((item) => item.id === "enhance")) {
+    audit.push({
+      kind: "changed",
+      label: "Photo enhancement",
+      detail: `${state.enhancementMode} identity-preserving cleanup applied`,
+    });
+  }
+  const activeAdjustments = Object.entries(state.adjust ?? {}).filter(([, value]) => Number(value) !== 0);
+  if (activeAdjustments.length) {
+    audit.push({
+      kind: "changed",
+      label: "Browser image adjustments",
+      detail: activeAdjustments.map(([key, value]) => `${titleCase(key)} ${Number(value) > 0 ? "+" : ""}${value}`).join(", "),
+    });
+  }
+
+  const changedCount = audit.filter((item) => item.kind === "changed").length;
+  if (!changedCount) {
+    audit.push({
+      kind: "unchanged",
+      label: "No retouching applied",
+      detail: "only output crop, sizing and encoding were produced",
+    });
+  }
+
+  const unavailable = Object.keys(EDIT_LABELS).filter((key) => state.profile.allowedEdits?.[key] === false);
+  if (unavailable.length) {
+    audit.push({
+      kind: "blocked",
+      label: `Unavailable in ${state.profile.countryName} submission mode`,
+      detail: unavailable.map((key) => EDIT_LABELS[key] ?? key).join(", "),
+    });
+  }
+
+  const humanCount = (state.checks ?? []).filter((item) => item.status === "review").length;
+  if (humanCount) {
+    audit.push({
+      kind: "human",
+      label: `${humanCount} human confirmation${humanCount === 1 ? "" : "s"}`,
+      detail: "not claimed as computer-verified; confirm in the compliance list",
+    });
+  }
+
+  const items = audit
     .map(
-      (item) =>
-        `<li><strong>${escapeHtml(item.label ?? item.id ?? "Correction")}</strong><span>${escapeHtml(
-          item.detail ?? "applied",
-        )}</span></li>`,
+      (item) => `
+        <li class="audit-item ${escapeHtml(item.kind)}">
+          <b class="audit-badge">${escapeHtml(item.kind)}</b>
+          <div><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(item.detail)}</span></div>
+        </li>`,
     )
     .join("");
-
-  const clamped = state.policyClamped ?? [];
-  const clampNote = clamped.length
-    ? `<small class="policy-clamp">Disabled by ${escapeHtml(state.profile.countryName)} policy: ${clamped
-        .map((k) => escapeHtml(EDIT_LABELS[k] ?? k))
-        .join(", ")}</small>`
-    : "";
   elements.correctionsCard.hidden = false;
+  elements.correctionsCard.className = "corrections-card audit-card";
   elements.correctionsCard.innerHTML = `
     <div class="corrections-head">
-      <strong>Auto-corrections applied</strong>
-      <span>${corrections.length}</span>
+      <strong>Processing audit</strong>
+      <span>${changedCount} pixel edit${changedCount === 1 ? "" : "s"}</span>
     </div>
     <ul>${items}</ul>
-    <small>${
-      state.manualTouchup
-        ? "The automated pipeline alters geometry and tone only and never touches the face. An operator manually painted the background afterward — verify the face was not affected."
-        : "Identity-preserving geometry and tone only. The face is never altered."
-    }</small>
-    ${clampNote}
+    <small>Measured means software analysis only. Formatted means crop, size or encoding. Changed means pixels were modified. Blocked means the selected submission policy prevented that tool.</small>
   `;
 }
 
@@ -2016,12 +2215,14 @@ function startScanAnimation() {
   // The camera preview owns the source canvas while live; don't fight it.
   if (!state.image || state.cameraStream) return;
   state.processing = true;
+  renderWorkflowProgress();
   cancelAnimationFrame(scanRAF);
   scanRAF = requestAnimationFrame(drawScanFrame);
 }
 
 function stopScanAnimation() {
   state.processing = false;
+  renderWorkflowProgress();
   cancelAnimationFrame(scanRAF);
   scanRAF = 0;
 }
@@ -2166,6 +2367,7 @@ function handleHumanCheckClick(event) {
 
 function renderChecks() {
   const { failCount, warningCount, unresolvedReviews } = computeLiveCounts();
+  renderWorkflowProgress();
   const status = failCount
     ? "Needs retake"
     : unresolvedReviews
@@ -2240,6 +2442,7 @@ function renderNoResult() {
   state.decision = null;
   state.pipeline = null;
   state.corrections = [];
+  state.effectiveEdits = {};
   renderSourceQuality();
   renderDecision();
   renderPipeline();
@@ -2409,6 +2612,49 @@ function drawCoachOverlay(fit, metrics, now) {
   ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
   ctx.stroke();
   ctx.restore();
+
+  // Show the measured geometry as well as the target oval. The eye line makes
+  // roll immediately understandable; the head axis makes a tilted pose obvious.
+  if (metrics.present && metrics.eyeLine && metrics.headAxis) {
+    const level = metrics.factors?.find((factor) => factor.id === "level");
+    const levelColor = (level?.s ?? 0) >= 0.75 ? "#41d97d" : (level?.s ?? 0) >= 0.4 ? "#f0b429" : "#e8442e";
+    const eyeLeft = {
+      x: mirrorX(fit, metrics.eyeLine.left.x),
+      y: fit.y + metrics.eyeLine.left.y * fit.height,
+    };
+    const eyeRight = {
+      x: mirrorX(fit, metrics.eyeLine.right.x),
+      y: fit.y + metrics.eyeLine.right.y * fit.height,
+    };
+    const axisTop = {
+      x: mirrorX(fit, metrics.headAxis.top.x),
+      y: fit.y + metrics.headAxis.top.y * fit.height,
+    };
+    const axisBottom = {
+      x: mirrorX(fit, metrics.headAxis.bottom.x),
+      y: fit.y + metrics.headAxis.bottom.y * fit.height,
+    };
+    ctx.save();
+    ctx.setLineDash([]);
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = levelColor;
+    ctx.beginPath();
+    ctx.moveTo(eyeLeft.x, eyeLeft.y);
+    ctx.lineTo(eyeRight.x, eyeRight.y);
+    ctx.moveTo(axisTop.x, axisTop.y);
+    ctx.lineTo(axisBottom.x, axisBottom.y);
+    ctx.stroke();
+    ctx.fillStyle = levelColor;
+    for (const point of [eyeLeft, eyeRight]) {
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.font = "600 9px 'KVNP Mono', Consolas, monospace";
+    ctx.textAlign = "center";
+    ctx.fillText("EYE LINE / HEAD LEVEL", (eyeLeft.x + eyeRight.x) / 2, Math.min(eyeLeft.y, eyeRight.y) - 10);
+    ctx.restore();
+  }
 
   // factor meters (left column): label + mini bar, coloured by score
   if (metrics.factors?.length) {
@@ -2650,8 +2896,8 @@ async function autoFix() {
   const button = elements.autoFix;
   const label = button.textContent;
   button.disabled = true;
-  button.textContent = "Fixing…";
-  elements.automationSummary.textContent = "Auto-fix: applying corrections…";
+  button.textContent = "Preparing…";
+  elements.automationSummary.textContent = "Preparing the permitted corrections…";
 
   try {
     // 1) Decide corrective settings from the current findings.
@@ -2698,7 +2944,7 @@ async function autoFix() {
     summarizeAutoFix(applied);
   } catch (error) {
     console.error(error);
-    elements.automationSummary.textContent = `Auto-fix failed: ${error.message}`;
+    elements.automationSummary.textContent = `Preparation failed: ${error.message}`;
   } finally {
     button.textContent = label;
   button.disabled = !state.originalFile || Boolean(state.processingError) || !state.face;
@@ -2744,6 +2990,7 @@ function applyToneAutoFix() {
 const HUMAN_ONLY = {
   face_direction: "turned head — face the camera",
   pose_yaw: "turned head — face the camera",
+  eye_gaze: "eyes looking away - look directly into the lens",
   expression: "neutral expression / mouth closed",
   mouth: "close mouth / neutral expression",
   source_focus: "out of focus — retake sharper",
@@ -2758,11 +3005,11 @@ function summarizeAutoFix(applied) {
   const fixedNote = applied.length ? ` Tone tuned: ${applied.join(", ")}.` : "";
 
   if (!blocking.length) {
-    elements.automationSummary.textContent = `Auto-fix complete — ready to export.${fixedNote}`;
+    elements.automationSummary.textContent = `Preparation complete — ready to export.${fixedNote}`;
     return;
   }
   const reasons = [...new Set(blocking.map((c) => HUMAN_ONLY[c.id] || c.label))].slice(0, 3);
-  elements.automationSummary.textContent = `Auto-fix applied what it can.${fixedNote} Still needs you: ${reasons.join("; ")}.`;
+  elements.automationSummary.textContent = `Preparation applied what it can.${fixedNote} Still needs you: ${reasons.join("; ")}.`;
 }
 
 async function generatePrintSheet() {
@@ -2887,6 +3134,7 @@ async function finishTouchUp() {
     if (state.backendResult) state.backendResult.finalDataUrl = dataUrl;
     state.lastReport = buildReport();
     elements.automationSummary.textContent = "Touch-up applied to the exported photo.";
+    renderCorrections();
     scheduleReanalyze();
   }
   renderFinalCanvas();
@@ -2897,6 +3145,7 @@ async function resetTouchUp() {
   const base = state.touchUp.serverFinalDataUrl;
   if (!base) return;
   state.touchUp.dirty = false;
+  state.manualTouchup = false;
   state.exportBlob = dataUrlToBlob(base);
   state.processedImage = await loadImageFromDataUrl(base);
   if (state.backendResult) state.backendResult.finalDataUrl = base;
@@ -2907,12 +3156,15 @@ async function resetTouchUp() {
     renderFinalCanvas();
   }
   elements.automationSummary.textContent = "Touch-up reset to the generated photo.";
+  state.lastReport = buildReport();
+  renderCorrections();
 }
 
 function clearTouchUp() {
   state.touchUp.active = false;
   state.touchUp.painting = false;
   state.touchUp.dirty = false;
+  state.manualTouchup = false;
   if (elements.finalCanvas) elements.finalCanvas.classList.remove("painting");
   if (elements.touchupBrush) elements.touchupBrush.hidden = true;
   if (elements.touchupReset) elements.touchupReset.hidden = true;
@@ -2973,6 +3225,7 @@ function buildAdjustControls() {
       elements.adjustGrid.querySelector(`[data-val="${key}"]`).textContent = input.value;
       if (state.resultView !== "result") setResultView("result");
       else applyAdjustments();
+      renderCorrections();
       scheduleReanalyze();
     });
   }
@@ -2991,6 +3244,7 @@ function resetAdjustments() {
   for (const key of Object.keys(state.adjust)) state.adjust[key] = 0;
   syncAdjustControls();
   applyAdjustments();
+  renderCorrections();
   scheduleReanalyze();
 }
 
@@ -3136,7 +3390,7 @@ async function reanalyzeOutput() {
     form.append("profile", JSON.stringify(state.profile));
     form.append(
       "options",
-      JSON.stringify({ backgroundReplaced: state.backgroundReplaced, outputBytes: state.exportBlob.size }),
+      JSON.stringify({ backgroundReplaced: state.effectiveEdits?.background === true, outputBytes: state.exportBlob.size }),
     );
     const response = await fetch("/api/analyze", { method: "POST", body: form });
     const data = await response.json();
@@ -3150,6 +3404,7 @@ async function reanalyzeOutput() {
     state.lastReport = buildReport();
     renderChecks();
     renderDecision();
+    renderCorrections();
   } catch (error) {
     console.warn("reanalyze failed", error);
   } finally {
@@ -3196,6 +3451,9 @@ function recomputeDecisionFromChecks() {
   const actions = [];
   if (status === "retake") actions.push("Use a sharper source", "Face the camera directly", "Use brighter even light");
   if (checks.some((c) => c.id === "background_cleanup" && c.status !== "pass")) actions.push("Review hair and shoulder edges");
+  if (checks.some((c) => c.id === "shoulder_framing" && c.status !== "pass")) {
+    actions.push("Keep only the head and upper shoulders; avoid excess torso");
+  }
   if (policyWarnings.length) actions.push("Use crop/background only if the government allows edited photos");
   if (reviewItems.length) actions.push("Confirm human-only checks before submission");
 
@@ -3497,7 +3755,14 @@ function round(value) {
 }
 
 function describeBackground(mode) {
-  return mode.replaceAll("_", " ");
+  const labels = {
+    white: "plain white",
+    white_or_off_white: "plain white or off-white",
+    plain_light: "plain light-coloured",
+    white_or_light: "plain white or light-coloured",
+    light_gray_or_white: "plain white or light gray",
+  };
+  return labels[mode] ?? String(mode).replaceAll("_", " ");
 }
 
 function escapeHtml(value) {

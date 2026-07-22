@@ -167,6 +167,11 @@ def test_strict_programme_clamps_every_pixel_edit():
     assert edit["value"] == "crop/format only", edit
     assert result["corrections"] == [], result["corrections"]
     assert result["allowedEdits"]["enhance"] is False
+    assert result["effectiveEdits"]["crop_resize"] is True
+    assert all(
+        result["effectiveEdits"][key] is False
+        for key in ("straighten", "tone", "lighting", "background", "enhance", "rescue")
+    ), result["effectiveEdits"]
     assert "manual_geometry" in result["policyClamped"]
     assert {"straighten", "tone", "lighting", "background", "enhance"}.issubset(set(result["policyClamped"]))
     print("test_strict_programme_clamps_every_pixel_edit", PASS)
@@ -191,10 +196,82 @@ def test_strict_programme_preview_is_watermarked():
 
     encoded = base64.b64decode(result["finalDataUrl"].split(",", 1)[1])
     image = cv2.imdecode(np.frombuffer(encoded, np.uint8), cv2.IMREAD_COLOR)
+    top_band = image[: max(20, image.shape[0] // 6), :, :]
+    white_fraction = float(np.mean(np.all(top_band > 240, axis=2)))
+    assert white_fraction > 0.85, f"preview background replacement did not produce white: {white_fraction:.3f}"
     strip = image[int(image.shape[0] * 0.91) :, :, :]
     orange_text = (strip[:, :, 2] > 210) & (strip[:, :, 1] > 110) & (strip[:, :, 0] < 150)
     assert int(orange_text.sum()) > 20, "preview watermark text is missing"
     print("test_strict_programme_preview_is_watermarked", PASS)
+
+
+def test_locked_noncompliant_background_requires_retake():
+    source = np.full((400, 400, 3), 170, np.uint8)
+    face = {
+        "headHeight": 180,
+        "faceWidth": 130,
+        "centerX": 200,
+        "centerY": 180,
+        "rollDegrees": 0,
+        "yawProxy": 0,
+    }
+    stats = server.image_stats(source)
+    face_stats = {**stats, "focus": 30.0}
+    rows = server.build_source_quality(
+        source,
+        face,
+        US_PASSPORT,
+        stats,
+        face_stats,
+        50000,
+        False,
+        {"available": True, "faceCoverage": 1.0, "status": "pass", "engine": "test"},
+    )
+    background = next(item for item in rows if item["id"] == "source_background_path")
+    assert background["status"] == "fail", background
+    print("test_locked_noncompliant_background_requires_retake", PASS)
+
+
+def test_shoulder_framing_flags_too_much_upper_body():
+    face = {
+        "faceCount": 1,
+        "headHeight": 50.0,
+        "faceWidth": 35.0,
+        "centerX": 50.0,
+        "centerY": 30.0,  # 5% top margin, leaving 45% below the chin
+        "rollDegrees": 0.0,
+        "yawProxy": 0.0,
+        "mouthGapPercent": 0.0,
+        "eyeOpenness": 0.2,
+        "gazeOffsetPercent": 0.0,
+        "glareFraction": 0.0,
+        "eyeY": 30.0,
+    }
+    checks = server.build_checks(
+        face,
+        {"x": 0.0, "y": 0.0, "width": 100.0, "height": 100.0},
+        US_PASSPORT,
+        {
+            "noise": 2.0,
+            "focus": 30.0,
+            "sharpness": 30.0,
+            "luma": 140.0,
+            "contrast": 40.0,
+            "faceLuma": 140.0,
+            "faceContrast": 40.0,
+        },
+        {"status": "pass", "value": "plain", "target": "plain light background"},
+        50000,
+        False,
+        {"available": False, "status": "review", "message": "disabled"},
+        False,
+        "natural",
+        [],
+    )
+    shoulder = next(item for item in checks if item["id"] == "shoulder_framing")
+    assert shoulder["status"] == "fail", shoulder
+    assert "too much upper body" in shoulder["value"], shoulder
+    print("test_shoulder_framing_flags_too_much_upper_body", PASS)
 
 
 def main():
@@ -207,6 +284,8 @@ def main():
         test_clipping_capture_fails_lighting_even_after_tone,
         test_strict_programme_clamps_every_pixel_edit,
         test_strict_programme_preview_is_watermarked,
+        test_locked_noncompliant_background_requires_retake,
+        test_shoulder_framing_flags_too_much_upper_body,
     ]
     for test in tests:
         test()

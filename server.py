@@ -32,7 +32,7 @@ from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parent
-SERVER_VERSION = "python-mediapipe-2026-06-18-production-pipeline"
+SERVER_VERSION = "python-mediapipe-2026-07-22-framing-audit"
 MODEL_DIR = ROOT / "models"
 TOOLS_DIR = ROOT / "tools"
 FACE_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task"
@@ -101,6 +101,8 @@ LEFT_EYE_INNER = 133
 RIGHT_EYE_TOP = 386
 RIGHT_EYE_BOTTOM = 374
 RIGHT_EYE_INNER = 362
+LEFT_IRIS_CENTER = 468
+RIGHT_IRIS_CENTER = 473
 
 
 def ensure_model(path, url):
@@ -744,7 +746,7 @@ def process_image(image_bytes, profile, options):
         dpi_final = 300
     output_final = add_preview_watermark(final) if preview_mode else final
     final_bytes = set_jpeg_dpi(encode_jpeg(output_final, profile), dpi_final)
-    overlay = build_overlay(source, landmarks, crop, matte=matte, face=face)
+    overlay = build_overlay(source, landmarks, crop, matte=matte, face=face, profile=profile)
     overlay_bytes = encode_jpeg_bytes(overlay, 88)
     # "Before": the original capture framed to the same output size with no
     # correction/matte/enhancement, for an honest before/after comparison.
@@ -807,6 +809,17 @@ def process_image(image_bytes, profile, options):
             "message": "Cleanup tools are active. This watermarked result is for visual evaluation only, not submission.",
         }
 
+    correction_ids = {item.get("id") for item in corrections}
+    effective_edits = {
+        "crop_resize": True,
+        "straighten": "straighten" in correction_ids,
+        "tone": bool(correction_ids.intersection({"exposure", "white_balance"})),
+        "lighting": bool(correction_ids.intersection({"even_lighting", "red_eye"})),
+        "background": bool(replace_background and matte is not None),
+        "enhance": bool(enhance),
+        "rescue": False,
+    }
+
     return {
         "ok": True,
         "processor": "python-mediapipe",
@@ -823,7 +836,9 @@ def process_image(image_bytes, profile, options):
         "corrections": corrections,
         "policyClamped": policy_clamped,
         "allowedEdits": official_allowed,
-        "effectiveEdits": allowed,
+        # What actually touched pixels, not merely what this mode was allowed to
+        # do. The UI uses this as the processing audit source of truth.
+        "effectiveEdits": effective_edits,
         "previewOnly": preview_mode,
         "profileAuthority": profile_authority,
         "outputBytes": len(final_bytes),
@@ -876,6 +891,55 @@ def get_landmarks(face_landmarks, width, height):
     ]
 
 
+def estimate_eye_gaze(points, yaw_proxy=0.0):
+    """Estimate whether both irises are aligned with the camera.
+
+    Iris position is measured inside each eyelid box. A small yaw compensation
+    prevents a slightly turned but camera-looking face from being mislabeled.
+    The vertical bias accounts for Face Landmarker iris centers sitting a little
+    above the midpoint of the eyelid landmarks on a neutral forward gaze.
+    """
+    if len(points) <= RIGHT_IRIS_CENTER:
+        return {
+            "gazeHorizontalPercent": None,
+            "gazeVerticalPercent": None,
+            "gazeOffsetPercent": None,
+        }
+
+    eye_specs = [
+        (LEFT_EYE, LEFT_EYE_INNER, LEFT_EYE_TOP, LEFT_EYE_BOTTOM, LEFT_IRIS_CENTER),
+        (RIGHT_EYE, RIGHT_EYE_INNER, RIGHT_EYE_TOP, RIGHT_EYE_BOTTOM, RIGHT_IRIS_CENTER),
+    ]
+    positions = []
+    for outer, inner, top, bottom, iris in eye_specs:
+        x1, x2 = sorted((float(points[outer]["x"]), float(points[inner]["x"])))
+        y1, y2 = sorted((float(points[top]["y"]), float(points[bottom]["y"])))
+        if x2 - x1 < 1.0 or y2 - y1 < 1.0:
+            continue
+        positions.append(
+            (
+                (float(points[iris]["x"]) - x1) / (x2 - x1),
+                (float(points[iris]["y"]) - y1) / (y2 - y1),
+            )
+        )
+    if len(positions) != 2:
+        return {
+            "gazeHorizontalPercent": None,
+            "gazeVerticalPercent": None,
+            "gazeOffsetPercent": None,
+        }
+
+    mean_x = sum(item[0] for item in positions) / 2.0
+    mean_y = sum(item[1] for item in positions) / 2.0
+    horizontal = (mean_x - 0.5) * 100.0 + float(yaw_proxy) * 0.6
+    vertical = (mean_y - 0.5) * 100.0 + 5.5
+    return {
+        "gazeHorizontalPercent": round(horizontal, 2),
+        "gazeVerticalPercent": round(vertical, 2),
+        "gazeOffsetPercent": round(max(abs(horizontal), abs(vertical)), 2),
+    }
+
+
 def measure_face(points, face_count):
     oval = np.array([[points[index]["x"], points[index]["y"]] for index in FACE_OVAL], dtype=np.float32)
     min_x, min_y = oval.min(axis=0)
@@ -895,6 +959,7 @@ def measure_face(points, face_count):
     center_y = float(chin["y"] - head_height / 2)
     roll = math.degrees(math.atan2(right_eye["y"] - left_eye["y"], right_eye["x"] - left_eye["x"]))
     yaw_proxy = ((nose["x"] - center_x) / max(1.0, face_width)) * 100
+    gaze = estimate_eye_gaze(points, yaw_proxy)
     mouth_gap = (distance(mouth_upper, mouth_lower) / max(1.0, head_height)) * 100
 
     # Eye-aspect-ratio: eyelid gap relative to eye width, averaged over both eyes.
@@ -915,6 +980,7 @@ def measure_face(points, face_count):
         "eyeY": round((left_eye["y"] + right_eye["y"]) / 2.0, 2),
         "mouthGapPercent": round(float(mouth_gap), 2),
         "eyeOpenness": eye_openness,
+        **gaze,
         "bounds": {
             "minX": round(float(min_x), 2),
             "minY": round(float(min_y), 2),
@@ -2498,7 +2564,24 @@ def add_preview_watermark(image_bgr):
     return result
 
 
-def build_overlay(source_bgr, points, crop, matte=None, face=None):
+def draw_dashed_line(image, start, end, color, thickness=2, dash=14, gap=9):
+    """Draw a scale-independent dashed guide between two pixel coordinates."""
+    x1, y1 = start
+    x2, y2 = end
+    distance_px = math.hypot(x2 - x1, y2 - y1)
+    if distance_px < 1:
+        return
+    step = max(1, dash + gap)
+    for offset in range(0, int(distance_px) + 1, step):
+        end_offset = min(distance_px, offset + dash)
+        start_ratio = offset / distance_px
+        end_ratio = end_offset / distance_px
+        p1 = (int(round(x1 + (x2 - x1) * start_ratio)), int(round(y1 + (y2 - y1) * start_ratio)))
+        p2 = (int(round(x1 + (x2 - x1) * end_ratio)), int(round(y1 + (y2 - y1) * end_ratio)))
+        cv2.line(image, p1, p2, color, thickness, lineType=cv2.LINE_AA)
+
+
+def build_overlay(source_bgr, points, crop, matte=None, face=None, profile=None):
     source = ensure_bgr(source_bgr)
     dim = source.copy()
     cv2.rectangle(dim, (0, 0), (source.shape[1], source.shape[0]), (10, 24, 39), thickness=-1)
@@ -2531,21 +2614,120 @@ def build_overlay(source_bgr, points, crop, matte=None, face=None):
         lineType=cv2.LINE_AA,
     )
 
-    cv2.line(overlay, (x + w // 2, y), (x + w // 2, y + h), (60, 105, 255), 2, lineType=cv2.LINE_AA)
-    font_scale = max(0.42, min(0.78, max(source.shape[:2]) / 1500.0))
-    label_y = max(22, y + 27)
-    cv2.putText(overlay, "FINAL CROP", (max(8, x + 10), label_y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (46, 204, 113), 2, cv2.LINE_AA)
-    outline_anchor = tuple(head_outline[np.argmin(head_outline[:, 1])])
-    cv2.putText(
+    guide_thickness = max(2, crop_thickness - 1)
+    target_color = (60, 105, 255)
+    draw_dashed_line(
         overlay,
-        "HEAD + EARS",
-        (max(8, int(outline_anchor[0]) - 45), max(22, int(outline_anchor[1]) - 10)),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        font_scale,
-        (255, 178, 36),
-        2,
-        cv2.LINE_AA,
+        (x + w // 2, y),
+        (x + w // 2, y + h),
+        target_color,
+        guide_thickness,
+        dash=max(10, crop_thickness * 5),
+        gap=max(7, crop_thickness * 3),
     )
+    font_scale = max(0.42, min(0.78, max(source.shape[:2]) / 1500.0))
+
+    # Draw the detected eye line and head axis, not an abstract oval. These
+    # guides make tilt and face alignment visible without suggesting that the
+    # cyan silhouette is the skin-only FaceMesh oval.
+    level_status = "review"
+    gaze_status = "review"
+    direction_status = "review"
+    if face is not None:
+        roll = abs(float(face.get("rollDegrees", 0)))
+        yaw = abs(float(face.get("yawProxy", 0)))
+        gaze = face.get("gazeOffsetPercent")
+        level_status = threshold_status(roll, 4.0, 7.0)
+        direction_status = threshold_status(yaw, 9.0, 14.0)
+        gaze_status = "review" if gaze is None else threshold_status(abs(float(gaze)), 3.0, 4.0)
+        shoulder_status = "review"
+        shoulder_room = None
+        source_background_status = "review"
+        source_background_value = ""
+        profile_head = (profile or {}).get("head") or {}
+        if profile_head:
+            head_percent = float(face["headHeight"]) / max(1.0, float(h)) * 100.0
+            top_margin = ((float(face["centerY"]) - float(face["headHeight"]) / 2.0 - float(y)) / max(1.0, float(h))) * 100.0
+            shoulder_room = 100.0 - top_margin - head_percent
+            target_room = 100.0 - float(profile_head["topMarginPercent"]) - float(profile_head["targetPercent"])
+            shoulder_status = threshold_status(abs(shoulder_room - target_room), 8.0, 12.0)
+            if shoulder_room < 6:
+                shoulder_status = "fail"
+        if profile:
+            source_background = background_stats(source, profile, replaced=False)
+            source_background_status = source_background["status"]
+
+        status_colors = {
+            "pass": (125, 217, 65),
+            "warning": (41, 180, 240),
+            "fail": (46, 68, 232),
+            "review": (255, 167, 106),
+        }
+        level_color = status_colors[level_status]
+
+        if len(points) > max(LEFT_EYE_INNER, RIGHT_EYE_INNER):
+            left_center = (
+                int(round((points[LEFT_EYE]["x"] + points[LEFT_EYE_INNER]["x"]) / 2)),
+                int(round((points[LEFT_EYE]["y"] + points[LEFT_EYE_INNER]["y"]) / 2)),
+            )
+            right_center = (
+                int(round((points[RIGHT_EYE]["x"] + points[RIGHT_EYE_INNER]["x"]) / 2)),
+                int(round((points[RIGHT_EYE]["y"] + points[RIGHT_EYE_INNER]["y"]) / 2)),
+            )
+            cv2.line(overlay, left_center, right_center, level_color, guide_thickness, cv2.LINE_AA)
+            cv2.circle(overlay, left_center, max(3, crop_thickness + 1), level_color, -1, cv2.LINE_AA)
+            cv2.circle(overlay, right_center, max(3, crop_thickness + 1), level_color, -1, cv2.LINE_AA)
+
+        if len(points) > max(FOREHEAD, CHIN):
+            forehead = (int(round(points[FOREHEAD]["x"])), int(round(points[FOREHEAD]["y"])))
+            chin = (int(round(points[CHIN]["x"])), int(round(points[CHIN]["y"])))
+            cv2.line(overlay, forehead, chin, level_color, guide_thickness, cv2.LINE_AA)
+
+        eye_rule = ((profile or {}).get("head") or {}).get("eye")
+        if eye_rule and eye_rule.get("targetFromTopPercent") is not None:
+            target_eye_y = int(round(y + h * float(eye_rule["targetFromTopPercent"]) / 100.0))
+            draw_dashed_line(
+                overlay,
+                (x + max(8, crop_thickness * 3), target_eye_y),
+                (x + w - max(8, crop_thickness * 3), target_eye_y),
+                target_color,
+                guide_thickness,
+                dash=max(10, crop_thickness * 5),
+                gap=max(7, crop_thickness * 3),
+            )
+
+        status_label = {"pass": "PASS", "warning": "CHECK", "fail": "RETAKE", "review": "CHECK"}
+        rows = [
+            ("HEAD LEVEL", level_status, f'{roll:.1f} DEG'),
+            ("HEAD DIRECTION", direction_status, f'{yaw:.1f}%'),
+            ("EYE GAZE", gaze_status, "N/A" if gaze is None else f'{abs(float(gaze)):.1f}%'),
+            ("SHOULDER FRAME", shoulder_status, "N/A" if shoulder_room is None else f'{shoulder_room:.1f}%'),
+            ("SOURCE BACKGROUND", source_background_status, source_background_value),
+        ]
+        row_height = max(24, int(round(font_scale * 36)))
+        panel_width = max(235, int(round(font_scale * 390)))
+        panel_height = row_height * len(rows) + 14
+        panel_x = int(clamp(x + 12, 6, max(6, source.shape[1] - panel_width - 6)))
+        panel_y = int(clamp(y + h - panel_height - 12, 6, max(6, source.shape[0] - panel_height - 6)))
+        panel = overlay.copy()
+        cv2.rectangle(panel, (panel_x, panel_y), (panel_x + panel_width, panel_y + panel_height), (11, 13, 16), -1)
+        overlay = cv2.addWeighted(panel, 0.78, overlay, 0.22, 0)
+        for index, (name, status, value) in enumerate(rows):
+            baseline = panel_y + 10 + row_height * index + int(row_height * 0.65)
+            color = status_colors[status]
+            cv2.putText(overlay, name, (panel_x + 10, baseline), cv2.FONT_HERSHEY_SIMPLEX, font_scale * 0.72, (236, 233, 226), 1, cv2.LINE_AA)
+            right = status_label[status] if not value else f'{status_label[status]}  {value}'
+            right_size = cv2.getTextSize(right, cv2.FONT_HERSHEY_SIMPLEX, font_scale * 0.68, 1)[0]
+            cv2.putText(
+                overlay,
+                right,
+                (panel_x + panel_width - right_size[0] - 10, baseline),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                font_scale * 0.68,
+                color,
+                1,
+                cv2.LINE_AA,
+            )
     return overlay
 
 
@@ -2604,6 +2786,11 @@ def background_stats(image_bgr, profile, replaced=False):
     # retake - so never hard-fail the output on it.
     if replaced and status == "fail":
         status = "warning"
+    # Without replacement these are the actual submission pixels. A mandatory
+    # background rule is binary: values outside the programme tolerance require
+    # a retake, not a dismissible warning.
+    if not replaced and status == "warning":
+        status = "fail"
 
     return {
         "status": status,
@@ -2666,6 +2853,18 @@ def build_checks(face, crop, profile, stats, background_stats_result, output_byt
     head_percent = (face["headHeight"] / crop["height"]) * 100
     center_offset = abs((face["centerX"] - (crop["x"] + crop["width"] / 2)) / crop["width"]) * 100
     top_margin = (((face["centerY"] - face["headHeight"] / 2) - crop["y"]) / crop["height"]) * 100
+    shoulder_room = 100.0 - top_margin - head_percent
+    target_shoulder_room = 100.0 - float(profile["head"]["topMarginPercent"]) - float(profile["head"]["targetPercent"])
+    shoulder_delta = shoulder_room - target_shoulder_room
+    shoulder_status = threshold_status(abs(shoulder_delta), 8.0, 12.0)
+    if shoulder_room < 6:
+        shoulder_status = "fail"
+    if shoulder_delta > 8:
+        shoulder_note = "too much upper body"
+    elif shoulder_delta < -8:
+        shoulder_note = "shoulders too tight"
+    else:
+        shoulder_note = "balanced upper shoulders"
     file_rules = profile.get("file", {})
     max_bytes = profile.get("automation", {}).get("compressionTarget") or file_rules.get("maxBytes")
     min_bytes = file_rules.get("minBytes")
@@ -2698,16 +2897,28 @@ def build_checks(face, crop, profile, stats, background_stats_result, output_byt
         edit_risk_value = "face restoration rescue mode"
         edit_risk_target = "avoid unless retake is impossible"
 
+    gaze_offset = face.get("gazeOffsetPercent")
+    gaze_status = "review" if gaze_offset is None else threshold_status(float(gaze_offset), 3.0, 4.0)
+    gaze_value = "not measurable" if gaze_offset is None else f'{float(gaze_offset):.1f}% iris offset'
+
     checks = [
         check("face_detection", "Face detection", "pass" if face["faceCount"] == 1 else "fail", f'{face["faceCount"]} face / Python FaceMesh', "1 clear face"),
         check("face_outline", "Head outline", "pass", "hair, ears and jaw mapped", "visible head silhouette"),
         check("head_size", "Head size", range_status(head_percent, profile["head"]["minPercent"], profile["head"]["maxPercent"]), f"{head_percent:.1f}%", f'{profile["head"]["minPercent"]}-{profile["head"]["maxPercent"]}%'),
         check("head_center", "Horizontal center", threshold_status(center_offset, 5, 8), f"{center_offset:.1f}% offset", "<= 5%"),
         check("top_margin", "Top margin", top_margin_status, f"{top_margin:.1f}%", f'{profile["head"]["topMarginPercent"]}% target'),
+        check(
+            "shoulder_framing",
+            "Shoulder framing",
+            shoulder_status,
+            f"{shoulder_room:.1f}% below chin / {shoulder_note}",
+            f"about {target_shoulder_room:.0f}% / head and upper shoulders only",
+        ),
         check("head_tilt", "Head tilt", threshold_status(abs(face["rollDegrees"]), 4, 7), f'{abs(face["rollDegrees"]):.1f} deg', "<= 4 deg"),
-        check("face_direction", "Face direction", threshold_status(abs(face["yawProxy"]), 9, 14), f'{abs(face["yawProxy"]):.1f}% nose offset', "facing camera"),
+        check("face_direction", "Head direction", threshold_status(abs(face["yawProxy"]), 9, 14), f'{abs(face["yawProxy"]):.1f}% nose offset', "head facing camera"),
         check("mouth", "Mouth", threshold_status(face["mouthGapPercent"], 1.4, 2.4), f'{face["mouthGapPercent"]:.1f}%', "closed/neutral"),
         check("eyes_open", "Eyes open", threshold_status_inverse(face.get("eyeOpenness", 0.3), 0.17, 0.12), f'{face.get("eyeOpenness", 0):.2f} aperture', "eyes fully open"),
+        check("eye_gaze", "Eye gaze", gaze_status, gaze_value, "both eyes looking into camera"),
         check("glasses_glare", "Glasses glare", "warning" if face.get("glareFraction", 0) > 0.04 else "pass", f'{face.get("glareFraction", 0) * 100:.1f}% hotspot over eyes', "no glare/reflection on lenses"),
         check("background_cleanup", "Background cleanup", mask_stats.get("status", "review") if background_replaced else "review", mask_value(mask_stats, background_replaced), "clean matte with visible face/hair edges"),
         check("background_uniformity", "Background uniformity", background_stats_result["status"], background_stats_result["value"], background_stats_result["target"]),
@@ -2801,8 +3012,9 @@ def build_source_quality(source_bgr, face, profile, source_stats, face_stats, so
     pose_value += f" / {yaw:.1f}% yaw"
 
     if not background_replaced:
-        background_status = "review"
-        background_value = "replacement off"
+        source_background = background_stats(source_bgr, profile, replaced=False)
+        background_status = source_background["status"]
+        background_value = source_background["value"]
     elif mask_stats.get("available"):
         background_status = mask_stats.get("status", "warning")
         background_value = f'{mask_stats["engine"]} / face kept {mask_stats["faceCoverage"] * 100:.0f}%'
@@ -2817,7 +3029,7 @@ def build_source_quality(source_bgr, face, profile, source_stats, face_stats, so
         check("source_noise", "Input noise", threshold_status(face_noise, 9, 14), f"{face_noise:.1f}", "low grain before enhancement"),
         check("source_lighting", "Input lighting", lighting_status, lighting_value, "even exposure, no clipping"),
         check("source_pose", "Capture pose", pose_status, pose_value, "front-facing, level head"),
-        check("source_background_path", "Background path", background_status, background_value, "matte-ready portrait"),
+        check("source_background_path", "Source background", background_status, background_value, "programme-required plain background"),
         check("source_file", "Source file", "pass", format_bytes(source_bytes), "original image retained for audit"),
     ]
 
@@ -2866,11 +3078,24 @@ def build_decision(source_quality, checks, pipeline):
     review_items = [item for item in checks if item["status"] == "review"]
     source_failures = [item for item in source_quality if item["status"] == "fail"]
     policy_warnings = [item for item in checks if item["id"] == "edit_policy" and item["status"] == "warning"]
+    background_failure = any(
+        item["id"] in {"source_background_path", "background_uniformity"} and item["status"] == "fail"
+        for item in [*source_quality, *checks]
+    )
+    gaze_failure = any(item["id"] == "eye_gaze" and item["status"] == "fail" for item in checks)
+    unfixable_failure = background_failure or gaze_failure
 
-    if source_failures:
+    if source_failures or unfixable_failure:
         status = "retake"
         title = "Retake source photo"
-        message = "The input does not have enough clean detail for a reliable passport output."
+        if background_failure and gaze_failure:
+            message = "Retake against the required plain background while looking directly into the camera lens."
+        elif background_failure:
+            message = "The selected programme requires a plain capture background and does not permit replacing this one digitally."
+        elif gaze_failure:
+            message = "The eyes are not aligned with the camera. Retake while looking directly into the lens."
+        else:
+            message = "The input has a capture problem that cannot be repaired safely for this programme."
     elif fail_items:
         status = "fix"
         title = "Fix output before export"
@@ -2890,9 +3115,20 @@ def build_decision(source_quality, checks, pipeline):
 
     actions = []
     if status == "retake":
-        actions.extend(["Use a sharper source", "Face the camera directly", "Use brighter even light"])
-    if any(item["id"] == "background_cleanup" and item["status"] != "pass" for item in checks):
+        if background_failure:
+            actions.append("Use the programme-required plain background when taking the photo")
+        if gaze_failure:
+            actions.append("Look directly into the camera lens")
+        if any(item["id"] in {"source_focus", "source_face_pixels", "source_resolution"} and item["status"] == "fail" for item in source_quality):
+            actions.append("Use a sharper, higher-resolution source")
+        if any(item["id"] == "source_lighting" and item["status"] == "fail" for item in source_quality):
+            actions.append("Use brighter, even light without clipping")
+        if any(item["id"] in {"source_pose", "face_direction", "head_tilt"} and item["status"] == "fail" for item in [*source_quality, *checks]):
+            actions.append("Keep the head level and face the camera directly")
+    if any(item["id"] == "background_cleanup" and item["status"] != "pass" and item["value"] != "disabled" for item in checks):
         actions.append("Review hair and shoulder edges")
+    if any(item["id"] == "shoulder_framing" and item["status"] != "pass" for item in checks):
+        actions.append("Keep only the head and upper shoulders; avoid excess torso")
     if policy_warnings:
         actions.append("Use crop/background only if the government allows edited photos")
     if review_items:

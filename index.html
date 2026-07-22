@@ -4,29 +4,35 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>KVNP Passport Studio</title>
-    <link rel="stylesheet" href="src/styles.css?v=kvnp-studio-26" />
+    <link rel="stylesheet" href="src/styles.css?v=kvnp-studio-31" />
   </head>
   <body>
     <!-- ============ AUTH ============ -->
     <div id="auth-view" class="auth-view">
       <div class="auth-aside">
+        <img class="auth-aside-photo" src="screenshots/eval/raw/px_220453.jpg" alt="" />
         <div class="auth-aside-inner">
           <div class="auth-brand">
             <span class="brand-mark" aria-hidden="true">KV</span>
             <span class="auth-brand-name">KVNP Studio</span>
           </div>
-          <h1 class="auth-headline">Passport &amp; visa photos,<br />compliant by construction.</h1>
+          <span class="auth-kicker">Application photo intelligence</span>
+          <h1 class="auth-headline">The right photo.<br />Before the application asks.</h1>
           <p class="auth-sub">
-            Detect, auto-correct, matte, and validate against official programme rules — with an
-            honest decision on every photo.
+            Choose the destination. KVNP checks the shot, prepares the exact file, and tells you
+            clearly when a retake is the safer answer.
           </p>
           <ul class="auth-points">
-            <li><span class="dot"></span> Identity-preserving auto-correction</li>
-            <li><span class="dot"></span> Before / after studio compare</li>
-            <li><span class="dot"></span> Print sheets at lab resolution</li>
-            <li><span class="dot"></span> Per-programme compliance checks</li>
+            <li><span class="dot"></span> 17 verified programme profiles</li>
+            <li><span class="dot"></span> Live pose, gaze, framing and background checks</li>
+            <li><span class="dot"></span> Submission file, print sheet and audit report</li>
           </ul>
-          <div class="auth-aside-foot">KVNP Holdings Inc · local processing</div>
+          <div class="auth-proof">
+            <span><strong>478</strong> face points</span>
+            <span><strong>0</strong> face reshaping</span>
+            <span><strong>100%</strong> edits disclosed</span>
+          </div>
+          <div class="auth-aside-foot">KVNP Holdings Inc / private processing</div>
         </div>
       </div>
 
@@ -78,14 +84,14 @@
 
         <nav class="sidebar-nav">
           <button class="nav-item active" type="button" data-nav="studio">
-            <span class="nav-ico">▣</span> Studio
+            <span class="nav-ico">01</span> New photo
           </button>
           <button class="nav-item" type="button" data-nav="queue">
-            <span class="nav-ico">≡</span> Batch queue
+            <span class="nav-ico">02</span> Batch queue
             <span id="nav-queue-count" class="nav-badge" hidden>0</span>
           </button>
           <button class="nav-item" type="button" data-nav="checks">
-            <span class="nav-ico">✓</span> Compliance
+            <span class="nav-ico">03</span> Compliance
           </button>
         </nav>
 
@@ -104,7 +110,7 @@
       <div class="app-main">
         <header class="topbar">
           <div class="topbar-title">
-            <h2>Studio</h2>
+            <h2>New application photo</h2>
             <p id="profile-summary">Select a country and programme.</p>
           </div>
           <div class="topbar-actions">
@@ -112,18 +118,37 @@
           </div>
         </header>
 
+        <nav class="workflow-progress" aria-label="Photo preparation progress">
+          <button class="workflow-step active" type="button" data-workflow-step="1" data-target="destination-card">
+            <span>01</span><strong>Destination</strong><small>Choose the rules</small>
+          </button>
+          <button class="workflow-step" type="button" data-workflow-step="2" data-target="photo-card">
+            <span>02</span><strong>Photo</strong><small>Upload or capture</small>
+          </button>
+          <button class="workflow-step" type="button" data-workflow-step="3" data-target="assessment-panel">
+            <span>03</span><strong>Assessment</strong><small>Check the source</small>
+          </button>
+          <button class="workflow-step" type="button" data-workflow-step="4" data-target="prepare-card">
+            <span>04</span><strong>Prepare</strong><small>Apply safe fixes</small>
+          </button>
+          <button class="workflow-step" type="button" data-workflow-step="5" data-target="export-controls">
+            <span>05</span><strong>Export</strong><small>Download the file</small>
+          </button>
+        </nav>
+
         <main class="workspace">
           <!-- SOURCE -->
-          <section class="card source-card" aria-labelledby="source-title">
+          <section id="photo-card" class="card source-card" aria-labelledby="source-title">
             <div class="card-head">
               <div>
-                <h3 id="source-title">Source</h3>
+                <span class="card-step">Step 02</span>
+                <h3 id="source-title">Add your photo</h3>
                 <p id="source-meta">No image loaded</p>
               </div>
               <div class="btn-row">
-                <label class="btn btn-primary" for="file-input">Upload</label>
+                <label class="btn btn-primary" for="file-input">Upload photo</label>
                 <input id="file-input" type="file" accept="image/*" multiple />
-                <button id="camera-button" class="btn" type="button">Camera</button>
+                <button id="camera-button" class="btn" type="button">Open camera</button>
                 <button id="capture-button" class="btn" type="button" disabled>Capture</button>
                 <label class="mini-toggle"><input id="auto-capture" type="checkbox" checked /> Auto</label>
               </div>
@@ -131,26 +156,26 @@
 
             <div id="queue-strip" class="queue-strip" hidden></div>
 
-            <div class="stage">
+            <div id="upload-dropzone" class="stage">
               <canvas id="source-canvas" width="900" height="620"></canvas>
               <video id="camera-feed" playsinline muted hidden></video>
               <div id="empty-state" class="empty-state">
-                <div class="empty-glyph">⬡</div>
-                <strong>Load a portrait photo</strong>
-                <span>Green marks the final crop. Cyan traces the visible head, including hair and ears.</span>
+                <div class="empty-glyph">+</div>
+                <strong>Drop a portrait here</strong>
+                <span>Or use Upload photo. JPG, PNG, WebP and phone images are accepted.</span>
               </div>
               <div id="country-gate" class="country-gate">
                 <div class="country-gate-inner">
-                  <span class="gate-step">Step 1 of 2 — destination</span>
-                  <strong>Choose the country first</strong>
-                  <span>Every country has different photo laws. The studio only assesses and fixes what your selected programme legally allows.</span>
+                  <span class="gate-step">Step 01 / Destination</span>
+                  <strong>Confirm where this photo is going</strong>
+                  <span>The selected programme sets the crop, background, file and editing rules.</span>
                   <button id="gate-confirm" class="btn btn-primary" type="button">Continue with this programme</button>
-                  <span class="gate-hint">or pick a different country / programme in Job setup →</span>
+                  <span class="gate-hint">Choose another country in Destination.</span>
                 </div>
               </div>
             </div>
 
-            <div class="card-strip">
+            <div id="assessment-panel" class="card-strip">
               <div class="card-strip-head">
                 <h4>Capture quality</h4>
                 <p id="retake-guidance">Load a portrait to see whether the source is strong enough.</p>
@@ -160,9 +185,13 @@
           </section>
 
           <!-- CONTROLS -->
-          <section class="card control-card" aria-labelledby="controls-title">
+          <section id="destination-card" class="card control-card" aria-labelledby="controls-title">
             <div class="card-head compact">
-              <h3 id="controls-title">Job setup</h3>
+              <div>
+                <span class="card-step">Step 01</span>
+                <h3 id="controls-title">Destination</h3>
+              </div>
+              <span id="catalogue-count" class="catalogue-count">22 programmes</span>
             </div>
 
             <div class="field-grid">
@@ -176,6 +205,12 @@
               </label>
             </div>
 
+            <div class="programme-brief" aria-label="Selected programme summary">
+              <div><span>Output</span><strong id="programme-output">-</strong></div>
+              <div><span>Background</span><strong id="programme-background">-</strong></div>
+              <div><span>Rules reviewed</span><strong id="programme-reviewed">-</strong></div>
+            </div>
+
             <div class="preset-bar">
               <select id="preset-select" title="Saved presets">
                 <option value="">Presets…</option>
@@ -186,19 +221,26 @@
 
             <div id="requirements-list" class="requirements-list"></div>
 
-            <div class="section-label policy-title">What this country allows</div>
+            <div class="section-label policy-title">Submission policy</div>
             <div id="policy-list" class="policy-list"></div>
+            <div id="source-links" class="source-links"></div>
+
+            <details class="studio-details">
+              <summary>
+                <span>Advanced processing</span>
+                <small>Models, preview tools and manual placement</small>
+              </summary>
+              <div class="studio-details-body">
             <div class="preview-mode-card">
               <div>
-                <strong>Need to test the cleanup tools?</strong>
-                <span>Editing preview enables them with a permanent not-for-submission watermark.</span>
+                <strong>Editing preview</strong>
+                <span>Test cleanup tools on a permanently watermarked, non-submission result.</span>
               </div>
               <label class="mini-toggle" for="preview-mode">
                 <input id="preview-mode" type="checkbox" />
-                Editing preview
+                Enable preview
               </label>
             </div>
-            <div id="source-links" class="source-links"></div>
 
             <div class="section-divider"></div>
 
@@ -234,6 +276,7 @@
                 <span>Photo enhancement</span>
               </label>
             </div>
+            <p id="background-policy-note" class="control-guidance" role="status"></p>
 
             <label class="field-label spaced" for="enhancement-mode">Enhancement mode</label>
             <select id="enhancement-mode">
@@ -276,19 +319,22 @@
             </details>
 
             <div id="measurements" class="measurements"></div>
+              </div>
+            </details>
           </section>
 
           <!-- RESULT -->
-          <section class="card result-card" aria-labelledby="result-title">
+          <section id="prepare-card" class="card result-card" aria-labelledby="result-title">
             <div class="card-head">
               <div>
-                <h3 id="result-title">Generated photo</h3>
+                <span class="card-step">Steps 03-05</span>
+                <h3 id="result-title">Prepared photo</h3>
                 <p id="result-summary">Waiting for an image.</p>
               </div>
               <div class="btn-row">
-                <button id="auto-fix" class="btn btn-primary" type="button" disabled>✦ Auto-fix</button>
-                <button id="download-photo" class="btn" type="button" disabled>Download</button>
-                <button id="download-report" class="btn" type="button" disabled>Report</button>
+                <button id="auto-fix" class="btn btn-primary" type="button" disabled>Prepare photo</button>
+                <button id="download-photo" class="btn" type="button" disabled>Download file</button>
+                <button id="download-report" class="btn" type="button" disabled>Audit report</button>
               </div>
             </div>
 
@@ -343,7 +389,7 @@
                   <button id="touchup-reset" class="btn btn-sm" type="button" hidden>Reset</button>
                 </div>
 
-                <details class="adjust-panel" open>
+                <details class="adjust-panel">
                   <summary>
                     <span>Adjustments</span>
                     <button id="adjust-reset" class="link-btn" type="button">Reset all</button>
@@ -351,8 +397,8 @@
                   <div id="adjust-grid" class="adjust-grid"></div>
                 </details>
 
-                <div class="output-row">
-                  <span class="print-bar-label">Output</span>
+                <div id="export-controls" class="output-row">
+                  <span class="print-bar-label">Download file</span>
                   <select id="output-format" class="mini-select" title="File format">
                     <option value="image/jpeg">JPEG</option>
                     <option value="image/png">PNG</option>
@@ -397,8 +443,8 @@
       </div>
     </div>
 
-    <script src="src/vendor/gsap.min.js?v=kvnp-studio-26"></script>
-    <script src="src/motion.js?v=kvnp-studio-26"></script>
-    <script type="module" src="src/app.js?v=kvnp-studio-26"></script>
+    <script src="src/vendor/gsap.min.js?v=kvnp-studio-31"></script>
+    <script src="src/motion.js?v=kvnp-studio-31"></script>
+    <script type="module" src="src/app.js?v=kvnp-studio-31"></script>
   </body>
 </html>
