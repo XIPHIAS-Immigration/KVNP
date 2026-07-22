@@ -31,6 +31,22 @@ US_PASSPORT = {
     "reviewChecks": ["neutral expression"],
 }
 
+ASSISTED_PROFILE = {
+    **US_PASSPORT,
+    "country": "IN",
+    "countryName": "India",
+    "programme": "e-Visa test profile",
+    "allowedEdits": {
+        "straighten": True,
+        "tone": True,
+        "lighting": True,
+        "background": True,
+        "enhance": True,
+        "rescue": False,
+        "note": "Conservative preparation allowed; facial restoration prohibited.",
+    },
+}
+
 
 def _portrait():
     return cv2.imread(str(ROOT / "screenshots" / "test-inputs" / "portrait.jpg"))
@@ -83,12 +99,12 @@ def test_correction_flips_tilt_check_to_pass():
     image_bytes = _jpeg_bytes(_tilt(_portrait(), 8.0))
     base_options = {"backgroundReplaced": True, "enhanceOutput": True, "enhancementMode": "ai-clean", "backgroundColor": "#ffffff"}
 
-    with_fix = server.process_image(image_bytes, US_PASSPORT, base_options)
+    with_fix = server.process_image(image_bytes, ASSISTED_PROFILE, base_options)
     tilt = next(c for c in with_fix["checks"] if c["id"] == "head_tilt")
     assert tilt["status"] == "pass", tilt
     assert any(c["id"] == "straighten" for c in with_fix["corrections"]), with_fix["corrections"]
 
-    without_fix = server.process_image(image_bytes, US_PASSPORT, {**base_options, "autoStraighten": False})
+    without_fix = server.process_image(image_bytes, ASSISTED_PROFILE, {**base_options, "autoStraighten": False})
     tilt_no = next(c for c in without_fix["checks"] if c["id"] == "head_tilt")
     assert tilt_no["status"] == "fail", tilt_no
     assert not any(c["id"] == "straighten" for c in without_fix["corrections"]), without_fix["corrections"]
@@ -106,7 +122,7 @@ def test_manual_override_keeps_corrections_and_placement():
         "backgroundColor": "#ffffff",
         "manualFace": {"centerX": 300, "centerY": 300, "headHeight": 250, "faceWidth": 180},
     }
-    result = server.process_image(image_bytes, US_PASSPORT, options)
+    result = server.process_image(image_bytes, ASSISTED_PROFILE, options)
     # manualFace controls placement...
     assert abs(result["face"]["centerX"] - 300) < 1, result["face"]
     assert abs(result["face"]["headHeight"] - 250) < 1, result["face"]
@@ -133,16 +149,26 @@ def test_clipping_capture_fails_lighting_even_after_tone():
     print("test_clipping_capture_fails_lighting_even_after_tone", PASS)
 
 
-def test_strict_programme_flags_corrections_as_policy_risk():
-    """A strict 'no alteration' programme must flag applied geometry/tone edits."""
+def test_strict_programme_clamps_every_pixel_edit():
+    """A strict programme must reject client attempts to enable pixel edits."""
     image_bytes = _jpeg_bytes(_tilt(_portrait(), 8.0))
-    # background + enhancement OFF, but auto-straighten/tone on -> pixels still edited
-    options = {"backgroundReplaced": False, "enhanceOutput": False, "autoStraighten": True, "autoTone": True}
+    options = {
+        "backgroundReplaced": True,
+        "enhanceOutput": True,
+        "autoStraighten": True,
+        "autoTone": True,
+        "autoLighting": True,
+        "manualFace": {"centerX": 300, "centerY": 300, "headHeight": 250, "faceWidth": 180},
+    }
     result = server.process_image(image_bytes, US_PASSPORT, options)  # US is strict
     edit = next(c for c in result["checks"] if c["id"] == "edit_policy")
-    assert edit["status"] == "warning", edit
-    assert edit["value"] != "crop/format only", edit
-    print("test_strict_programme_flags_corrections_as_policy_risk", PASS)
+    assert edit["status"] == "pass", edit
+    assert edit["value"] == "crop/format only", edit
+    assert result["corrections"] == [], result["corrections"]
+    assert result["allowedEdits"]["enhance"] is False
+    assert "manual_geometry" in result["policyClamped"]
+    assert {"straighten", "tone", "lighting", "background", "enhance"}.issubset(set(result["policyClamped"]))
+    print("test_strict_programme_clamps_every_pixel_edit", PASS)
 
 
 def main():
@@ -153,7 +179,7 @@ def main():
         test_correction_flips_tilt_check_to_pass,
         test_manual_override_keeps_corrections_and_placement,
         test_clipping_capture_fails_lighting_even_after_tone,
-        test_strict_programme_flags_corrections_as_policy_risk,
+        test_strict_programme_clamps_every_pixel_edit,
     ]
     for test in tests:
         test()

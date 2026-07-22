@@ -346,11 +346,22 @@
                   <select id="output-format" class="mini-select" title="File format">
                     <option value="image/jpeg">JPEG</option>
                     <option value="image/png">PNG</option>
+                    <option value="image/webp">WebP</option>
+                    <option value="application/pdf">Photo PDF</option>
+                  </select>
+                  <select id="output-scale" class="mini-select" title="Export resolution">
+                    <option value="1">Required size</option>
+                    <option value="2">2x high resolution</option>
+                  </select>
+                  <select id="output-dpi" class="mini-select" title="Print resolution">
+                    <option value="300">300 DPI</option>
+                    <option value="600">600 DPI</option>
                   </select>
                   <label id="quality-field" class="touchup-brush">
                     Quality <input id="output-quality" type="range" min="60" max="100" value="92" />
                     <span id="quality-val" class="zoom-label">92</span>
                   </label>
+                  <span id="output-note" class="output-note">Required-size JPEG for submission.</span>
                 </div>
               </div>
 

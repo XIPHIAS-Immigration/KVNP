@@ -85,8 +85,8 @@ docker compose version
 ## 4. Clone the repo
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
-cd YOUR_REPO_NAME
+git clone https://github.com/XIPHIAS-Immigration/KVNP.git
+cd KVNP
 ```
 
 ## 5. Create production env
@@ -100,7 +100,7 @@ nano .env
 Set:
 
 ```text
-DOMAIN=passport.yourdomain.com
+DOMAIN=passport.kvnp.ca
 ACME_EMAIL=you@example.com
 KVNP_SESSION_SECRET=<paste-long-random-secret>
 ```
@@ -120,29 +120,41 @@ docker compose logs -f app
 docker compose logs -f caddy
 ```
 
-Health check locally on the server:
+Health check inside the app container:
 
 ```bash
-curl http://127.0.0.1:4173/api/health
+docker compose exec -T app curl -fsS http://127.0.0.1:4173/api/health
 ```
 
 Public check after DNS resolves:
 
 ```bash
-curl https://passport.yourdomain.com/api/health
+curl -fsS https://passport.kvnp.ca/api/health
 ```
 
 Open:
 
 ```text
-https://passport.yourdomain.com/?guest
+https://passport.kvnp.ca/
 ```
 
 ## 7. Update deployment
 
 ```bash
-git pull
-docker compose up -d --build
+cd ~/KVNP
+git pull --ff-only origin main
+docker compose up -d --build --remove-orphans
+docker compose ps
+docker compose exec -T app curl -fsS http://127.0.0.1:4173/api/health
+curl -fsS https://passport.kvnp.ca/api/health
+```
+
+The ignored `.env` file and the `kvnp_data` Docker volume remain in place during
+this update. If the public check returns `502`, inspect the application first:
+
+```bash
+docker compose logs --tail=100 app
+docker compose logs --tail=100 caddy
 ```
 
 ## 8. Stop to save money

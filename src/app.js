@@ -70,8 +70,12 @@ const elements = {
   adjustGrid: document.querySelector("#adjust-grid"),
   adjustReset: document.querySelector("#adjust-reset"),
   outputFormat: document.querySelector("#output-format"),
+  outputScale: document.querySelector("#output-scale"),
+  outputDpi: document.querySelector("#output-dpi"),
   outputQuality: document.querySelector("#output-quality"),
+  qualityField: document.querySelector("#quality-field"),
   qualityVal: document.querySelector("#quality-val"),
+  outputNote: document.querySelector("#output-note"),
   bgSwatches: document.querySelector("#bg-swatches"),
   presetSelect: document.querySelector("#preset-select"),
   presetSave: document.querySelector("#preset-save"),
@@ -126,6 +130,7 @@ const state = {
   sourceQuality: [],
   pipeline: null,
   decision: null,
+  processingError: null,
   manualOverride: false,
   backgroundReplaced: true,
   enhanceOutput: true,
@@ -150,6 +155,8 @@ const state = {
   zoom: 1,
   resultView: "result",
   outputFormat: "image/jpeg",
+  outputScale: 1,
+  outputDpi: 300,
   outputQuality: 92,
 };
 
@@ -342,6 +349,7 @@ function handleProfileChange() {
   state.profile = RULE_PROFILES.find((profile) => profile.id === elements.profileSelect.value) ?? getDefaultProfile();
   applyProfileAutomationDefaults();
   renderProfile();
+  renderVisionStatus();
   configureFinalCanvas();
   state.manualOverride = false;
   if (state.originalFile) {
@@ -358,6 +366,7 @@ function handleCountryChange() {
   populateProgrammeSelect(state.profile.country);
   applyProfileAutomationDefaults();
   renderProfile();
+  renderVisionStatus();
   configureFinalCanvas();
   state.manualOverride = false;
   if (state.originalFile) {
@@ -405,6 +414,10 @@ function applyProfileAutomationDefaults() {
   state.enhancementMode = automation.enhancementMode ?? "ai-clean";
   state.backgroundColor = automation.backgroundColor ?? "#ffffff";
   state.backgroundCleanup = automation.backgroundCleanup ?? "balanced";
+  state.outputFormat = state.profile.output?.mime ?? "image/jpeg";
+  state.outputScale = 1;
+  state.outputDpi = 300;
+  state.outputQuality = Math.round((state.profile.output?.quality ?? 0.92) * 100);
 
   elements.backgroundReplace.checked = state.backgroundReplaced;
   elements.backgroundReplace.disabled = false;
@@ -414,6 +427,7 @@ function applyProfileAutomationDefaults() {
   elements.enhancementMode.disabled = false;
   elements.backgroundColor.value = state.backgroundColor;
   elements.backgroundCleanup.value = state.backgroundCleanup;
+  syncOutputControls();
 
   // Country law gates the controls: what the programme forbids is off + locked.
   const allowed = state.profile.allowedEdits ?? {};
@@ -446,8 +460,65 @@ function applyProfileAutomationDefaults() {
     elements.enhancementMode.value = "studio";
   }
 
+  elements.enhancementMode.disabled = allowed.enhance === false;
+  elements.backgroundCleanup.disabled = allowed.background === false;
+  elements.backgroundColor.disabled = allowed.background === false;
+  applyAdjustmentPolicyGate();
+
   // Touch-up paints over the background, so it is gated by the same background policy.
   applyTouchupGate();
+}
+
+function syncOutputControls() {
+  elements.outputFormat.value = state.outputFormat;
+  elements.outputScale.value = String(state.outputScale);
+  elements.outputDpi.value = String(state.outputDpi);
+  elements.outputQuality.value = String(state.outputQuality);
+  elements.qualityVal.textContent = String(state.outputQuality);
+  if (elements.qualityField) elements.qualityField.hidden = state.outputFormat === "image/png";
+  elements.outputDpi.disabled = state.outputFormat === "image/webp";
+  updateOutputNote();
+}
+
+function updateOutputNote() {
+  if (!elements.outputNote) return;
+  const labels = {
+    "image/jpeg": "JPEG",
+    "image/png": "PNG",
+    "image/webp": "WebP",
+    "application/pdf": "PDF",
+  };
+  const requiredMime = state.profile.output?.mime ?? "image/jpeg";
+  const width = Number(state.profile.output?.widthPx ?? 0) * state.outputScale;
+  const height = Number(state.profile.output?.heightPx ?? 0) * state.outputScale;
+  const convenience = state.outputScale !== 1 || state.outputFormat !== requiredMime;
+  elements.outputNote.classList.toggle("warning", convenience);
+  elements.outputNote.textContent = convenience
+    ? `Convenience export: ${width} x ${height}px ${labels[state.outputFormat] ?? "file"}. The portal may require ${state.profile.output.widthPx} x ${state.profile.output.heightPx}px ${labels[requiredMime] ?? "JPEG"}.`
+    : `Submission export: ${width} x ${height}px ${labels[state.outputFormat] ?? "file"} at the programme's required canvas size.`;
+}
+
+function isValidationOnlyProfile() {
+  const allowed = state.profile?.allowedEdits ?? {};
+  return ["straighten", "tone", "lighting", "background", "enhance"].every((key) => allowed[key] === false);
+}
+
+function applyAdjustmentPolicyGate() {
+  const validationOnly = isValidationOnlyProfile();
+  if (validationOnly) {
+    for (const key of Object.keys(state.adjust)) state.adjust[key] = 0;
+  }
+  for (const input of elements.adjustGrid?.querySelectorAll("[data-adjust]") ?? []) {
+    input.disabled = validationOnly;
+    input.title = validationOnly ? `Pixel adjustments are not permitted for ${state.profile.countryName}` : "";
+  }
+  if (elements.adjustReset) elements.adjustReset.disabled = validationOnly;
+  const manualDetails = document.querySelector(".manual-details");
+  manualDetails?.classList.toggle("policy-locked", validationOnly);
+  for (const input of manualDetails?.querySelectorAll("input") ?? []) input.disabled = validationOnly;
+  if (validationOnly) state.manualOverride = false;
+  if (elements.autoFix) elements.autoFix.textContent = validationOnly ? "Recheck photo" : "Auto-fix";
+  syncAdjustControls();
 }
 
 function applyTouchupGate() {
@@ -495,6 +566,9 @@ function renderPolicyList() {
     elements.policyList.innerHTML = "";
     return;
   }
+  const mode = isValidationOnlyProfile()
+    ? `<div class="policy-mode validation"><strong>Validation only</strong><span>We measure and format the original capture. Capture defects require a retake.</span></div>`
+    : `<div class="policy-mode assisted"><strong>Assisted editing</strong><span>Only the operations listed below can be applied.</span></div>`;
   const chips = Object.keys(EDIT_LABELS)
     .map((key) => {
       const ok = allowed[key] !== false;
@@ -502,7 +576,7 @@ function renderPolicyList() {
     })
     .join("");
   const note = allowed.note ? `<p class="policy-note">${escapeHtml(allowed.note)}</p>` : "";
-  elements.policyList.innerHTML = chips + note;
+  elements.policyList.innerHTML = mode + chips + note;
 }
 
 async function loadImageFile(file) {
@@ -538,6 +612,7 @@ async function loadImageFile(file) {
   state.humanChecks = {};
   state.pipeline = null;
   state.decision = null;
+  state.processingError = null;
   state.corrections = [];
   state.policyClamped = [];
   state.manualTouchup = false;
@@ -557,16 +632,10 @@ async function loadImageFile(file) {
 }
 
 function configureDefaultFace() {
-  const width = state.image.naturalWidth;
-  const height = state.image.naturalHeight;
-  state.face = {
-    centerX: width * 0.5,
-    centerY: height * 0.43,
-    headHeight: Math.min(width, height) * 0.45,
-    faceWidth: Math.min(width, height) * 0.34,
-    source: "manual-fallback",
-    confidence: 0,
-  };
+  // Geometry must come from a successful detector result. Inventing a centered
+  // fallback face makes non-portraits look measurable and is unsafe for export.
+  state.face = null;
+  state.crop = null;
 }
 
 async function rerunVisionAnalysis() {
@@ -638,6 +707,7 @@ async function processOnServer() {
     }
 
     state.backendResult = result;
+    state.processingError = null;
     state.face = normalizeServerFace(result.face);
     state.crop = result.crop;
     state.serverChecks = result.checks ?? [];
@@ -665,13 +735,42 @@ async function processOnServer() {
     if (seq !== processSeq) return; // superseded; let the newer request own the UI
     console.error(error);
     state.backendResult = null;
+    state.face = null;
+    state.crop = null;
+    state.exportBlob = null;
     state.processedImage = null;
     state.sourceOverlayImage = null;
     state.corrections = [];
     state.beforeDataUrl = null;
-    state.sourceQuality = buildBrowserSourceQuality();
-    state.pipeline = buildBrowserPipeline();
-    state.decision = buildBrowserDecision();
+    state.processingError = error.message || "The photo could not be analyzed.";
+    state.sourceQuality = [
+      qualityCheck("analysis_error", "Portrait analysis", "fail", state.processingError, "1 clear, unobstructed face"),
+    ];
+    state.serverChecks = [];
+    state.checks = [];
+    state.pipeline = {
+      version: "analysis-failed",
+      models: state.modelInventory ?? [],
+      stages: [
+        {
+          id: "geometry",
+          label: "Geometry",
+          engine: "MediaPipe Face Landmarker",
+          status: "fail",
+          detail: state.processingError,
+        },
+      ],
+    };
+    state.decision = {
+      status: "retake",
+      title: "Retake required",
+      message: state.processingError,
+      failures: 1,
+      warnings: 0,
+      reviews: 0,
+      actions: ["Use one unobstructed, front-facing person in even light"],
+      pipelineVersion: "analysis-failed",
+    };
     state.visionStatus = { ready: false, failed: true, message: error.message };
     elements.automationSummary.textContent = error.message;
     stopScanAnimation();
@@ -764,11 +863,13 @@ function renderVisionStatus() {
   }
 
   elements.rerunVision.disabled = !state.image;
-  elements.autoFix.disabled = !state.originalFile;
+  elements.autoFix.disabled = !state.originalFile || Boolean(state.processingError) || !state.face;
 
   if (!state.image) {
     elements.automationSummary.textContent = status.ready
-      ? "Python MediaPipe is ready. Load a portrait to auto-edit."
+      ? isValidationOnlyProfile()
+        ? "Python MediaPipe is ready. Load a portrait to validate the original capture."
+        : "Python MediaPipe is ready. Load a portrait for permitted corrections and validation."
       : status.message;
     return;
   }
@@ -839,9 +940,18 @@ function scheduleAnalysis() {
 }
 
 async function runAnalysis() {
-  if (!state.image || !state.face) {
+  if (!state.image) {
     renderEmptyCanvas();
     renderNoResult();
+    return;
+  }
+  if (!state.face) {
+    if (state.processingError) {
+      renderProcessingFailure();
+    } else {
+      renderEmptyCanvas();
+      renderNoResult();
+    }
     return;
   }
 
@@ -952,14 +1062,41 @@ function renderSourceCanvas() {
   sourceCtx.save();
   sourceCtx.fillStyle = "rgba(7, 13, 22, 0.42)";
   sourceCtx.fillRect(fit.x, fit.y, fit.width, fit.height);
-  sourceCtx.fillStyle = "#dbeafe";
+  sourceCtx.fillStyle = state.processingError ? "#fecaca" : "#dbeafe";
   sourceCtx.font = "700 18px Segoe UI, sans-serif";
   sourceCtx.textAlign = "center";
-  sourceCtx.fillText("Python FaceMesh processing...", canvas.width / 2, canvas.height / 2);
+  sourceCtx.fillText(state.processingError ? "Portrait analysis failed" : "Python FaceMesh processing...", canvas.width / 2, canvas.height / 2);
   sourceCtx.fillStyle = "#91a1b5";
   sourceCtx.font = "500 13px Segoe UI, sans-serif";
-  sourceCtx.fillText("The face-shaped contour will appear when processing completes.", canvas.width / 2, canvas.height / 2 + 28);
+  sourceCtx.fillText(
+    state.processingError ? state.processingError.slice(0, 100) : "The face-shaped contour will appear when processing completes.",
+    canvas.width / 2,
+    canvas.height / 2 + 28,
+  );
   sourceCtx.restore();
+}
+
+function renderProcessingFailure() {
+  configureFinalCanvas();
+  renderSourceCanvas();
+  finalCtx.clearRect(0, 0, elements.finalCanvas.width, elements.finalCanvas.height);
+  finalCtx.fillStyle = "#0f1620";
+  finalCtx.fillRect(0, 0, elements.finalCanvas.width, elements.finalCanvas.height);
+  finalCtx.fillStyle = "#fecaca";
+  finalCtx.font = "700 22px Segoe UI, sans-serif";
+  finalCtx.textAlign = "center";
+  finalCtx.fillText("No compliant output", elements.finalCanvas.width / 2, elements.finalCanvas.height / 2 - 10);
+  finalCtx.fillStyle = "#91a1b5";
+  finalCtx.font = "500 13px Segoe UI, sans-serif";
+  finalCtx.fillText("Retake or choose a clear portrait.", elements.finalCanvas.width / 2, elements.finalCanvas.height / 2 + 20);
+  state.lastReport = null;
+  renderSourceQuality();
+  renderPipeline();
+  renderDecision();
+  renderCorrections();
+  renderChecks();
+  elements.downloadPhoto.disabled = true;
+  elements.downloadReport.disabled = true;
 }
 
 function renderFinalCanvas() {
@@ -1212,7 +1349,7 @@ function describeFaceDetection() {
   const count = state.face?.faceCount ?? 0;
   if (source.includes("mediapipe")) return `${count} face / MediaPipe landmarks`;
   if (source.includes("native")) return `${count || 1} face / native detector`;
-  return "manual fallback";
+  return "no verified face geometry";
 }
 
 function getPoseStatus(value, passMax, warningMax) {
@@ -1358,7 +1495,13 @@ function buildBrowserPipeline() {
         label: "Enhancement",
         engine: state.enhanceOutput ? state.enhancementMode : "disabled",
         status: state.enhanceOutput ? (state.enhancementMode === "strong" ? "warning" : "pass") : "review",
-        detail: state.enhancementMode === "strong" ? "rescue mode, verify likeness" : "identity-preserving output",
+        detail: state.enhanceOutput
+          ? state.enhancementMode === "strong"
+            ? "rescue mode, verify likeness"
+            : "bounded, identity-faithful cleanup"
+          : isValidationOnlyProfile()
+            ? "disabled by programme policy"
+            : "disabled",
       },
       {
         id: "validation",
@@ -2397,11 +2540,48 @@ function frameSharpness(canvas) {
 
 async function downloadPhoto() {
   if (!state.processedImage) return;
-  await bakeExport();
-  if (!state.exportBlob) return;
-  const extension = state.outputFormat === "image/png" ? "png" : "jpg";
-  const filename = `${slugify(state.profile.label)}-${Date.now()}.${extension}`;
-  downloadBlob(state.exportBlob, filename);
+  const button = elements.downloadPhoto;
+  const originalLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = "Preparing...";
+  try {
+    await bakeExport();
+    if (!state.exportBlob) return;
+    const spec = {
+      format: state.outputFormat,
+      scale: state.outputScale,
+      dpi: state.outputDpi,
+      quality: state.outputQuality,
+    };
+    const form = new FormData();
+    form.append("image", state.exportBlob, "passport-photo.jpg");
+    form.append("spec", JSON.stringify(spec));
+    const response = await fetch("/api/export", { method: "POST", body: form });
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({}));
+      throw new Error(result.error || `HTTP ${response.status}`);
+    }
+    const blob = await response.blob();
+    const extensions = {
+      "image/jpeg": "jpg",
+      "image/png": "png",
+      "image/webp": "webp",
+      "application/pdf": "pdf",
+    };
+    const extension = extensions[state.outputFormat] ?? "jpg";
+    const filename = `${slugify(state.profile.label)}-${state.outputScale}x-${Date.now()}.${extension}`;
+    downloadBlob(blob, filename);
+    const width = response.headers.get("X-KVNP-Width") ?? "?";
+    const height = response.headers.get("X-KVNP-Height") ?? "?";
+    const engine = response.headers.get("X-KVNP-Upscale") ?? "none";
+    elements.automationSummary.textContent = `Export ready: ${width} x ${height}px ${extension.toUpperCase()}${engine === "none" ? "" : ` / ${engine}`}.`;
+  } catch (error) {
+    console.error(error);
+    elements.automationSummary.textContent = `Export failed: ${error.message}`;
+  } finally {
+    button.textContent = originalLabel;
+    renderChecks();
+  }
 }
 
 function downloadReport() {
@@ -2416,7 +2596,7 @@ function downloadReport() {
    finishing) and report what still needs a human / retake.
    ============================================================ */
 async function autoFix() {
-  if (!state.originalFile) return;
+  if (!state.originalFile || state.processingError || !state.face) return;
   const button = elements.autoFix;
   const label = button.textContent;
   button.disabled = true;
@@ -2437,7 +2617,7 @@ async function autoFix() {
     state.backgroundReplaced = lawful.background !== false;
     state.backgroundCleanup = bgTrouble ? "strong" : state.backgroundCleanup === "balanced" ? "balanced" : state.backgroundCleanup;
     state.backgroundColor = state.profile.automation?.backgroundColor || "#ffffff";
-    if (state.enhancementMode === "natural") state.enhancementMode = "ai-clean";
+    if (state.enhancementMode === "strong") state.enhancementMode = "natural";
     for (const key of Object.keys(state.adjust)) state.adjust[key] = 0;
 
     // Reflect into the controls — respect the same law-gating as the state above,
@@ -2471,7 +2651,7 @@ async function autoFix() {
     elements.automationSummary.textContent = `Auto-fix failed: ${error.message}`;
   } finally {
     button.textContent = label;
-    button.disabled = !state.originalFile;
+  button.disabled = !state.originalFile || Boolean(state.processingError) || !state.face;
   }
 }
 
@@ -2704,7 +2884,15 @@ function bindCockpit() {
   });
   elements.outputFormat.addEventListener("change", () => {
     state.outputFormat = elements.outputFormat.value;
-    scheduleReanalyze();
+    syncOutputControls();
+  });
+  elements.outputScale.addEventListener("change", () => {
+    state.outputScale = Number(elements.outputScale.value) === 2 ? 2 : 1;
+    updateOutputNote();
+  });
+  elements.outputDpi.addEventListener("change", () => {
+    state.outputDpi = Number(elements.outputDpi.value) === 600 ? 600 : 300;
+    updateOutputNote();
   });
   elements.outputQuality.addEventListener("input", () => {
     state.outputQuality = Number(elements.outputQuality.value);
@@ -2738,6 +2926,7 @@ function buildAdjustControls() {
       scheduleReanalyze();
     });
   }
+  applyAdjustmentPolicyGate();
 }
 
 function syncAdjustControls() {
@@ -2768,7 +2957,7 @@ function applyAdjustments() {
   adjustCtx.clearRect(0, 0, width, height);
   adjustCtx.drawImage(state.processedImage, 0, 0, width, height);
 
-  if (adjustmentsActive()) {
+  if (adjustmentsActive() && !isValidationOnlyProfile()) {
     const image = adjustCtx.getImageData(0, 0, width, height);
     applyTone(image.data, state.adjust);
     adjustCtx.putImageData(image, 0, 0);
@@ -2872,8 +3061,9 @@ async function bakeExport() {
     adjustCtx.putImageData(image, 0, 0);
     if (state.adjust.sharpness > 0) applySharpen(adjustCtx, width, height, state.adjust.sharpness / 100);
   }
-  const quality = state.outputFormat === "image/png" ? undefined : state.outputQuality / 100;
-  state.exportBlob = await canvasToBlob(adjustCanvas, state.outputFormat, quality);
+  const complianceMime = state.profile.output?.mime ?? "image/jpeg";
+  const quality = complianceMime === "image/png" ? undefined : state.outputQuality / 100;
+  state.exportBlob = await canvasToBlob(adjustCanvas, complianceMime, quality);
 }
 
 /* ---------- live re-analysis: keep the numbers honest as the photo changes ---------- */
@@ -3085,6 +3275,8 @@ function currentSettings() {
     autoLighting: state.autoLighting,
     adjust: { ...state.adjust },
     outputFormat: state.outputFormat,
+    outputScale: state.outputScale,
+    outputDpi: state.outputDpi,
     outputQuality: state.outputQuality,
   };
 }
@@ -3121,6 +3313,8 @@ function applyPreset(name) {
   state.autoStraighten = preset.autoStraighten ?? true;
   state.autoTone = preset.autoTone ?? true;
   state.outputFormat = preset.outputFormat ?? "image/jpeg";
+  state.outputScale = preset.outputScale === 2 ? 2 : 1;
+  state.outputDpi = preset.outputDpi === 600 ? 600 : 300;
   state.outputQuality = preset.outputQuality ?? 92;
   Object.assign(state.adjust, { brightness: 0, contrast: 0, saturation: 0, warmth: 0, tint: 0, highlights: 0, shadows: 0, sharpness: 0 }, preset.adjust ?? {});
 
@@ -3133,9 +3327,7 @@ function applyPreset(name) {
   elements.autoTone.checked = state.autoTone;
   state.autoLighting = preset.autoLighting !== false;
   elements.autoLighting.checked = state.autoLighting;
-  elements.outputFormat.value = state.outputFormat;
-  elements.outputQuality.value = state.outputQuality;
-  elements.qualityVal.textContent = String(state.outputQuality);
+  syncOutputControls();
   syncAdjustControls();
   markActiveSwatch();
 

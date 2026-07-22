@@ -15,6 +15,7 @@ data/secret.key
 
 # Generated logs and visual outputs
 *.log
+output/
 screenshots/*
 !screenshots/app-shell.png
 !screenshots/country-programme-ui.png

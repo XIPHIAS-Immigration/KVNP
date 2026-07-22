@@ -121,6 +121,66 @@ def test_keep_main_subject_preserves_soft_edges():
     print("test_keep_main_subject_preserves_soft_edges", PASS)
 
 
+def test_head_guard_restores_ears_and_neck():
+    """A coarse mask with clipped side features must recover both ears and neck."""
+    m = np.zeros((120, 120), np.float32)
+    cv2.ellipse(m, (60, 50), (20, 31), 0, 0, 360, 1.0, -1)
+    m[75:116, 45:76] = 1.0
+    source = np.full((120, 120, 3), (70, 150, 70), np.uint8)
+    skin = (92, 132, 184)
+    cv2.ellipse(source, (60, 50), (20, 31), 0, 0, 360, skin, -1)
+    cv2.ellipse(source, (40, 53), (4, 9), 0, 0, 360, skin, -1)
+    cv2.ellipse(source, (80, 53), (4, 9), 0, 0, 360, skin, -1)
+    source[73:108, 49:72] = skin
+    face = {
+        "headHeight": 62,
+        "faceWidth": 38,
+        "centerX": 60,
+        "centerY": 50,
+        "bounds": {"minX": 41, "maxX": 79, "minY": 27, "maxY": 73},
+    }
+    guarded = server.protect_head_and_neck(m, face, 120, 120, source_bgr=source)
+    ear_y = 53
+    assert guarded[ear_y, 40] > 0.65, guarded[ear_y, 40]
+    assert guarded[ear_y, 80] > 0.65, guarded[ear_y, 80]
+    assert guarded[88, 60] > 0.9, guarded[88, 60]
+    assert guarded[5, 5] == 0.0, "background far from the head must remain transparent"
+    assert guarded[53, 35] == 0.0, "nearby non-skin background must not become an ear blob"
+    print("test_head_guard_restores_ears_and_neck", PASS)
+
+
+def test_soft_hair_edge_removes_old_background_spill():
+    """Semi-transparent hair must carry hair colour, not the old green wall."""
+    alpha = np.zeros((80, 80), np.float32)
+    alpha[:, 28:52] = 1.0
+    alpha[:, 24:28] = np.array([0.15, 0.35, 0.6, 0.82], np.float32)
+    alpha[:, 52:56] = np.array([0.82, 0.6, 0.35, 0.15], np.float32)
+    old_background = np.array([72, 138, 78], np.float32)
+    hair = np.array([20, 24, 28], np.float32)
+    source = hair * alpha[..., None] + old_background * (1.0 - alpha[..., None])
+    result = server.composite_background(source.astype(np.uint8), alpha, (255, 255, 255)).astype(np.float32)
+    expected = hair * alpha[..., None] + 255.0 * (1.0 - alpha[..., None])
+    edge = (alpha > 0.1) & (alpha < 0.9)
+    mean_error = float(np.abs(result[edge] - expected[edge]).mean())
+    assert mean_error < 16.0, mean_error
+    assert np.array_equal(result[:, 30:50].astype(np.uint8), source[:, 30:50].astype(np.uint8))
+    print("test_soft_hair_edge_removes_old_background_spill", PASS)
+
+
+def test_output_trimap_rejects_halo_but_keeps_dark_curl():
+    source = np.full((120, 120, 3), (70, 145, 72), np.uint8)
+    source[20:115, 40:80] = (22, 24, 28)
+    source[34:64, 36:42] = (22, 24, 28)  # a real curl outside the solid core
+    matte = np.zeros((120, 120), np.float32)
+    matte[20:115, 40:80] = 1.0
+    matte[16:119, 34:86] = np.maximum(matte[16:119, 34:86], 0.45)
+    refined = server.refine_output_matte(matte, source)
+    assert refined[90, 35] < 0.08, refined[90, 35]
+    assert refined[45, 38] > 0.3, refined[45, 38]
+    assert refined[50, 50] == 1.0
+    print("test_output_trimap_rejects_halo_but_keeps_dark_curl", PASS)
+
+
 def test_modnet_path_with_synthetic_model():
     """Validate the MODNet ONNX code path end to end with a tiny stand-in model."""
     import onnx
@@ -199,6 +259,9 @@ def main():
         test_stray_and_hole_detection,
         test_no_false_holes_when_subject_in_corner,
         test_keep_main_subject_preserves_soft_edges,
+        test_head_guard_restores_ears_and_neck,
+        test_soft_hair_edge_removes_old_background_spill,
+        test_output_trimap_rejects_halo_but_keeps_dark_curl,
         test_modnet_path_with_synthetic_model,
         test_real_portrait_clean_matte,
     ]

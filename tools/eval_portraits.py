@@ -1,4 +1,4 @@
-"""Evaluation harness: measure how much the studio helps real portraits.
+"""Evaluation harness: measure the assisted-editing pipeline on real portraits.
 
 For each portrait we run the pipeline twice for the same programme:
   BEFORE  - just crop/resize to spec, no corrections (autoCorrect off, no bg, no enhance)
@@ -24,16 +24,7 @@ import server  # noqa: E402
 OUT = ROOT / "screenshots" / "eval"
 (OUT / "after").mkdir(parents=True, exist_ok=True)
 
-US_PASSPORT = {
-    "id": "us-passport", "label": "US passport", "country": "US", "countryName": "United States",
-    "programme": "Passport photo", "category": "Passport", "document": "Passport", "delivery": "Print",
-    "output": {"widthPx": 600, "heightPx": 600, "printWidthMm": 51, "printHeightMm": 51, "mime": "image/jpeg", "quality": 0.92},
-    "head": {"minPercent": 49, "maxPercent": 69, "targetPercent": 62, "topMarginPercent": 13},
-    "background": {"mode": "white_or_off_white", "minEdgeLuma": 190, "maxEdgeSaturation": 52, "maxEdgeSpread": 42},
-    "file": {"formats": ["jpg"], "minBytes": None, "maxBytes": None},
-    "automation": {"backgroundReplacement": True, "backgroundColor": "#ffffff", "enhanceOutput": True, "compressionTarget": None},
-    "reviewChecks": ["neutral expression", "eyes open", "mouth closed", "no face covering"],
-}
+EVAL_PROFILE = server.PROFILE_REGISTRY["india-visa-online-digital-2026-06"]
 
 BEFORE_OPTS = {"autoCorrect": False, "backgroundReplaced": False, "enhanceOutput": False}
 AFTER_OPTS = {
@@ -93,14 +84,14 @@ def verdict(before, after):
 def main():
     images = sorted(glob.glob(str(ROOT / "screenshots" / "eval" / "raw" / "px_*.jpg")))
     images += [str(ROOT / "screenshots" / "eval" / "raw" / "test_pexels.jpg")]
-    print(f"Evaluating {len(images)} real portraits on US passport (BEFORE=no help, AFTER=full pipeline)\n")
+    print(f"Evaluating {len(images)} real portraits on assisted-editing profile (BEFORE=no help, AFTER=faithful pipeline)\n")
     print(f"{'image':22} {'BEFORE':>9} {'AFTER':>9}  {'verdict':22} corrections / remaining fails")
     print("-" * 110)
     t0 = time.time()
     rows = []
     for path in images:
         name = Path(path).stem
-        before, after = run_one(path, US_PASSPORT)
+        before, after = run_one(path, EVAL_PROFILE)
         v = verdict(before, after)
         rows.append((name, before, after, v))
         remain = ",".join(after["outFail"] + after["srcFail"]) or "none"

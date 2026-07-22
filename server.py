@@ -24,7 +24,7 @@ import mediapipe as mp
 import numpy as np
 import uvicorn
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision
@@ -552,6 +552,34 @@ async def print_sheet(image: UploadFile = File(...), spec: str = Form("{}")):
         return JSONResponse({"ok": False, "error": "Print sheet failed. See server log."}, status_code=500)
 
 
+@app.post("/api/export")
+async def export_photo(image: UploadFile = File(...), spec: str = Form("{}")):
+    """Encode the finished photo without re-running or altering the face pipeline."""
+    try:
+        try:
+            spec_data = json.loads(spec)
+        except (ValueError, TypeError):
+            raise ValueError("Invalid JSON in export spec.")
+        photo = decode_image(await image.read())
+        output, metadata = encode_photo_export(photo, spec_data)
+        filename = f'passport-photo.{metadata["extension"]}'
+        return Response(
+            content=output,
+            media_type=metadata["mime"],
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "X-KVNP-Width": str(metadata["width"]),
+                "X-KVNP-Height": str(metadata["height"]),
+                "X-KVNP-Upscale": metadata["upscaleEngine"],
+            },
+        )
+    except ValueError as error:
+        return JSONResponse({"ok": False, "error": str(error)}, status_code=422)
+    except Exception:
+        traceback.print_exc()
+        return JSONResponse({"ok": False, "error": "Export failed. See server log."}, status_code=500)
+
+
 def process_image(image_bytes, profile, options):
     # Resolve against the authoritative registry (and enforce safety bounds)
     # before any pixel work, so /api/process and any direct caller are covered.
@@ -566,8 +594,17 @@ def process_image(image_bytes, profile, options):
     # Country law: the selected programme's allowedEdits gates every correction,
     # REGARDLESS of what the client asked for. Clamped requests are reported so
     # the UI can say "disabled by <country> policy" instead of silently ignoring.
-    allowed = profile.get("allowedEdits") or {}
+    allowed = dict(profile.get("allowedEdits") or {})
+    policy = edit_policy(profile)
+    # Authorities that require an original/unaltered capture get a hard server
+    # lock. Client flags are untrusted and can never re-enable pixel edits.
+    if policy["strict"]:
+        for key in ("straighten", "tone", "lighting", "background", "enhance", "rescue"):
+            allowed[key] = False
     policy_clamped = []
+    if policy["strict"] and has_manual:
+        has_manual = False
+        policy_clamped.append("manual_geometry")
 
     def permit(kind, requested):
         if not requested:
@@ -589,7 +626,7 @@ def process_image(image_bytes, profile, options):
 
     source = original_source
     if do_tone:
-        source, tone_corrections = auto_tone_correct(source)
+        source, tone_corrections = auto_tone_correct(source, landmarks=landmarks)
         corrections.extend(tone_corrections)
         mp_image = build_mp_image(source)
 
@@ -626,7 +663,15 @@ def process_image(image_bytes, profile, options):
 
     # Always estimate the matte: it yields a real crown for accurate head sizing,
     # and is reused for background replacement when that is enabled.
-    matte, matte_engine = build_person_mask(mp_image, source, face, True, width, height)
+    matte, matte_engine = build_person_mask(
+        mp_image,
+        source,
+        face,
+        True,
+        width,
+        height,
+        landmarks=None if has_manual else landmarks,
+    )
     if matte is not None and not has_manual:
         face = refine_head_from_matte(face, matte, width, height)
 
@@ -640,13 +685,36 @@ def process_image(image_bytes, profile, options):
         background_cleanup = str(options.get("backgroundCleanup") or "balanced")
         composite_matte = apply_background_cleanup(matte, background_cleanup)
         mask_stats = describe_mask(composite_matte, face, width, height, matte_engine)
-        edited = composite_background(source, composite_matte, background_rgb)
+        # Composite at the final canvas resolution. Besides bounding memory on
+        # phone photos, this lets edge decontamination operate on the exact
+        # pixels the applicant will download rather than on a later-resampled
+        # halo.
+        final_source = crop_and_resize(
+            source,
+            crop,
+            profile["output"]["widthPx"],
+            profile["output"]["heightPx"],
+            pad_color=background_rgb,
+        )
+        final_matte = crop_mask_and_resize(
+            composite_matte,
+            crop,
+            profile["output"]["widthPx"],
+            profile["output"]["heightPx"],
+        )
+        final_matte = refine_output_matte(final_matte, final_source)
+        final = composite_background(final_source, final_matte, background_rgb)
         pad_color = background_rgb
     else:
         mask_stats = describe_mask(None, face, width, height, "unavailable" if replace_background else "disabled")
-        edited = source.copy()
         pad_color = None
-    final = crop_and_resize(edited, crop, profile["output"]["widthPx"], profile["output"]["heightPx"], pad_color=pad_color)
+        final = crop_and_resize(
+            source,
+            crop,
+            profile["output"]["widthPx"],
+            profile["output"]["heightPx"],
+            pad_color=pad_color,
+        )
     if enhance:
         final = enhance_passport_photo(final, enhancement_mode)
     # Stamp the print DPI into the JFIF metadata so labs print at the physical
@@ -945,6 +1013,8 @@ def detect_face(source_bgr):
     faces = result.face_landmarks or []
     if not faces:
         raise ValueError("No face detected. Use a clear front-facing portrait.")
+    if len(faces) != 1:
+        raise ValueError(f"Multiple faces detected ({len(faces)}). Use a photo containing only one person.")
     landmarks = get_landmarks(faces[0], width, height)
     face = measure_face(landmarks, len(faces))
     return mp_image, landmarks, face
@@ -996,7 +1066,7 @@ def auto_straighten_source(source_bgr, landmarks, face):
     return rotated, mp_image, new_landmarks, new_face, correction
 
 
-def auto_tone_correct(source_bgr):
+def auto_tone_correct(source_bgr, landmarks=None):
     """Gentle, identity-preserving exposure + white-balance normalization.
 
     Returns ``(image, corrections)``. Only acts when there is a visible colour
@@ -1005,34 +1075,51 @@ def auto_tone_correct(source_bgr):
     """
     image = ensure_bgr(source_bgr)
     corrections = []
+    height, width = image.shape[:2]
+    if landmarks:
+        tone_mask = face_oval_mask(landmarks, width, height, feather=max(8.0, width * 0.018))
+        sample_mask = tone_mask > 0.62
+    else:
+        tone_mask = np.ones((height, width), dtype=np.float32)
+        sample_mask = np.ones((height, width), dtype=bool)
 
-    means = image.reshape(-1, 3).astype(np.float32).mean(axis=0)
+    means = image[sample_mask].astype(np.float32).mean(axis=0)
     spread = (float(means.max()) - float(means.min())) / (float(means.mean()) + 1e-6)
     if spread > 0.10:
-        image = gray_world_balance(image)
+        source_float = image.astype(np.float32)
+        gray = float(means.mean())
+        gains = np.clip(gray / np.maximum(means, 1.0), 0.92, 1.08)
+        balanced = np.clip(source_float * gains[None, None, :], 0, 255)
+        blend = tone_mask[..., None] * 0.72
+        image = np.clip(source_float * (1.0 - blend) + balanced * blend, 0, 255).astype(np.uint8)
         corrections.append(
             {"id": "white_balance", "label": "Auto white balance", "detail": "neutralised colour cast", "applied": True}
         )
 
-    luma = float(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY).mean())
-    if luma < 100.0 or luma > 185.0:
+    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    luma = float(gray_image[sample_mask].mean())
+    if luma < 96.0 or luma > 190.0:
         # Gamma on the LAB L channel brightens shadows/midtones toward the target
         # without a linear multiply that would blow highlights to pure white.
         # (gamma maps [0,1] -> [0,1], so white stays white - no new clipping - and
         # chroma is untouched, preserving skin tone and likeness.)
         normalized = max(1.0, luma) / 255.0
-        target = 140.0 / 255.0
-        gamma = clamp(math.log(target) / math.log(normalized), 0.45, 2.2)
+        target = 125.0 / 255.0
+        gamma = clamp(math.log(target) / math.log(normalized), 0.72, 1.35)
         lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
         l_channel = np.power(lab[:, :, 0].astype(np.float32) / 255.0, gamma) * 255.0
         lab[:, :, 0] = np.clip(l_channel, 0, 255).astype(np.uint8)
-        image = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
-        new_luma = float(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY).mean())
+        corrected = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR).astype(np.float32)
+        original = image.astype(np.float32)
+        blend = tone_mask[..., None] * 0.78
+        image = np.clip(original * (1.0 - blend) + corrected * blend, 0, 255).astype(np.uint8)
+        new_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        new_luma = float(new_gray[sample_mask].mean())
         corrections.append(
             {
                 "id": "exposure",
                 "label": "Auto-exposure",
-                "detail": f"brightness {luma:.0f} -> {new_luma:.0f}",
+                "detail": f"face brightness {luma:.0f} -> {new_luma:.0f}",
                 "applied": True,
             }
         )
@@ -1064,9 +1151,11 @@ def even_face_lighting(image, landmarks, face, width, height):
     illum = cv2.GaussianBlur(l_channel, (0, 0), max(6.0, face_w / 3.5))
     mean_illum = float((illum * mask).sum() / max(1e-6, mask.sum()))
     unevenness = float(np.sqrt(((illum - mean_illum) ** 2 * mask).sum() / max(1e-6, mask.sum())))
-    if unevenness < 11.0:
+    if unevenness < 16.0:
         return image, False  # lighting is already reasonably even; leave it
-    lab[:, :, 0] = np.clip(l_channel - (illum - mean_illum) * 0.55 * mask, 0, 255)
+    # Correct illumination gently. Strong flattening makes skin look synthetic
+    # even when no generative model is involved.
+    lab[:, :, 0] = np.clip(l_channel - (illum - mean_illum) * 0.24 * mask, 0, 255)
     return ensure_bgr(cv2.cvtColor(lab.astype(np.uint8), cv2.COLOR_LAB2BGR)), True
 
 
@@ -1128,7 +1217,7 @@ def apply_facial_corrections(image, landmarks, face, width, height):
     return image, corrections
 
 
-def build_person_mask(mp_image, source_bgr, face, enabled, width, height):
+def build_person_mask(mp_image, source_bgr, face, enabled, width, height, landmarks=None):
     """Return ``(alpha_mask, engine_label)`` for the person matte.
 
     Prefers MODNet portrait matting (when ``models/modnet.onnx`` is present)
@@ -1157,7 +1246,116 @@ def build_person_mask(mp_image, source_bgr, face, enabled, width, height):
         mask = clean_coarse_matte(mask)
 
     mask = finalize_matte(mask, source_bgr, face, width, height)
+    mask = protect_head_and_neck(mask, face, width, height, landmarks=landmarks, source_bgr=source_bgr)
     return np.clip(mask, 0, 1).astype(np.float32), engine
+
+
+def protect_head_and_neck(mask, face, width, height, landmarks=None, source_bgr=None):
+    """Restore low-confidence biometric features after portrait segmentation.
+
+    Coarse selfie masks can classify ears, a narrow jaw edge, or the neck as
+    background. Once composited, that looks like a missing body part. This guard
+    is anchored to detected face geometry and only expands into pixels supported
+    by the nearby person mask, so it preserves real features without drawing an
+    artificial head silhouette into the background.
+    """
+    alpha = np.clip(np.asarray(mask, dtype=np.float32).squeeze(), 0, 1)
+    if alpha.shape[:2] != (height, width):
+        alpha = cv2.resize(alpha, (width, height), interpolation=cv2.INTER_LINEAR)
+
+    face_width = max(8.0, float(face.get("faceWidth", min(width, height) * 0.25)))
+    head_height = max(12.0, float(face.get("headHeight", min(width, height) * 0.38)))
+    cx = float(face.get("centerX", width / 2))
+    cy = float(face.get("centerY", height * 0.42))
+    bounds = face.get("bounds") or {}
+    min_x = float(bounds.get("minX", cx - face_width / 2))
+    max_x = float(bounds.get("maxX", cx + face_width / 2))
+    min_y = float(bounds.get("minY", cy - head_height * 0.34))
+    max_y = float(bounds.get("maxY", cy + head_height * 0.42))
+
+    if source_bgr is None:
+        return alpha
+    source = ensure_bgr(source_bgr)
+    if source.shape[:2] != (height, width):
+        source = cv2.resize(source, (width, height), interpolation=cv2.INTER_AREA)
+
+    # Learn skin chroma from the detected face itself; fixed RGB skin rules are
+    # inaccurate across complexions and lighting. The inner-face ellipse avoids
+    # hair/background and the median resists eyes, brows, lips, and facial hair.
+    sample_mask = np.zeros((height, width), dtype=np.uint8)
+    face_h = max(8.0, max_y - min_y)
+    cv2.ellipse(
+        sample_mask,
+        (int(round(cx)), int(round(min_y + face_h * 0.58))),
+        (max(2, int(round(face_width * 0.28))), max(3, int(round(face_h * 0.27)))),
+        0,
+        0,
+        360,
+        255,
+        -1,
+    )
+    sample_pixels = (sample_mask > 0) & (alpha > 0.72)
+    if int(sample_pixels.sum()) < 24:
+        return alpha
+    lab = cv2.cvtColor(source, cv2.COLOR_BGR2LAB).astype(np.float32)
+    skin_lab = np.median(lab[sample_pixels], axis=0)
+    delta = np.abs(lab - skin_lab[None, None, :])
+    # Luminance varies strongly between a lit cheek and a shadowed ear; chroma
+    # is the stronger identity-independent signal, with a generous L allowance.
+    skin_like = (delta[:, :, 0] <= 62) & (delta[:, :, 1] <= 19) & (delta[:, :, 2] <= 23)
+    skin_like = cv2.morphologyEx(
+        skin_like.astype(np.uint8),
+        cv2.MORPH_CLOSE,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
+        iterations=1,
+    ).astype(np.float32)
+
+    guard = np.zeros((height, width), dtype=np.uint8)
+
+    # Ear guards sit just outside the face oval. Keep them compact: enough to
+    # retain the pinna and lobe without pulling a large patch of background in.
+    eye_y = float(face.get("eyeY", min_y + (max_y - min_y) * 0.34))
+    ear_y = int(round(eye_y + head_height * 0.08))
+    ear_axes = (max(2, int(round(face_width * 0.075))), max(3, int(round(head_height * 0.13))))
+    for ear_x in (min_x - face_width * 0.015, max_x + face_width * 0.015):
+        cv2.ellipse(guard, (int(round(ear_x)), ear_y), ear_axes, 0, 0, 360, 255, -1)
+
+    # A conservative neck bridge prevents detached-head cutouts. Skin matching
+    # stops clothing or background inside this geometry from being retained.
+    chin_y = max_y
+    neck = np.array(
+        [
+            [cx - face_width * 0.28, chin_y - head_height * 0.03],
+            [cx + face_width * 0.28, chin_y - head_height * 0.03],
+            [cx + face_width * 0.34, chin_y + head_height * 0.34],
+            [cx - face_width * 0.34, chin_y + head_height * 0.34],
+        ],
+        dtype=np.int32,
+    )
+    cv2.fillConvexPoly(guard, neck, 255)
+
+    # Nearby alpha support prevents the guard from jumping to a similarly
+    # coloured object that is not connected to the detected subject.
+    sigma = max(2.0, face_width * 0.045)
+    support = cv2.GaussianBlur(alpha, (0, 0), sigmaX=sigma, sigmaY=sigma)
+    support = np.clip((support - 0.025) / 0.24, 0, 1)
+    # Cool/blue backgrounds can be close to shadowed skin in LAB distance. Only
+    # *newly restored* pixels must also follow the face's warm chroma direction;
+    # pixels already supported by the matte keep their original alpha. This is
+    # what prevents the familiar coloured wedges behind an otherwise good ear.
+    bgr = source.astype(np.float32)
+    red_excess = bgr[:, :, 2] - bgr[:, :, 0]
+    sample_red_excess = float(np.median(red_excess[sample_pixels]))
+    warm_floor = max(2.0, min(12.0, sample_red_excess * 0.16))
+    chroma_supported = (red_excess >= warm_floor) | (alpha >= 0.16)
+    protected = (
+        (guard.astype(np.float32) / 255.0)
+        * skin_like
+        * chroma_supported.astype(np.float32)
+        * support
+        * 0.985
+    )
+    return np.maximum(alpha, protected).astype(np.float32)
 
 
 def finalize_matte(mask, source_bgr, face, width, height):
@@ -1493,11 +1691,19 @@ def apply_background_cleanup(mask, strength):
     alpha so anything below ~0.5 becomes fully transparent (pure background),
     "max" pushes that threshold higher for a perfectly flat field.
     """
-    if mask is None or strength in (None, "balanced", "soft"):
+    if mask is None or strength in (None, "soft"):
         return mask
     mask = np.asarray(mask, dtype=np.float32)
-    low, high = (0.5, 0.85) if strength == "strong" else (0.62, 0.93)
+    if strength == "balanced":
+        low, high = (0.06, 0.94)
+    elif strength == "strong":
+        low, high = (0.18, 0.84)
+    else:
+        low, high = (0.32, 0.72)
     cleaned = np.clip((mask - low) / max(1e-3, high - low), 0.0, 1.0)
+    # Smoothstep suppresses low-confidence background haze while retaining
+    # gradual high-confidence hair edges better than a hard threshold.
+    cleaned = cleaned * cleaned * (3.0 - 2.0 * cleaned)
     # Keep confidently-solid interior fully opaque.
     cleaned = np.where(mask > 0.96, 1.0, cleaned)
     return cleaned.astype(np.float32)
@@ -1513,8 +1719,111 @@ def composite_background(source_bgr, mask, background_rgb):
     background_bgr = np.array([background_rgb[2], background_rgb[1], background_rgb[0]], dtype=np.float32)
     alpha = mask[..., None].astype(np.float32)
     source = ensure_bgr(source_bgr).astype(np.float32)
-    composed = source * alpha + background_bgr * (1 - alpha)
+    foreground = decontaminate_foreground(source, mask)
+    composed = foreground * alpha + background_bgr * (1 - alpha)
     return ensure_bgr(np.clip(composed, 0, 255).astype(np.uint8))
+
+
+def refine_output_matte(mask, source_bgr):
+    """Resolve the uncertain hair band from image colour at final resolution.
+
+    MediaPipe provides the semantic person prior. GrabCut receives only that
+    trimap (definite foreground/background plus an uncertain band), then a small
+    guided filter aligns the retained edge to the source. Confident ears, face,
+    hair and shoulders are locked as foreground and can never be removed here.
+    """
+    alpha = np.clip(np.asarray(mask, dtype=np.float32).squeeze(), 0, 1)
+    source = ensure_bgr(source_bgr)
+    if alpha.shape[:2] != source.shape[:2]:
+        alpha = cv2.resize(alpha, (source.shape[1], source.shape[0]), interpolation=cv2.INTER_LINEAR)
+
+    definite_bg = alpha <= 0.035
+    definite_fg = alpha >= 0.94
+    if int(definite_bg.sum()) < 64 or int(definite_fg.sum()) < 64:
+        return alpha
+
+    trimap = np.full(alpha.shape, cv2.GC_PR_BGD, dtype=np.uint8)
+    trimap[alpha >= 0.38] = cv2.GC_PR_FGD
+    trimap[definite_bg] = cv2.GC_BGD
+    trimap[definite_fg] = cv2.GC_FGD
+    background_model = np.zeros((1, 65), np.float64)
+    foreground_model = np.zeros((1, 65), np.float64)
+    try:
+        cv2.grabCut(
+            source,
+            trimap,
+            None,
+            background_model,
+            foreground_model,
+            3,
+            cv2.GC_INIT_WITH_MASK,
+        )
+    except cv2.error:
+        return alpha
+
+    selected = (trimap == cv2.GC_FGD) | (trimap == cv2.GC_PR_FGD)
+    refined = np.where(selected, alpha, alpha * 0.025).astype(np.float32)
+    if HAS_GUIDED_FILTER:
+        try:
+            guide = source.astype(np.float32) / 255.0
+            refined = cv2.ximgproc.guidedFilter(guide=guide, src=refined, radius=4, eps=2e-4)
+        except Exception:
+            pass
+    refined = np.clip(refined, 0, 1)
+    rejected = (trimap == cv2.GC_BGD) | (trimap == cv2.GC_PR_BGD)
+    refined[rejected & (alpha < 0.75)] = 0.0
+    # Resampling and the guided filter can widen a one-pixel camera edge into a
+    # visible grey ring. A final smooth remap contracts that uncertainty while
+    # preserving a soft transition for real wisps and curls.
+    refined = np.clip((refined - 0.16) / 0.68, 0, 1)
+    refined = refined * refined * (3.0 - 2.0 * refined)
+    refined[definite_fg] = 1.0
+    refined[definite_bg] = 0.0
+    return refined.astype(np.float32)
+
+
+def decontaminate_foreground(source_bgr, mask):
+    """Estimate true RGB at soft matte edges before changing the background.
+
+    Fine hair pixels are optical mixtures of foreground and the capture's old
+    background. Alpha compositing alone carries that old colour into the new
+    background as a grey/green/blue halo. Local known-background and
+    known-foreground samples let us solve the standard compositing equation for
+    a much cleaner foreground colour without inventing shape or facial detail.
+    """
+    source = ensure_bgr(source_bgr).astype(np.float32)
+    alpha = np.clip(np.asarray(mask, dtype=np.float32).squeeze(), 0, 1)
+    if alpha.shape[:2] != source.shape[:2]:
+        alpha = cv2.resize(alpha, (source.shape[1], source.shape[0]), interpolation=cv2.INTER_LINEAR)
+
+    height, width = alpha.shape
+    sigma = max(2.0, min(12.0, min(width, height) * 0.014))
+    background_weight = np.clip((0.08 - alpha) / 0.08, 0, 1)
+    foreground_weight = np.clip((alpha - 0.88) / 0.12, 0, 1)
+
+    def local_average(weight):
+        denominator = cv2.GaussianBlur(weight, (0, 0), sigmaX=sigma, sigmaY=sigma)
+        numerator = cv2.GaussianBlur(source * weight[..., None], (0, 0), sigmaX=sigma, sigmaY=sigma)
+        return numerator / np.maximum(denominator[..., None], 1e-4), denominator
+
+    background_estimate, background_support = local_average(background_weight)
+    foreground_estimate, foreground_support = local_average(foreground_weight)
+    background_estimate = np.where(background_support[..., None] > 1e-4, background_estimate, source)
+    foreground_estimate = np.where(foreground_support[..., None] > 1e-4, foreground_estimate, source)
+
+    a = alpha[..., None]
+    solved = (source - (1.0 - a) * background_estimate) / np.maximum(a, 0.12)
+    solved = np.clip(solved, 0, 255)
+    solve_confidence = np.clip((a - 0.12) / 0.62, 0, 1)
+    recovered = solved * solve_confidence + foreground_estimate * (1.0 - solve_confidence)
+
+    # Opaque interiors remain byte-for-byte source pixels. The correction peaks
+    # on the semi-transparent band where colour spill exists and fades smoothly
+    # at both sides of the matte.
+    edge_blend = np.clip((0.98 - a) / 0.45, 0, 1) * np.clip((a - 0.025) / 0.18, 0, 1)
+    supported = (background_support[..., None] > 1e-4) & (foreground_support[..., None] > 1e-4)
+    edge_blend *= supported.astype(np.float32)
+    return source * (1.0 - edge_blend) + recovered * edge_blend
 
 
 def normalize_light(image_bgr):
@@ -1530,15 +1839,15 @@ def normalize_light(image_bgr):
 
 def enhance_passport_photo(image_bgr, mode="studio"):
     image_bgr = ensure_bgr(image_bgr)
-    mode = mode if mode in {"natural", "studio", "ai-clean", "strong"} else "ai-clean"
+    mode = mode if mode in {"natural", "studio", "ai-clean", "strong"} else "natural"
     if mode == "ai-clean":
         return identity_clean_enhance(image_bgr)
     if mode == "strong":
         return ai_clean_enhance(image_bgr, strength="strong", restore_face=True)
 
     settings = {
-        "natural": {"denoise": 4, "clahe": 1.18, "detail": 0.08, "amount": 0.22, "radius": 0.9},
-        "studio": {"denoise": 8, "clahe": 1.32, "detail": 0.14, "amount": 0.38, "radius": 0.9},
+        "natural": {"denoise": 2, "clahe": 1.04, "chroma": 0.10, "amount": 0.08, "blend": 0.30},
+        "studio": {"denoise": 3, "clahe": 1.10, "chroma": 0.18, "amount": 0.14, "blend": 0.48},
     }[mode]
 
     enhanced = gray_world_balance(image_bgr)
@@ -1546,20 +1855,17 @@ def enhance_passport_photo(image_bgr, mode="studio"):
         enhanced,
         None,
         h=settings["denoise"],
-        hColor=max(3, settings["denoise"] - 1),
+        hColor=settings["denoise"],
         templateWindowSize=7,
-        searchWindowSize=21,
+        searchWindowSize=17,
     )
-    enhanced = chroma_noise_reduction(enhanced, strength=0.35 if mode == "natural" else 0.55)
+    enhanced = chroma_noise_reduction(enhanced, strength=settings["chroma"])
     enhanced = local_contrast(enhanced, settings["clahe"])
-    enhanced = preserve_skin_tone(image_bgr, enhanced, strength=0.92)
-
-    if mode == "studio" and hasattr(cv2, "detailEnhance"):
-        detailed = cv2.detailEnhance(enhanced, sigma_s=7, sigma_r=0.08)
-        enhanced = cv2.addWeighted(enhanced, 1 - settings["detail"], detailed, settings["detail"], 0)
-
-    enhanced = edge_aware_sharpen(enhanced, amount=settings["amount"], radius=settings["radius"])
-    enhanced = mild_output_curve(enhanced, mode)
+    enhanced = preserve_skin_tone(image_bgr, enhanced, strength=0.20)
+    enhanced = edge_aware_sharpen(enhanced, amount=settings["amount"], radius=0.72)
+    # Preserve the capture as the dominant signal. This avoids waxy skin,
+    # crunchy hair, and segmentation halos while still reducing minor noise.
+    enhanced = cv2.addWeighted(image_bgr, 1 - settings["blend"], enhanced, settings["blend"], 0)
     return ensure_bgr(enhanced)
 
 
@@ -1569,17 +1875,17 @@ def identity_clean_enhance(image_bgr):
     denoised = cv2.fastNlMeansDenoisingColored(
         balanced,
         None,
-        h=3,
-        hColor=3,
+        h=2,
+        hColor=2,
         templateWindowSize=7,
         searchWindowSize=17,
     )
-    denoised = chroma_noise_reduction(denoised, strength=0.22)
-    enhanced = cv2.addWeighted(original, 0.74, denoised, 0.26, 0)
-    enhanced = local_contrast(enhanced, 1.08)
-    enhanced = preserve_skin_tone(original, enhanced, strength=0.96)
-    enhanced = edge_aware_sharpen(enhanced, amount=0.28, radius=0.72)
-    return ensure_bgr(cv2.convertScaleAbs(enhanced, alpha=1.01, beta=1))
+    denoised = chroma_noise_reduction(denoised, strength=0.12)
+    enhanced = cv2.addWeighted(original, 0.82, denoised, 0.18, 0)
+    enhanced = local_contrast(enhanced, 1.04)
+    enhanced = preserve_skin_tone(original, enhanced, strength=0.18)
+    enhanced = edge_aware_sharpen(enhanced, amount=0.10, radius=0.68)
+    return ensure_bgr(cv2.addWeighted(original, 0.72, enhanced, 0.28, 0))
 
 
 def ai_clean_enhance(image_bgr, strength="balanced", restore_face=False):
@@ -1912,6 +2218,29 @@ def crop_and_resize(image, crop, output_width, output_height, pad_color=None):
     return ensure_bgr(cv2.resize(crop_img, (output_width, output_height), interpolation=cv2.INTER_AREA))
 
 
+def crop_mask_and_resize(mask, crop, output_width, output_height):
+    """Crop/pad an alpha matte with the same geometry used for the RGB image."""
+    matte = np.clip(np.asarray(mask, dtype=np.float32).squeeze(), 0, 1)
+    src_h, src_w = matte.shape[:2]
+    x = int(round(crop["x"]))
+    y = int(round(crop["y"]))
+    width = max(1, int(round(crop["width"])))
+    height = max(1, int(round(crop["height"])))
+
+    if x >= 0 and y >= 0 and x + width <= src_w and y + height <= src_h:
+        crop_mask = matte[y : y + height, x : x + width]
+    else:
+        crop_mask = np.zeros((height, width), dtype=np.float32)
+        sx1, sy1 = max(0, x), max(0, y)
+        sx2, sy2 = min(src_w, x + width), min(src_h, y + height)
+        if sx2 > sx1 and sy2 > sy1:
+            crop_mask[sy1 - y : sy2 - y, sx1 - x : sx2 - x] = matte[sy1:sy2, sx1:sx2]
+
+    interpolation = cv2.INTER_LINEAR if output_width > crop_mask.shape[1] else cv2.INTER_AREA
+    resized = cv2.resize(crop_mask, (output_width, output_height), interpolation=interpolation)
+    return np.clip(resized, 0, 1).astype(np.float32)
+
+
 PRINT_SHEETS = {
     "4x6": {"label": "4 x 6 in", "width_in": 6.0, "height_in": 4.0},
     "5x7": {"label": "5 x 7 in", "width_in": 7.0, "height_in": 5.0},
@@ -2055,7 +2384,9 @@ def background_stats(image_bgr, profile, replaced=False):
     luma = rgb[:, 0] * 0.2126 + rgb[:, 1] * 0.7152 + rgb[:, 2] * 0.0722
     max_channel = rgb.max(axis=1)
     min_channel = rgb.min(axis=1)
-    saturation = np.where(max_channel <= 1, 0, ((max_channel - min_channel) / max_channel) * 100)
+    saturation = np.zeros_like(max_channel, dtype=np.float32)
+    np.divide(max_channel - min_channel, max_channel, out=saturation, where=max_channel > 1)
+    saturation *= 100
 
     # When the background is replaced it is a known light colour by construction.
     # Measure only the light (background) pixels so that the subject's hair/
@@ -2120,13 +2451,28 @@ def mask_value(mask_stats, background_replaced):
 
 
 def edit_policy(profile):
-    review_text = " ".join(profile.get("reviewChecks", [])).lower()
-    strict_terms = ("unaltered", "no digital retouching", "no retouching", "photo must not be altered", "true likeness")
-    strict = any(term in review_text for term in strict_terms)
+    policy_text = " ".join(
+        [
+            *profile.get("reviewChecks", []),
+            str((profile.get("allowedEdits") or {}).get("note", "")),
+        ]
+    ).lower()
+    strict_terms = (
+        "unaltered",
+        "must not be altered",
+        "must not be digitally altered",
+        "no digital retouching",
+        "no retouching",
+        "must not be retouched",
+        "digitally enhanced or altered",
+        "true likeness",
+    )
+    strict = any(term in policy_text for term in strict_terms)
     if profile.get("country") in {"US", "CA", "GB", "AU"}:
         strict = True
     return {
         "strict": strict,
+        "mode": "validation_only" if strict else "assisted_editing",
         "label": "government may reject digitally altered or AI-restored photos" if strict else "identity must not be changed",
     }
 
@@ -2550,6 +2896,83 @@ def encode_jpeg_bytes(image_bgr, quality):
     if not ok:
         raise ValueError("Could not encode JPEG output.")
     return encoded.tobytes()
+
+
+def encode_photo_export(image_bgr, spec=None):
+    """Return an identity-preserving photo export and machine-readable metadata.
+
+    The optional 2x path enlarges pixels with FSRCNN (or Lanczos when the model
+    is unavailable). It never invokes face restoration or generative models.
+    """
+    spec = dict(spec or {})
+    format_aliases = {
+        "jpg": ("image/jpeg", "jpg"),
+        "jpeg": ("image/jpeg", "jpg"),
+        "image/jpeg": ("image/jpeg", "jpg"),
+        "png": ("image/png", "png"),
+        "image/png": ("image/png", "png"),
+        "webp": ("image/webp", "webp"),
+        "image/webp": ("image/webp", "webp"),
+        "pdf": ("application/pdf", "pdf"),
+        "application/pdf": ("application/pdf", "pdf"),
+    }
+    requested_format = str(spec.get("format", "image/jpeg")).strip().lower()
+    if requested_format not in format_aliases:
+        raise ValueError("Unsupported export format. Choose JPEG, PNG, WebP, or PDF.")
+    mime, extension = format_aliases[requested_format]
+
+    try:
+        scale = int(spec.get("scale", 1))
+        quality = int(round(float(spec.get("quality", 92))))
+        dpi = int(round(float(spec.get("dpi", 300))))
+    except (TypeError, ValueError):
+        raise ValueError("Invalid export scale, quality, or DPI.")
+    if scale not in (1, 2):
+        raise ValueError("Export scale must be 1x or 2x.")
+    quality = max(60, min(100, quality))
+    dpi = max(72, min(1200, dpi))
+
+    photo = ensure_bgr(image_bgr)
+    height, width = photo.shape[:2]
+    if width * height * scale * scale > int(MAX_MEGAPIXELS * 1_000_000):
+        raise ValueError(f"High-resolution export exceeds the {MAX_MEGAPIXELS} MP safety limit.")
+
+    upscale_engine = "none"
+    if scale == 2:
+        enlarged = superres_upscale(photo)
+        if enlarged is not None:
+            photo = enlarged
+            upscale_engine = "FSRCNN 2x"
+        else:
+            photo = cv2.resize(photo, (width * 2, height * 2), interpolation=cv2.INTER_LANCZOS4)
+            upscale_engine = "Lanczos 2x fallback"
+
+    if mime == "image/jpeg":
+        binary = set_jpeg_dpi(encode_jpeg_bytes(photo, quality), dpi)
+    else:
+        rgb = cv2.cvtColor(photo, cv2.COLOR_BGR2RGB)
+        pil = Image.fromarray(rgb)
+        buffer = io.BytesIO()
+        if mime == "image/png":
+            pil.save(buffer, format="PNG", compress_level=5, dpi=(dpi, dpi))
+        elif mime == "image/webp":
+            pil.save(buffer, format="WEBP", quality=quality, method=4)
+        else:
+            # Pillow derives the PDF MediaBox from pixel dimensions/resolution,
+            # producing a page whose physical size matches the selected DPI.
+            pil.save(buffer, format="PDF", resolution=float(dpi), quality=quality)
+        binary = buffer.getvalue()
+
+    out_height, out_width = photo.shape[:2]
+    return binary, {
+        "mime": mime,
+        "extension": extension,
+        "width": int(out_width),
+        "height": int(out_height),
+        "dpi": dpi,
+        "scale": scale,
+        "upscaleEngine": upscale_engine,
+    }
 
 
 def set_jpeg_dpi(jpeg_bytes, dpi):

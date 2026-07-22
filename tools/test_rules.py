@@ -144,6 +144,40 @@ def test_rescue_disabled_everywhere():
     print("test_rescue_disabled_everywhere", PASS)
 
 
+def test_strict_profiles_are_validation_only():
+    strict_ids = {
+        "us-passport-print-2026-06",
+        "us-visa-ds160-digital-2026-06",
+        "us-dv-lottery-digital-2026-06",
+        "uk-passport-digital-2026-06",
+        "india-passport-icao-upload-2026-06",
+        "india-visa-online-digital-2026-06",
+        "canada-passport-print-2026-06",
+        "canada-trv-print-2026-06",
+        "australia-passport-print-2026-06",
+        "france-schengen-visa-print-2026-06",
+    }
+    profiles = {p["id"]: p for p in _load()}
+    edit_keys = ("straighten", "tone", "lighting", "background", "enhance", "rescue")
+    for profile_id in strict_ids:
+        assert profile_id in profiles, f"missing strict profile {profile_id}"
+        allowed = profiles[profile_id]["allowedEdits"]
+        enabled = [key for key in edit_keys if allowed.get(key) is not False]
+        assert not enabled, f"{profile_id}: strict profile enables {enabled}"
+    print("test_strict_profiles_are_validation_only", PASS)
+
+
+def test_automation_defaults_respect_policy():
+    for profile in _load():
+        allowed = profile["allowedEdits"]
+        automation = profile["automation"]
+        assert allowed.get("background") or not automation.get("backgroundReplacement"), \
+            f"{profile['id']}: background replacement defaults on when policy disables it"
+        assert allowed.get("enhance") or not automation.get("enhanceOutput"), \
+            f"{profile['id']}: enhancement defaults on when policy disables it"
+    print("test_automation_defaults_respect_policy", PASS)
+
+
 def test_enhance_disabled_no_aggressive_enhancement_mode():
     data = _load()
     for p in data:
@@ -217,6 +251,8 @@ def main():
         test_background_numeric,
         test_file_byte_ordering,
         test_rescue_disabled_everywhere,
+        test_strict_profiles_are_validation_only,
+        test_automation_defaults_respect_policy,
         test_enhance_disabled_no_aggressive_enhancement_mode,
         test_india_icao_square,
         test_drift_guard_ids_in_frontend,

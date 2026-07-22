@@ -25,6 +25,13 @@ Both engines run through the same post-processing so the output is consistent:
   using the source image as guide, aligning the alpha to real edges (hair,
   shoulders) instead of a blocky cutout. Falls back to a Gaussian feather if
   `ximgproc` is unavailable.
+- **`refine_output_matte`** resolves uncertain pixels after the final crop and
+  resize. The MediaPipe/MODNet confidence becomes a trimap, OpenCV GrabCut
+  classifies the uncertain curl and clothing boundary from source colours, and
+  a guided filter aligns the retained alpha to the final output pixels.
+- **`decontaminate_foreground`** estimates local foreground and old-background
+  colour around semi-transparent pixels. It removes colour spill left inside
+  fine hair before compositing, without generating or reshaping face pixels.
 
 The cleanup, refinement, and diagnostics run at a capped working resolution
 (`MATTE_WORK_MAX_SIDE`, 1280 px long side); only the final alpha is upsampled to
