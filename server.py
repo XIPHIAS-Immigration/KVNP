@@ -265,7 +265,7 @@ app.mount("/docs", StaticFiles(directory=ROOT / "docs"), name="docs")
 # ============================================================
 # Accounts / sessions (local SQLite, signed session cookie)
 # ============================================================
-DATA_DIR = ROOT / "data"
+DATA_DIR = Path(os.environ.get("KVNP_DATA_DIR", str(ROOT / "data"))).resolve()
 DB_PATH = DATA_DIR / "kvnp.db"
 SECRET_PATH = DATA_DIR / "secret.key"
 SESSION_COOKIE = "kvnp_session"
@@ -274,6 +274,9 @@ PBKDF2_ROUNDS = 200_000
 
 
 def get_secret():
+    env_secret = os.environ.get("KVNP_SESSION_SECRET")
+    if env_secret:
+        return hashlib.sha256(env_secret.encode("utf-8")).digest()
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     if SECRET_PATH.exists():
         return SECRET_PATH.read_bytes()
@@ -2658,4 +2661,6 @@ def title_case(value):
 
 
 if __name__ == "__main__":
-    uvicorn.run("server:app", host="127.0.0.1", port=int(os.environ.get("PORT", "4173")), reload=False)
+    uvicorn.run("server:app", host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", "4173")), reload=False)
+
+

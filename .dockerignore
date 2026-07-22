@@ -1,0 +1,31 @@
+.git
+.agents
+__pycache__
+*.pyc
+*.log
+.env
+.env.*
+!.env.example
+
+# local user/session state
+data/*.db
+data/*.db-*
+data/secret.key
+
+# generated screenshots/reports; keep source fixtures out of Docker for prod
+screenshots
+
+# heavy optional model/runtime downloads
+models/*.pth
+models/*.onnx
+gfpgan/weights
+tools/CodeFormer
+tools/realesrgan-ncnn-vulkan
+tools/realesrgan-ncnn-vulkan*.zip
+tools/__pycache__
+
+# editor/os
+.vscode
+.idea
+.DS_Store
+Thumbs.db

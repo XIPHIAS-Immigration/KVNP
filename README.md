@@ -72,6 +72,27 @@ model. It is not bundled because MODNet pretrained weights are typically
 non-commercial; review the license before using one in production. See
 `docs/matting.md` and `scripts/fetch-modnet.ps1`.
 
+
+## Docker / AWS demo
+
+Deployment files are included for a short EC2 demo:
+
+- `requirements.txt` - Python runtime dependencies
+- `Dockerfile` - CPU-only app container
+- `compose.yaml` - app + Caddy HTTPS reverse proxy
+- `Caddyfile` - automatic HTTPS for the configured domain
+- `.env.example` - production environment template
+- `docs/aws-ec2-demo.md` - EC2 + GoDaddy deployment runbook
+
+For local Docker smoke testing:
+
+```powershell
+docker build -t kvnp-passport-studio .
+docker run --rm -p 4173:4173 -e HOST=0.0.0.0 -e KVNP_SESSION_SECRET=dev-secret kvnp-passport-studio
+```
+
+For the AWS demo, follow `docs/aws-ec2-demo.md`.
+
 ## Current starter programmes
 
 - United States passport
@@ -84,3 +105,4 @@ non-commercial; review the license before using one in production. See
 - Canada temporary resident visa
 - Australia passport
 - France / Schengen visa
+
