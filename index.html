@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KVNP Passport Studio</title>
+    <link rel="stylesheet" href="src/styles.css?v=kvnp-studio-25" />
+  </head>
+  <body>
+    <!-- ============ AUTH ============ -->
+    <div id="auth-view" class="auth-view">
+      <div class="auth-aside">
+        <div class="auth-aside-inner">
+          <div class="auth-brand">
+            <span class="brand-mark" aria-hidden="true">KV</span>
+            <span class="auth-brand-name">KVNP Studio</span>
+          </div>
+          <h1 class="auth-headline">Passport &amp; visa photos,<br />compliant by construction.</h1>
+          <p class="auth-sub">
+            Detect, auto-correct, matte, and validate against official programme rules — with an
+            honest decision on every photo.
+          </p>
+          <ul class="auth-points">
+            <li><span class="dot"></span> Identity-preserving auto-correction</li>
+            <li><span class="dot"></span> Before / after studio compare</li>
+            <li><span class="dot"></span> Print sheets at lab resolution</li>
+            <li><span class="dot"></span> Per-programme compliance checks</li>
+          </ul>
+          <div class="auth-aside-foot">KVNP Holdings Inc · local processing</div>
+        </div>
+      </div>
+
+      <div class="auth-panel">
+        <div class="auth-card">
+          <div class="auth-card-head">
+            <h2 id="auth-title">Welcome back</h2>
+            <p id="auth-subtitle">Sign in to your studio workspace.</p>
+          </div>
+
+          <form id="auth-form" class="auth-form" autocomplete="on">
+            <label class="auth-field" id="auth-name-field" hidden>
+              <span>Full name</span>
+              <input id="auth-name" type="text" autocomplete="name" placeholder="Jane Doe" />
+            </label>
+            <label class="auth-field">
+              <span>Email</span>
+              <input id="auth-email" type="email" autocomplete="email" placeholder="you@studio.com" required />
+            </label>
+            <label class="auth-field">
+              <span>Password</span>
+              <input id="auth-password" type="password" autocomplete="current-password" placeholder="••••••••" required minlength="6" />
+            </label>
+            <div id="auth-error" class="auth-error" hidden></div>
+            <button id="auth-submit" class="btn btn-primary btn-block" type="submit">Sign in</button>
+          </form>
+
+          <div class="auth-switch">
+            <span id="auth-switch-text">New to KVNP Studio?</span>
+            <button id="auth-switch-btn" class="link-btn" type="button">Create an account</button>
+          </div>
+
+          <div class="auth-divider"><span>or</span></div>
+          <button id="auth-guest" class="btn btn-ghost btn-block" type="button">Continue as guest</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ APP ============ -->
+    <div id="app-view" class="app-shell" hidden>
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <span class="brand-mark" aria-hidden="true">KV</span>
+          <div class="sidebar-brand-text">
+            <strong>KVNP Studio</strong>
+            <span>Passport Photo</span>
+          </div>
+        </div>
+
+        <nav class="sidebar-nav">
+          <button class="nav-item active" type="button" data-nav="studio">
+            <span class="nav-ico">▣</span> Studio
+          </button>
+          <button class="nav-item" type="button" data-nav="queue">
+            <span class="nav-ico">≡</span> Batch queue
+            <span id="nav-queue-count" class="nav-badge" hidden>0</span>
+          </button>
+          <button class="nav-item" type="button" data-nav="checks">
+            <span class="nav-ico">✓</span> Compliance
+          </button>
+        </nav>
+
+        <div class="sidebar-foot">
+          <div id="account-chip" class="account-chip">
+            <span id="account-avatar" class="account-avatar">G</span>
+            <div class="account-meta">
+              <strong id="account-name">Guest</strong>
+              <span id="account-email">local session</span>
+            </div>
+            <button id="logout-btn" class="icon-btn" type="button" title="Sign out">⨯</button>
+          </div>
+        </div>
+      </aside>
+
+      <div class="app-main">
+        <header class="topbar">
+          <div class="topbar-title">
+            <h2>Studio</h2>
+            <p id="profile-summary">Select a country and programme.</p>
+          </div>
+          <div class="topbar-actions">
+            <div id="vision-status" class="status-chip">Connecting backend</div>
+          </div>
+        </header>
+
+        <main class="workspace">
+          <!-- SOURCE -->
+          <section class="card source-card" aria-labelledby="source-title">
+            <div class="card-head">
+              <div>
+                <h3 id="source-title">Source</h3>
+                <p id="source-meta">No image loaded</p>
+              </div>
+              <div class="btn-row">
+                <label class="btn btn-primary" for="file-input">Upload</label>
+                <input id="file-input" type="file" accept="image/*" multiple />
+                <button id="camera-button" class="btn" type="button">Camera</button>
+                <button id="capture-button" class="btn" type="button" disabled>Capture</button>
+                <label class="mini-toggle"><input id="auto-capture" type="checkbox" checked /> Auto</label>
+              </div>
+            </div>
+
+            <div id="queue-strip" class="queue-strip" hidden></div>
+
+            <div class="stage">
+              <canvas id="source-canvas" width="900" height="620"></canvas>
+              <video id="camera-feed" playsinline muted hidden></video>
+              <div id="empty-state" class="empty-state">
+                <div class="empty-glyph">⬡</div>
+                <strong>Load a portrait photo</strong>
+                <span>The crop frame and face trace appear here.</span>
+              </div>
+              <div id="country-gate" class="country-gate">
+                <div class="country-gate-inner">
+                  <span class="gate-step">Step 1 of 2 — destination</span>
+                  <strong>Choose the country first</strong>
+                  <span>Every country has different photo laws. The studio only assesses and fixes what your selected programme legally allows.</span>
+                  <button id="gate-confirm" class="btn btn-primary" type="button">Continue with this programme</button>
+                  <span class="gate-hint">or pick a different country / programme in Job setup →</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card-strip">
+              <div class="card-strip-head">
+                <h4>Capture quality</h4>
+                <p id="retake-guidance">Load a portrait to see whether the source is strong enough.</p>
+              </div>
+              <div id="source-quality-list" class="quality-list"></div>
+            </div>
+          </section>
+
+          <!-- CONTROLS -->
+          <section class="card control-card" aria-labelledby="controls-title">
+            <div class="card-head compact">
+              <h3 id="controls-title">Job setup</h3>
+            </div>
+
+            <div class="field-grid">
+              <label class="field">
+                <span class="field-label">Country</span>
+                <select id="country-select"></select>
+              </label>
+              <label class="field">
+                <span class="field-label">Programme</span>
+                <select id="profile-select"></select>
+              </label>
+            </div>
+
+            <div class="preset-bar">
+              <select id="preset-select" title="Saved presets">
+                <option value="">Presets…</option>
+              </select>
+              <button id="preset-save" class="btn btn-sm" type="button">Save</button>
+              <button id="preset-delete" class="btn btn-sm" type="button" title="Delete preset">Delete</button>
+            </div>
+
+            <div id="requirements-list" class="requirements-list"></div>
+
+            <div class="section-label policy-title">What this country allows</div>
+            <div id="policy-list" class="policy-list"></div>
+            <div id="source-links" class="source-links"></div>
+
+            <div class="section-divider"></div>
+
+            <div class="automation-card">
+              <div>
+                <h4>Pipeline</h4>
+                <p id="automation-summary">Load a portrait to run computer-vision checks.</p>
+              </div>
+              <button id="rerun-vision" class="btn btn-sm" type="button" disabled>Auto analyze</button>
+            </div>
+
+            <div id="pipeline-report" class="pipeline-stack" aria-label="Processing models"></div>
+
+            <div class="switch-grid">
+              <label class="switch-row">
+                <input id="auto-straighten" type="checkbox" checked />
+                <span>Auto-straighten tilt</span>
+              </label>
+              <label class="switch-row">
+                <input id="auto-tone" type="checkbox" checked />
+                <span>Auto exposure / colour</span>
+              </label>
+              <label class="switch-row">
+                <input id="auto-lighting" type="checkbox" checked />
+                <span>Even lighting / red-eye</span>
+              </label>
+              <label class="switch-row">
+                <input id="background-replace" type="checkbox" checked />
+                <span>Clean background</span>
+              </label>
+              <label class="switch-row">
+                <input id="enhance-output" type="checkbox" checked />
+                <span>Photo enhancement</span>
+              </label>
+            </div>
+
+            <label class="field-label spaced" for="enhancement-mode">Enhancement mode</label>
+            <select id="enhancement-mode">
+              <option value="natural">Natural compliance</option>
+              <option value="studio">Studio clean</option>
+              <option value="ai-clean">Passport clean</option>
+            </select>
+
+            <label class="field-label spaced" for="background-cleanup">Background cleanup</label>
+            <select id="background-cleanup">
+              <option value="balanced">Balanced edges</option>
+              <option value="strong">Strong (cleaner white)</option>
+              <option value="max">Maximum (flat field)</option>
+            </select>
+
+            <label class="field-label spaced" for="background-color">Background color</label>
+            <div class="bg-color-row">
+              <input id="background-color" type="color" value="#ffffff" />
+              <div id="bg-swatches" class="bg-swatches"></div>
+            </div>
+
+            <div class="section-divider"></div>
+
+            <details class="manual-details">
+              <summary>Manual override</summary>
+              <div class="manual-grid">
+                <label class="range-field">
+                  <span>Head center X</span>
+                  <input id="center-x" type="range" min="0" max="100" value="50" />
+                </label>
+                <label class="range-field">
+                  <span>Head center Y</span>
+                  <input id="center-y" type="range" min="0" max="100" value="45" />
+                </label>
+                <label class="range-field">
+                  <span>Head height</span>
+                  <input id="head-height" type="range" min="15" max="95" value="50" />
+                </label>
+              </div>
+            </details>
+
+            <div id="measurements" class="measurements"></div>
+          </section>
+
+          <!-- RESULT -->
+          <section class="card result-card" aria-labelledby="result-title">
+            <div class="card-head">
+              <div>
+                <h3 id="result-title">Generated photo</h3>
+                <p id="result-summary">Waiting for an image.</p>
+              </div>
+              <div class="btn-row">
+                <button id="auto-fix" class="btn btn-primary" type="button" disabled>✦ Auto-fix</button>
+                <button id="download-photo" class="btn" type="button" disabled>Download</button>
+                <button id="download-report" class="btn" type="button" disabled>Report</button>
+              </div>
+            </div>
+
+            <div class="export-layout">
+              <div class="result-left">
+                <div class="result-toolbar">
+                  <div class="seg" role="tablist">
+                    <button id="view-result" class="seg-btn active" type="button" data-view="result">Result</button>
+                    <button id="view-compare" class="seg-btn" type="button" data-view="compare">Before / after</button>
+                  </div>
+                  <div class="toolbar-spacer"></div>
+                  <button id="toggle-guides" class="btn btn-sm ghost-toggle" type="button" disabled>Guides</button>
+                  <button id="zoom-out" class="icon-btn sq" type="button" title="Zoom out" disabled>−</button>
+                  <span id="zoom-label" class="zoom-label">100%</span>
+                  <button id="zoom-in" class="icon-btn sq" type="button" title="Zoom in" disabled>+</button>
+                </div>
+                <div class="final-frame">
+                  <div id="compare" class="compare" hidden>
+                    <img id="compare-after" class="compare-img compare-after" alt="Generated photo" />
+                    <img id="compare-before" class="compare-img compare-before" alt="Original photo" />
+                    <div id="compare-divider" class="compare-divider"></div>
+                    <span class="compare-tag compare-tag-before">Before</span>
+                    <span class="compare-tag compare-tag-after">After</span>
+                    <input id="compare-range" class="compare-range" type="range" min="0" max="100" value="50" aria-label="Before and after comparison" />
+                  </div>
+                  <canvas id="final-canvas" width="600" height="600"></canvas>
+                </div>
+
+                <div class="print-bar">
+                  <span class="print-bar-label">Print sheet</span>
+                  <select id="sheet-size" class="mini-select" title="Print sheet size" disabled>
+                    <option value="4x6">4x6 in</option>
+                    <option value="5x7">5x7 in</option>
+                    <option value="a4">A4</option>
+                    <option value="letter">Letter</option>
+                  </select>
+                  <select id="sheet-dpi" class="mini-select" title="Print resolution" disabled>
+                    <option value="300" selected>300 DPI</option>
+                    <option value="600">600 DPI</option>
+                    <option value="150">150 DPI</option>
+                  </select>
+                  <input id="sheet-copies" class="mini-input" type="number" min="1" max="60" placeholder="Max" title="Copies (blank = fill sheet)" disabled />
+                  <button id="print-sheet" class="btn btn-sm" type="button" disabled>Generate</button>
+                </div>
+
+                <div class="touchup-bar">
+                  <span class="print-bar-label">Touch-up</span>
+                  <button id="touchup-toggle" class="btn btn-sm" type="button" disabled>Clean background</button>
+                  <label id="touchup-brush" class="touchup-brush" hidden>
+                    Brush <input id="touchup-size" type="range" min="8" max="64" value="26" />
+                  </label>
+                  <button id="touchup-reset" class="btn btn-sm" type="button" hidden>Reset</button>
+                </div>
+
+                <details class="adjust-panel" open>
+                  <summary>
+                    <span>Adjustments</span>
+                    <button id="adjust-reset" class="link-btn" type="button">Reset all</button>
+                  </summary>
+                  <div id="adjust-grid" class="adjust-grid"></div>
+                </details>
+
+                <div class="output-row">
+                  <span class="print-bar-label">Output</span>
+                  <select id="output-format" class="mini-select" title="File format">
+                    <option value="image/jpeg">JPEG</option>
+                    <option value="image/png">PNG</option>
+                  </select>
+                  <label id="quality-field" class="touchup-brush">
+                    Quality <input id="output-quality" type="range" min="60" max="100" value="92" />
+                    <span id="quality-val" class="zoom-label">92</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="inspector-stack">
+                <div id="decision-card" class="decision-card pending">
+                  <strong>Waiting for image</strong>
+                  <span>Load a portrait to generate a decision.</span>
+                </div>
+                <div id="corrections-card" class="corrections-card" hidden></div>
+                <div id="overall-status" class="overall-status pending">Pending</div>
+                <div class="section-label">Compliance checks</div>
+                <p class="muted-copy">Machine checks are gated by source quality; human-only items stay flagged for review.</p>
+                <div id="checks-list" class="checks-list"></div>
+                <p class="disclaimer-note">
+                  Automated estimate only — not a government service, not affiliated with any
+                  passport/visa authority, and not a guarantee of acceptance. The issuing authority
+                  makes the final decision.
+                </p>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script src="src/vendor/gsap.min.js?v=kvnp-studio-25"></script>
+    <script src="src/motion.js?v=kvnp-studio-25"></script>
+    <script type="module" src="src/app.js?v=kvnp-studio-25"></script>
+  </body>
+</html>

@@ -1,0 +1,38 @@
+﻿# Python/runtime
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# Local app state and secrets
+data/*.db
+data/*.db-*
+data/secret.key
+
+# Generated logs and visual outputs
+*.log
+screenshots/*
+!screenshots/test-inputs/
+!screenshots/test-inputs/**
+!screenshots/reference-video/
+!screenshots/reference-video/**
+
+# Large/local model weights and downloaded native runtimes
+models/*
+!models/README.md
+*.pth
+*.onnx
+gfpgan/weights/
+tools/CodeFormer/
+tools/realesrgan-ncnn-vulkan/
+tools/realesrgan-ncnn-vulkan*.zip
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
