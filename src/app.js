@@ -1,5 +1,5 @@
-import { COUNTRIES, RULE_PROFILES, getDefaultProfile, getProfilesForCountry } from "./rules.js?v=kvnp-studio-33";
-import { initCoach, analyzeFrame, coachAvailable } from "./capture.js?v=kvnp-studio-33";
+import { COUNTRIES, RULE_PROFILES, getDefaultProfile, getProfilesForCountry } from "./rules.js?v=kvnp-studio-34";
+import { initCoach, analyzeFrame, coachAvailable } from "./capture.js?v=kvnp-studio-34";
 
 const elements = {
   fileInput: document.querySelector("#file-input"),
@@ -109,6 +109,13 @@ const elements = {
   backgroundVariantCopy: document.querySelector("#background-variant-copy"),
   backgroundVariantPolicy: document.querySelector("#background-variant-policy"),
   backgroundVariantConfirm: document.querySelector("#background-variant-confirm"),
+  programmeSearch: document.querySelector("#programme-search"),
+  categoryFilters: document.querySelector("#category-filters"),
+  programmeGrid: document.querySelector("#programme-grid"),
+  workspaceModeButtons: Array.from(document.querySelectorAll("[data-workspace-mode]")),
+  coachBanner: document.querySelector("#coach-banner"),
+  coachDirective: document.querySelector("#coach-directive"),
+  coachDetail: document.querySelector("#coach-detail"),
 };
 
 const ADJUST_CONTROLS = [
@@ -194,6 +201,9 @@ const state = {
   reviewPreviewUrl: null,
   downloadAcknowledged: false,
   backgroundVariantBusy: false,
+  workspaceMode: "guided",
+  catalogueQuery: "",
+  catalogueCategory: "All",
 };
 
 let adjustBakeTimer = 0;
@@ -212,8 +222,11 @@ let analysisTimer = 0;
 let serverTimer = 0;
 
 function init() {
+  restoreWorkspaceMode();
   populateCountrySelect();
   populateProgrammeSelect(state.profile.country);
+  renderCategoryFilters();
+  renderProgrammeCatalogue();
   applyProfileAutomationDefaults();
   renderProfile();
   renderEmptyCanvas();
@@ -296,6 +309,25 @@ function bindEvents() {
   });
   elements.downloadWarningDialog.addEventListener("close", resetDownloadWarningDialog);
   elements.backgroundVariantConfirm.addEventListener("click", downloadBackgroundVariant);
+  elements.programmeSearch?.addEventListener("input", () => {
+    state.catalogueQuery = elements.programmeSearch.value.trim().toLowerCase();
+    renderProgrammeCatalogue();
+  });
+  elements.categoryFilters?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-category]");
+    if (!button) return;
+    state.catalogueCategory = button.dataset.category;
+    renderCategoryFilters();
+    renderProgrammeCatalogue();
+  });
+  elements.programmeGrid?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-profile-id]");
+    if (!button) return;
+    selectCatalogueProfile(button.dataset.profileId);
+  });
+  for (const button of elements.workspaceModeButtons) {
+    button.addEventListener("click", () => setWorkspaceMode(button.dataset.workspaceMode));
+  }
 
   if (elements.uploadDropzone) {
     for (const eventName of ["dragenter", "dragover"]) {
@@ -344,6 +376,92 @@ function populateProgrammeSelect(countryCode) {
   }
 
   elements.profileSelect.value = state.profile.id;
+}
+
+function restoreWorkspaceMode() {
+  let saved = "guided";
+  try {
+    saved = localStorage.getItem("kvnp-workspace-mode") || "guided";
+  } catch {
+    saved = "guided";
+  }
+  setWorkspaceMode(saved, { persist: false });
+}
+
+function setWorkspaceMode(mode, { persist = true } = {}) {
+  const next = mode === "studio" ? "studio" : "guided";
+  state.workspaceMode = next;
+  document.body.dataset.workspaceMode = next;
+  for (const button of elements.workspaceModeButtons) {
+    const active = button.dataset.workspaceMode === next;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  }
+  if (next === "studio") document.querySelector(".studio-details")?.setAttribute("open", "");
+  if (persist) {
+    try {
+      localStorage.setItem("kvnp-workspace-mode", next);
+    } catch {
+      // Private browsing can disable storage; the mode still works for this session.
+    }
+  }
+}
+
+function renderCategoryFilters() {
+  if (!elements.categoryFilters) return;
+  const categories = ["All", ...new Set(RULE_PROFILES.map((profile) => profile.category).filter(Boolean))];
+  elements.categoryFilters.innerHTML = categories
+    .map((category) => {
+      const active = category === state.catalogueCategory;
+      return `<button class="category-filter ${active ? "active" : ""}" type="button" data-category="${escapeHtml(
+        category,
+      )}" aria-pressed="${active ? "true" : "false"}">${escapeHtml(category)}</button>`;
+    })
+    .join("");
+}
+
+function renderProgrammeCatalogue() {
+  if (!elements.programmeGrid) return;
+  const query = state.catalogueQuery;
+  const category = state.catalogueCategory;
+  const matches = RULE_PROFILES.filter((profile) => {
+    const categoryMatch = category === "All" || profile.category === category;
+    const haystack = `${profile.countryName} ${profile.programme} ${profile.category} ${profile.delivery}`.toLowerCase();
+    return categoryMatch && (!query || haystack.includes(query));
+  });
+
+  if (!matches.length) {
+    elements.programmeGrid.innerHTML =
+      '<div class="catalogue-empty"><strong>No verified programme found</strong><span>Try a country or broader document category.</span></div>';
+    return;
+  }
+
+  elements.programmeGrid.innerHTML = matches
+    .map((profile) => {
+      const active = profile.id === state.profile.id;
+      const policyFlags = Object.values(profile.allowedEdits ?? {}).filter((value) => typeof value === "boolean");
+      const validationOnly = policyFlags.length > 0 && policyFlags.every((value) => value === false);
+      const policyLabel = profile.checkerOnly ? "Source checker" : validationOnly ? "Validation only" : "Safe preparation";
+      return `
+        <button class="programme-card ${active ? "active" : ""}" type="button" data-profile-id="${escapeHtml(profile.id)}"
+          aria-pressed="${active ? "true" : "false"}">
+          <span class="programme-country">${escapeHtml(profile.countryName)}</span>
+          <strong>${escapeHtml(profile.programme)}</strong>
+          <small>${escapeHtml(profile.category)} / ${escapeHtml(profile.delivery)}</small>
+          <span class="programme-policy ${validationOnly ? "validation" : "assisted"}">${policyLabel}</span>
+        </button>`;
+    })
+    .join("");
+}
+
+function selectCatalogueProfile(profileId) {
+  const profile = RULE_PROFILES.find((item) => item.id === profileId);
+  if (!profile) return;
+  elements.countrySelect.value = profile.country;
+  state.profile = profile;
+  populateProgrammeSelect(profile.country);
+  elements.profileSelect.value = profile.id;
+  handleProfileChange();
 }
 
 async function handleFileSelect(event) {
@@ -444,6 +562,7 @@ function handleProfileChange() {
   renderVisionStatus();
   configureFinalCanvas();
   state.manualOverride = false;
+  renderProgrammeCatalogue();
   if (state.originalFile) {
     scheduleServerProcessing();
   } else {
@@ -465,6 +584,7 @@ function handleCountryChange() {
   renderVisionStatus();
   configureFinalCanvas();
   state.manualOverride = false;
+  renderProgrammeCatalogue();
   if (state.originalFile) {
     scheduleServerProcessing();
   } else {
@@ -2083,17 +2203,27 @@ function renderSourceQuality() {
 
   if (!state.image) {
     elements.retakeGuidance.textContent = "Load a portrait to see whether the source is strong enough.";
+    renderCoachBanner("idle", "Add a portrait to begin", "KVNP will check camera level, shoulders, gaze, lighting and usable detail.");
     return;
   }
 
   if (!quality.length) {
     elements.retakeGuidance.textContent = "Waiting for Python quality analysis.";
+    renderCoachBanner("working", "Inspecting your photo", "Measuring pose, gaze, lighting, background and usable facial detail.");
     return;
   }
 
   const fails = quality.filter((item) => item.status === "fail");
   const warnings = quality.filter((item) => item.status === "warning");
-  elements.retakeGuidance.textContent = getRetakeGuidance(fails, warnings);
+  const guidance = getRetakeGuidance(fails, warnings);
+  elements.retakeGuidance.textContent = guidance;
+  if (fails.length) {
+    renderCoachBanner("fail", "Retake recommended", guidance);
+  } else if (warnings.length) {
+    renderCoachBanner("warning", "One more improvement", guidance);
+  } else {
+    renderCoachBanner("ready", "Capture looks strong", guidance);
+  }
 
   for (const item of quality) {
     const row = document.createElement("article");
@@ -2108,6 +2238,13 @@ function renderSourceQuality() {
     elements.sourceQualityList.append(row);
     if (elements.reviewSourceQualityList) elements.reviewSourceQualityList.append(row.cloneNode(true));
   }
+}
+
+function renderCoachBanner(tone, directive, detail) {
+  if (!elements.coachBanner || !elements.coachDirective || !elements.coachDetail) return;
+  elements.coachBanner.dataset.tone = tone;
+  elements.coachDirective.textContent = directive;
+  elements.coachDetail.textContent = detail;
 }
 
 function getRetakeGuidance(fails, warnings) {
@@ -2527,14 +2664,19 @@ function renderChecks() {
   elements.overallStatus.textContent = unresolvedReviews ? `${status} / ${unresolvedReviews} to confirm` : `${status}`;
   elements.overallStatus.className = `overall-status ${className}`;
   const preparedAvailable = Boolean(state.exportBlob && state.processedImage);
+  const checkerOnly = state.profile?.checkerOnly === true;
   const downloadIssues = getDownloadIssues();
   elements.downloadOriginal.disabled = !state.originalFile;
-  elements.downloadPhoto.disabled = !preparedAvailable;
-  elements.downloadPhoto.textContent = downloadIssues.length ? "Download with warnings" : "Download file";
-  elements.printSheet.disabled = !preparedAvailable;
-  elements.sheetSize.disabled = !preparedAvailable;
-  elements.sheetDpi.disabled = !preparedAvailable;
-  elements.sheetCopies.disabled = !preparedAvailable;
+  elements.downloadPhoto.disabled = !preparedAvailable || checkerOnly;
+  elements.downloadPhoto.textContent = checkerOnly
+    ? "Original only"
+    : downloadIssues.length
+      ? "Download with warnings"
+      : "Download file";
+  elements.printSheet.disabled = !preparedAvailable || checkerOnly;
+  elements.sheetSize.disabled = !preparedAvailable || checkerOnly;
+  elements.sheetDpi.disabled = !preparedAvailable || checkerOnly;
+  elements.sheetCopies.disabled = !preparedAvailable || checkerOnly;
   // Touch-up needs a generated photo with a clean-background pass available.
   const hasPhoto = Boolean(state.processedImage && state.backendResult?.ok);
   const touchupBanned = state.profile?.allowedEdits?.background === false && !state.previewMode;
@@ -2660,7 +2802,11 @@ function updateDownloadAdvisory(issues = getDownloadIssues()) {
   const detail = elements.downloadAdvisory.querySelector("span");
   let status = "pending";
 
-  if (state.processing) {
+  if (state.profile?.checkerOnly && state.originalFile) {
+    status = issues.length ? "warning" : "pass";
+    strong.textContent = "Source-check programme";
+    detail.textContent = "This authority requires an unaltered professional photo. Download the untouched original; KVNP does not offer a prepared submission export.";
+  } else if (state.processing) {
     strong.textContent = "Preparing your photo";
     detail.textContent = "The original is already available. The prepared file will appear when analysis finishes.";
   } else if (!state.exportBlob) {
@@ -3086,7 +3232,7 @@ function frameSharpness(canvas) {
 }
 
 function downloadPhoto() {
-  if (!state.processedImage || !state.exportBlob) return;
+  if (state.profile?.checkerOnly || !state.processedImage || !state.exportBlob) return;
   const issues = getDownloadIssues();
   if (issues.length && !state.downloadAcknowledged) {
     showDownloadWarningDialog(issues);
@@ -4120,6 +4266,7 @@ function describeBackground(mode) {
     white: "plain white",
     white_or_off_white: "plain white or off-white",
     plain_light: "plain light-coloured",
+    light_not_white: "plain light-coloured, not white",
     white_or_light: "plain white or light-coloured",
     light_gray_or_white: "plain white or light gray",
   };

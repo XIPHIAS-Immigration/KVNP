@@ -23,7 +23,7 @@
             clearly when a retake is the safer answer.
           </p>
           <ul class="auth-points">
-            <li><span class="dot"></span> 17 verified programme profiles</li>
+            <li><span class="dot"></span> 24 verified programme profiles across 17 countries</li>
             <li><span class="dot"></span> Live pose, gaze, framing and background checks</li>
             <li><span class="dot"></span> Submission file, print sheet and audit report</li>
           </ul>
@@ -114,6 +114,10 @@
             <p id="profile-summary">Select a country and programme.</p>
           </div>
           <div class="topbar-actions">
+            <div class="workspace-mode" role="group" aria-label="Workspace mode">
+              <button class="workspace-mode-btn active" type="button" data-workspace-mode="guided">Guided</button>
+              <button class="workspace-mode-btn" type="button" data-workspace-mode="studio">Studio</button>
+            </div>
             <div id="vision-status" class="status-chip">Connecting backend</div>
           </div>
         </header>
@@ -153,6 +157,12 @@
 
             <div id="queue-strip" class="queue-strip" hidden></div>
 
+            <div id="coach-banner" class="coach-banner" data-tone="idle" aria-live="polite">
+              <span>Capture coach</span>
+              <strong id="coach-directive">Add a portrait to begin</strong>
+              <small id="coach-detail">KVNP will check camera level, shoulders, gaze, lighting and usable detail.</small>
+            </div>
+
             <div id="upload-dropzone" class="stage">
               <canvas id="source-canvas" width="900" height="620"></canvas>
               <video id="camera-feed" playsinline muted hidden></video>
@@ -185,8 +195,24 @@
                 <span class="card-step">Step 01</span>
                 <h3 id="controls-title">Destination</h3>
               </div>
-              <span id="catalogue-count" class="catalogue-count">22 programmes</span>
+              <span id="catalogue-count" class="catalogue-count">24 programmes</span>
             </div>
+
+            <div class="catalogue-intro">
+              <span class="catalogue-kicker">Find your document</span>
+              <strong>What are you preparing?</strong>
+              <p>Search by country or document. KVNP will load the correct output, capture guidance and editing policy.</p>
+            </div>
+
+            <div class="catalogue-tools">
+              <label class="catalogue-search" for="programme-search">
+                <span class="field-label">Search countries and programmes</span>
+                <input id="programme-search" type="search" autocomplete="off" placeholder="Try Canada, passport, identity card..." />
+              </label>
+              <div id="category-filters" class="category-filters" role="group" aria-label="Document category"></div>
+            </div>
+
+            <div id="programme-grid" class="programme-grid" aria-live="polite"></div>
 
             <div class="field-grid">
               <label class="field">
@@ -563,8 +589,8 @@
       </form>
     </dialog>
 
-    <script src="src/vendor/gsap.min.js?v=kvnp-studio-33"></script>
-    <script src="src/motion.js?v=kvnp-studio-33"></script>
-    <script type="module" src="src/app.js?v=kvnp-studio-33"></script>
+    <script src="src/vendor/gsap.min.js?v=kvnp-studio-34"></script>
+    <script src="src/motion.js?v=kvnp-studio-34"></script>
+    <script type="module" src="src/app.js?v=kvnp-studio-34"></script>
   </body>
 </html>

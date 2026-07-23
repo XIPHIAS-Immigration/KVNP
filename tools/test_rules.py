@@ -49,7 +49,7 @@ def _no_duplicate_keys(pairs):
 def test_loads_verified_catalogue():
     data = _load()
     assert isinstance(data, list), "profiles.json must be a JSON array"
-    assert len(data) == 22, f"expected 22 profiles, got {len(data)}"
+    assert len(data) == 24, f"expected 24 profiles, got {len(data)}"
     assert len({p["country"] for p in data}) == 17, "expected 17 countries"
     print("test_loads_verified_catalogue", PASS)
 
@@ -169,6 +169,8 @@ def test_strict_profiles_are_validation_only():
         "hong-kong-passport-digital-2026-07",
         "south-korea-passport-digital-2026-07",
         "malaysia-evisa-digital-2026-07",
+        "india-oci-card-digital-2026-07",
+        "canada-pr-card-digital-checker-2026-07",
     }
     profiles = {p["id"]: p for p in _load()}
     edit_keys = ("straighten", "tone", "lighting", "background", "enhance", "rescue")
@@ -242,6 +244,16 @@ def test_new_catalogue_dimensions():
 
     my = profiles["malaysia-evisa-digital-2026-07"]
     assert (my["output"]["printWidthMm"], my["output"]["printHeightMm"]) == (35, 50)
+
+    oci = profiles["india-oci-card-digital-2026-07"]
+    assert (oci["output"]["widthPx"], oci["output"]["heightPx"]) == (900, 900)
+    assert oci["file"]["maxBytes"] == 200_000
+    assert oci["background"]["mode"] == "light_not_white"
+
+    pr = profiles["canada-pr-card-digital-checker-2026-07"]
+    assert (pr["output"]["widthPx"], pr["output"]["heightPx"]) == (1430, 2000)
+    assert pr["file"]["maxBytes"] == 4_000_000
+    assert pr["checkerOnly"] is True
     print("test_new_catalogue_dimensions", PASS)
 
 

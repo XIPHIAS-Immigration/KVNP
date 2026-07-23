@@ -1583,5 +1583,142 @@
       "compressionTarget": null
     },
     "reviewChecks": ["studio-captured original", "shoulders visible", "white background", "no digital alteration"]
+  },
+  {
+    "id": "india-oci-card-digital-2026-07",
+    "allowedEdits": {
+      "straighten": false,
+      "tone": false,
+      "lighting": false,
+      "background": false,
+      "enhance": false,
+      "rescue": false,
+      "note": "OCI requires a true front-view portrait on a plain light-coloured background that is not white. KVNP validates, sizes and compresses the source; capture defects require a retake."
+    },
+    "label": "India OCI Card - digital",
+    "country": "IN",
+    "countryName": "India",
+    "programme": "OCI Card application",
+    "category": "Identity",
+    "document": "Overseas Citizen of India Card",
+    "delivery": "Digital",
+    "lastReviewed": "2026-07-23",
+    "sources": [
+      {
+        "label": "Government of India OCI photo specifications",
+        "url": "https://ociservices.gov.in/onlineOCI/faq"
+      }
+    ],
+    "requirements": [
+      "Square photograph at least 51 x 51 mm",
+      "Face covers approximately 80% of the image",
+      "Plain light-coloured background that is not white",
+      "Front view with full face, head and shoulders centred",
+      "JPEG/JPG, 200 x 200 to 900 x 900 px, maximum 200 KB"
+    ],
+    "output": {
+      "widthPx": 900,
+      "heightPx": 900,
+      "printWidthMm": 51,
+      "printHeightMm": 51,
+      "mime": "image/jpeg",
+      "quality": 0.9
+    },
+    "head": {
+      "measure": "face_coverage",
+      "minMm": 38,
+      "maxMm": 43,
+      "minPercent": 74,
+      "maxPercent": 85,
+      "targetPercent": 80,
+      "topMarginPercent": 5
+    },
+    "background": {
+      "mode": "light_not_white",
+      "minEdgeLuma": 175,
+      "maxEdgeSaturation": 58,
+      "maxEdgeSpread": 38
+    },
+    "file": {
+      "formats": ["jpg", "jpeg"],
+      "minBytes": null,
+      "maxBytes": 200000
+    },
+    "automation": {
+      "backgroundReplacement": false,
+      "backgroundColor": "#e9edf1",
+      "enhanceOutput": false,
+      "compressionTarget": 200000
+    },
+    "reviewChecks": ["front view", "full face visible", "head and shoulders visible", "background is not white"]
+  },
+  {
+    "id": "canada-pr-card-digital-checker-2026-07",
+    "checkerOnly": true,
+    "allowedEdits": {
+      "straighten": false,
+      "tone": false,
+      "lighting": false,
+      "background": false,
+      "enhance": false,
+      "rescue": false,
+      "note": "Canada requires a professional, original PR Card photo and defines cropping, sharpening, tonal correction and background changes as alterations. KVNP checks the source only and exports the untouched original."
+    },
+    "label": "Canada PR Card - digital checker",
+    "country": "CA",
+    "countryName": "Canada",
+    "programme": "Permanent Resident Card checker",
+    "category": "Residence",
+    "document": "Permanent Resident Card",
+    "delivery": "Digital checker",
+    "lastReviewed": "2026-07-23",
+    "sources": [
+      {
+        "label": "Government of Canada permanent resident photos",
+        "url": "https://www.canada.ca/en/immigration-refugees-citizenship/services/permanent-residents/card/photos.html"
+      }
+    ],
+    "requirements": [
+      "Professional original photograph, not altered in any way",
+      "715 x 1000 to 2000 x 2800 px, JPEG/JPG, maximum 4 MB",
+      "Plain untextured white background with uniform lighting",
+      "Neutral expression, mouth closed, eyes open, looking at camera",
+      "Face and shoulders centred and squared to the camera"
+    ],
+    "output": {
+      "widthPx": 1430,
+      "heightPx": 2000,
+      "printWidthMm": 50,
+      "printHeightMm": 70,
+      "mime": "image/jpeg",
+      "quality": 0.95
+    },
+    "head": {
+      "measure": "chin_to_crown",
+      "minMm": 31,
+      "maxMm": 36,
+      "minPercent": 44,
+      "maxPercent": 51,
+      "targetPercent": 47.5,
+      "topMarginPercent": 13
+    },
+    "background": {
+      "mode": "white",
+      "minEdgeLuma": 200,
+      "maxEdgeSaturation": 40,
+      "maxEdgeSpread": 32
+    },
+    "file": {
+      "formats": ["jpg", "jpeg"],
+      "minBytes": null,
+      "maxBytes": 4000000
+    },
+    "automation": {
+      "backgroundReplacement": false,
+      "backgroundColor": "#ffffff",
+      "enhanceOutput": false,
+      "compressionTarget": null
+    },
+    "reviewChecks": ["professional studio source", "taken within 12 months", "neutral expression", "unaltered original"]
   }
 ]

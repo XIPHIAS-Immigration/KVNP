@@ -10,6 +10,47 @@ The acceptance engines used by governments, consulates, booths, and application 
 
 Build a low-cost tool that helps users create passport, visa, OCI, and identity-document photos that are likely to pass official checks.
 
+## 2026 product roadmap
+
+### Phase 1 - Guided consumer experience
+
+- Keep the existing four-step workflow, but show one primary decision or action at a time.
+- Make Guided mode the default and keep technical controls in an explicit Studio mode.
+- Add searchable programme discovery with document-category filters.
+- Turn quality results into one prominent instruction: ready, improve, or retake.
+- Preserve the black, orange, green, and neutral visual system while adding purposeful transitions and stronger selected states.
+
+### Phase 2 - Verified programme catalogue
+
+- Expand beyond passports and visas into identity cards, permanent residence cards, overseas citizenship, residence permits, and driving-licence photo workflows.
+- Encode only requirements backed by an official source and a recorded review date.
+- Model each programme's editing policy independently; strict programmes remain validation-only.
+- Add India OCI and Canada Permanent Resident Card as the first non-visa profiles.
+- Build a rule-review queue before attempting broad country coverage.
+
+### Phase 3 - Capture intelligence
+
+- Add phone-camera handoff through a short-lived QR session.
+- Capture a short burst and retain the sharpest frame that satisfies pose checks.
+- Add baby and child guidance, supporting-hand detection, and programme-specific expression exceptions.
+- Add accessibility and medical-exception guidance without automatically rejecting permitted accommodations.
+
+### Phase 4 - Product modes
+
+- Photo Checker: inspect an existing photo without changing pixels.
+- Photo Maker: apply only the formatting and corrections permitted by the selected programme.
+- Application Pack: export the prepared file, original, print sheet, and audit report together.
+- Family Queue: process multiple applicants without losing each applicant's rule profile.
+- Studio/Kiosk: presets, customer references, printer settings, and automatic session deletion.
+
+### Phase 5 - Trust, scale, and validation
+
+- Maintain a labelled regression bank of difficult real photographs and expected outcomes.
+- Show source measurements, applied operations, blocked operations, and human checks separately.
+- Never display an invented acceptance percentage.
+- Add privacy controls, short retention defaults, and auditable session deletion.
+- Add a rule-administration workflow with source status, reviewer, last-reviewed date, and change history.
+
 The first version should:
 
 - accept a camera capture or uploaded image

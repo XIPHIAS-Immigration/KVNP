@@ -63,11 +63,24 @@ def test_review_outputs_are_present():
 def test_warnings_do_not_gate_file_availability():
     _, app = load_sources()
     assert "const preparedAvailable = Boolean(state.exportBlob && state.processedImage);" in app
-    assert "elements.downloadPhoto.disabled = !preparedAvailable;" in app
-    assert "elements.printSheet.disabled = !preparedAvailable;" in app
+    assert "const checkerOnly = state.profile?.checkerOnly === true;" in app
+    assert "elements.downloadPhoto.disabled = !preparedAvailable || checkerOnly;" in app
+    assert "elements.printSheet.disabled = !preparedAvailable || checkerOnly;" in app
     assert "const photoReady = failCount === 0" not in app
     assert "showDownloadWarningDialog(issues);" in app
     print("test_warnings_do_not_gate_file_availability", PASS)
+
+
+def test_guided_catalogue_and_studio_mode_are_present():
+    html, app = load_sources()
+    for element_id in ("programme-search", "category-filters", "programme-grid", "coach-banner"):
+        assert f'id="{element_id}"' in html, element_id
+    assert 'data-workspace-mode="guided"' in html
+    assert 'data-workspace-mode="studio"' in html
+    assert "function renderProgrammeCatalogue()" in app
+    assert "function renderCoachBanner(" in app
+    assert 'document.body.dataset.workspaceMode = next;' in app
+    print("test_guided_catalogue_and_studio_mode_are_present", PASS)
 
 
 def test_original_download_survives_processing_failure():
@@ -92,6 +105,7 @@ def main():
         test_four_stage_structure,
         test_review_outputs_are_present,
         test_warnings_do_not_gate_file_availability,
+        test_guided_catalogue_and_studio_mode_are_present,
         test_original_download_survives_processing_failure,
         test_background_variant_respects_programme_policy,
     ]
