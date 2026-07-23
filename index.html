@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>KVNP Passport Studio</title>
-    <link rel="stylesheet" href="src/styles.css?v=kvnp-studio-31" />
+    <link rel="stylesheet" href="src/styles.css?v=kvnp-studio-32" />
   </head>
   <body>
     <!-- ============ AUTH ============ -->
@@ -125,20 +125,17 @@
           <button class="workflow-step" type="button" data-workflow-step="2" data-target="photo-card">
             <span>02</span><strong>Photo</strong><small>Upload or capture</small>
           </button>
-          <button class="workflow-step" type="button" data-workflow-step="3" data-target="assessment-panel">
-            <span>03</span><strong>Assessment</strong><small>Check the source</small>
+          <button class="workflow-step" type="button" data-workflow-step="3" data-target="prepare-card">
+            <span>03</span><strong>Prepare</strong><small>Apply safe fixes</small>
           </button>
-          <button class="workflow-step" type="button" data-workflow-step="4" data-target="prepare-card">
-            <span>04</span><strong>Prepare</strong><small>Apply safe fixes</small>
-          </button>
-          <button class="workflow-step" type="button" data-workflow-step="5" data-target="export-controls">
-            <span>05</span><strong>Export</strong><small>Download the file</small>
+          <button class="workflow-step" type="button" data-workflow-step="4" data-target="review-card">
+            <span>04</span><strong>Review</strong><small>Preview and download</small>
           </button>
         </nav>
 
         <main class="workspace">
           <!-- SOURCE -->
-          <section id="photo-card" class="card source-card" aria-labelledby="source-title">
+          <section id="photo-card" class="card source-card wizard-panel" data-wizard-panel="2" aria-labelledby="source-title" hidden>
             <div class="card-head">
               <div>
                 <span class="card-step">Step 02</span>
@@ -164,15 +161,6 @@
                 <strong>Drop a portrait here</strong>
                 <span>Or use Upload photo. JPG, PNG, WebP and phone images are accepted.</span>
               </div>
-              <div id="country-gate" class="country-gate">
-                <div class="country-gate-inner">
-                  <span class="gate-step">Step 01 / Destination</span>
-                  <strong>Confirm where this photo is going</strong>
-                  <span>The selected programme sets the crop, background, file and editing rules.</span>
-                  <button id="gate-confirm" class="btn btn-primary" type="button">Continue with this programme</button>
-                  <span class="gate-hint">Choose another country in Destination.</span>
-                </div>
-              </div>
             </div>
 
             <div id="assessment-panel" class="card-strip">
@@ -182,10 +170,16 @@
               </div>
               <div id="source-quality-list" class="quality-list"></div>
             </div>
+
+            <div class="wizard-actions">
+              <button class="btn" type="button" data-wizard-back="1">Back to destination</button>
+              <span id="photo-step-note">Upload or capture one photo to continue.</span>
+              <button id="continue-prepare" class="btn btn-primary" type="button" disabled>Continue to preparation</button>
+            </div>
           </section>
 
           <!-- CONTROLS -->
-          <section id="destination-card" class="card control-card" aria-labelledby="controls-title">
+          <section id="destination-card" class="card control-card wizard-panel is-active" data-wizard-panel="1" aria-labelledby="controls-title">
             <div class="card-head compact">
               <div>
                 <span class="card-step">Step 01</span>
@@ -224,6 +218,11 @@
             <div class="section-label policy-title">Submission policy</div>
             <div id="policy-list" class="policy-list"></div>
             <div id="source-links" class="source-links"></div>
+
+            <div class="destination-assurance">
+              <strong>Rules first, photo second</strong>
+              <span>This choice controls the crop, output, background checks and which edits are permitted.</span>
+            </div>
 
             <details class="studio-details">
               <summary>
@@ -321,24 +320,27 @@
             <div id="measurements" class="measurements"></div>
               </div>
             </details>
+
+            <div class="wizard-actions">
+              <span>Nothing is uploaded until you confirm the destination.</span>
+              <button id="gate-confirm" class="btn btn-primary" type="button">Continue with this programme</button>
+            </div>
           </section>
 
           <!-- RESULT -->
-          <section id="prepare-card" class="card result-card" aria-labelledby="result-title">
+          <section id="prepare-card" class="card result-card wizard-panel" data-wizard-panel="3" aria-labelledby="result-title" hidden>
             <div class="card-head">
               <div>
-                <span class="card-step">Steps 03-05</span>
+                <span class="card-step">Step 03</span>
                 <h3 id="result-title">Prepared photo</h3>
                 <p id="result-summary">Waiting for an image.</p>
               </div>
               <div class="btn-row">
                 <button id="auto-fix" class="btn btn-primary" type="button" disabled>Prepare photo</button>
-                <button id="download-photo" class="btn" type="button" disabled>Download file</button>
-                <button id="download-report" class="btn" type="button" disabled>Audit report</button>
               </div>
             </div>
 
-            <div class="export-layout">
+            <div class="prepare-layout">
               <div class="result-left">
                 <div class="result-toolbar">
                   <div class="seg" role="tablist">
@@ -363,23 +365,6 @@
                   <canvas id="final-canvas" width="600" height="600"></canvas>
                 </div>
 
-                <div class="print-bar">
-                  <span class="print-bar-label">Print sheet</span>
-                  <select id="sheet-size" class="mini-select" title="Print sheet size" disabled>
-                    <option value="4x6">4x6 in</option>
-                    <option value="5x7">5x7 in</option>
-                    <option value="a4">A4</option>
-                    <option value="letter">Letter</option>
-                  </select>
-                  <select id="sheet-dpi" class="mini-select" title="Print resolution" disabled>
-                    <option value="300" selected>300 DPI</option>
-                    <option value="600">600 DPI</option>
-                    <option value="150">150 DPI</option>
-                  </select>
-                  <input id="sheet-copies" class="mini-input" type="number" min="1" max="60" placeholder="Max" title="Copies (blank = fill sheet)" disabled />
-                  <button id="print-sheet" class="btn btn-sm" type="button" disabled>Generate</button>
-                </div>
-
                 <div class="touchup-bar">
                   <span class="print-bar-label">Touch-up</span>
                   <button id="touchup-toggle" class="btn btn-sm" type="button" disabled>Clean background</button>
@@ -397,8 +382,83 @@
                   <div id="adjust-grid" class="adjust-grid"></div>
                 </details>
 
-                <div id="export-controls" class="output-row">
-                  <span class="print-bar-label">Download file</span>
+              </div>
+
+            </div>
+
+            <div class="wizard-actions">
+              <button class="btn" type="button" data-wizard-back="2">Back to photo</button>
+              <span>Review the safe corrections before choosing an export.</span>
+              <button id="continue-review" class="btn btn-primary" type="button" disabled>Continue to review</button>
+            </div>
+          </section>
+
+          <!-- REVIEW -->
+          <section id="review-card" class="card review-card wizard-panel" data-wizard-panel="4" aria-labelledby="review-title" hidden>
+            <div class="card-head">
+              <div>
+                <span class="card-step">Step 04</span>
+                <h3 id="review-title">Review and download</h3>
+                <p>Check the result, understand every warning, then choose the file you need.</p>
+              </div>
+              <div class="btn-row review-download-actions">
+                <button id="download-original" class="btn" type="button" disabled>Original</button>
+                <button id="download-photo" class="btn btn-primary" type="button" disabled>Download file</button>
+                <button id="download-report" class="btn" type="button" disabled>Audit report</button>
+              </div>
+            </div>
+
+            <div class="review-layout">
+              <div class="review-preview-column">
+                <div class="review-preview-tabs" role="tablist" aria-label="Output preview">
+                  <button class="seg-btn active" type="button" data-review-preview="photo">Photo</button>
+                  <button class="seg-btn" type="button" data-review-preview="document">Document preview</button>
+                  <button class="seg-btn" type="button" data-review-preview="print">Print sheet</button>
+                </div>
+
+                <div class="review-preview-stage">
+                  <div class="review-preview-view is-active" data-review-preview-view="photo">
+                    <img id="review-photo-image" alt="Prepared passport or visa photo preview" />
+                    <p class="preview-empty">Prepare a photo to see the final file.</p>
+                  </div>
+
+                  <div class="review-preview-view" data-review-preview-view="document" hidden>
+                    <div class="document-mock" aria-label="Generic document placement preview">
+                      <div class="document-mock-head">
+                        <span>DOCUMENT PREVIEW</span>
+                        <strong>Placement check</strong>
+                      </div>
+                      <div class="document-mock-body">
+                        <img id="document-preview-photo" alt="Photo placed in a generic document preview" />
+                        <div class="document-mock-lines" aria-hidden="true">
+                          <span></span><span></span><span></span><span></span>
+                        </div>
+                      </div>
+                      <div class="document-mock-foot">PREVIEW ONLY / NOT AN OFFICIAL DOCUMENT</div>
+                    </div>
+                    <p class="preview-note">This generic mock-up checks scale and visual balance only. It does not reproduce any government document.</p>
+                  </div>
+
+                  <div class="review-preview-view" data-review-preview-view="print" hidden>
+                    <div class="print-preview-sheet" aria-label="Print sheet preview">
+                      <img class="print-preview-copy" alt="" />
+                      <img class="print-preview-copy" alt="" />
+                      <img class="print-preview-copy" alt="" />
+                      <img class="print-preview-copy" alt="" />
+                      <img class="print-preview-copy" alt="" />
+                      <img class="print-preview-copy" alt="" />
+                    </div>
+                    <p class="preview-note">Illustrative layout. Generate the print sheet below for exact sizing and DPI.</p>
+                  </div>
+                </div>
+
+                <div id="download-advisory" class="download-advisory pending">
+                  <strong>No prepared file yet</strong>
+                  <span>Your original remains available after upload, even when preparation cannot finish.</span>
+                </div>
+
+                <div id="export-controls" class="output-row review-export-controls">
+                  <span class="print-bar-label">Prepared file</span>
                   <select id="output-format" class="mini-select" title="File format">
                     <option value="image/jpeg">JPEG</option>
                     <option value="image/png">PNG</option>
@@ -419,6 +479,23 @@
                   </label>
                   <span id="output-note" class="output-note">Required-size JPEG for submission.</span>
                 </div>
+
+                <div class="print-bar review-print-controls">
+                  <span class="print-bar-label">Print sheet</span>
+                  <select id="sheet-size" class="mini-select" title="Print sheet size" disabled>
+                    <option value="4x6">4x6 in</option>
+                    <option value="5x7">5x7 in</option>
+                    <option value="a4">A4</option>
+                    <option value="letter">Letter</option>
+                  </select>
+                  <select id="sheet-dpi" class="mini-select" title="Print resolution" disabled>
+                    <option value="300" selected>300 DPI</option>
+                    <option value="600">600 DPI</option>
+                    <option value="150">150 DPI</option>
+                  </select>
+                  <input id="sheet-copies" class="mini-input" type="number" min="1" max="60" placeholder="Max" title="Copies (blank = fill sheet)" disabled />
+                  <button id="print-sheet" class="btn btn-sm" type="button" disabled>Generate</button>
+                </div>
               </div>
 
               <div class="inspector-stack">
@@ -432,19 +509,41 @@
                 <p class="muted-copy">Machine checks are gated by source quality; human-only items stay flagged for review.</p>
                 <div id="checks-list" class="checks-list"></div>
                 <p class="disclaimer-note">
-                  Automated estimate only — not a government service, not affiliated with any
-                  passport/visa authority, and not a guarantee of acceptance. The issuing authority
+                  Automated estimate only - not a government service, not affiliated with any
+                  passport or visa authority, and not a guarantee of acceptance. The issuing authority
                   makes the final decision.
                 </p>
               </div>
+            </div>
+
+            <div class="wizard-actions">
+              <button class="btn" type="button" data-wizard-back="3">Back to preparation</button>
+              <span>Warnings recommend a retake; they do not lock your files.</span>
             </div>
           </section>
         </main>
       </div>
     </div>
 
-    <script src="src/vendor/gsap.min.js?v=kvnp-studio-31"></script>
-    <script src="src/motion.js?v=kvnp-studio-31"></script>
-    <script type="module" src="src/app.js?v=kvnp-studio-31"></script>
+    <dialog id="download-warning-dialog" class="download-warning-dialog">
+      <form method="dialog" class="download-warning-card">
+        <span class="dialog-kicker">Download with warnings</span>
+        <h3>This file may not be accepted</h3>
+        <p>KVNP found issues worth correcting. You can still download the prepared file after acknowledging them.</p>
+        <ul id="download-warning-list" class="download-warning-list"></ul>
+        <label class="warning-acknowledgement">
+          <input id="download-warning-ack" type="checkbox" />
+          <span>I understand these warnings and want to download this version.</span>
+        </label>
+        <div class="dialog-actions">
+          <button class="btn" type="submit" value="cancel">Go back</button>
+          <button id="download-anyway-confirm" class="btn btn-primary" type="button" disabled>Download anyway</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="src/vendor/gsap.min.js?v=kvnp-studio-32"></script>
+    <script src="src/motion.js?v=kvnp-studio-32"></script>
+    <script type="module" src="src/app.js?v=kvnp-studio-32"></script>
   </body>
 </html>

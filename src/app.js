@@ -1,5 +1,5 @@
-import { COUNTRIES, RULE_PROFILES, getDefaultProfile, getProfilesForCountry } from "./rules.js?v=kvnp-studio-31";
-import { initCoach, analyzeFrame, coachAvailable } from "./capture.js?v=kvnp-studio-31";
+import { COUNTRIES, RULE_PROFILES, getDefaultProfile, getProfilesForCountry } from "./rules.js?v=kvnp-studio-32";
+import { initCoach, analyzeFrame, coachAvailable } from "./capture.js?v=kvnp-studio-32";
 
 const elements = {
   fileInput: document.querySelector("#file-input"),
@@ -28,6 +28,7 @@ const elements = {
   overallStatus: document.querySelector("#overall-status"),
   checksList: document.querySelector("#checks-list"),
   downloadPhoto: document.querySelector("#download-photo"),
+  downloadOriginal: document.querySelector("#download-original"),
   downloadReport: document.querySelector("#download-report"),
   autoFix: document.querySelector("#auto-fix"),
   sheetSize: document.querySelector("#sheet-size"),
@@ -57,8 +58,6 @@ const elements = {
   gateConfirm: document.querySelector("#gate-confirm"),
   policyList: document.querySelector("#policy-list"),
   previewMode: document.querySelector("#preview-mode"),
-  sheetDpi: document.querySelector("#sheet-dpi"),
-  sheetCopies: document.querySelector("#sheet-copies"),
   touchupToggle: document.querySelector("#touchup-toggle"),
   touchupBrush: document.querySelector("#touchup-brush"),
   touchupSize: document.querySelector("#touchup-size"),
@@ -88,6 +87,21 @@ const elements = {
   programmeReviewed: document.querySelector("#programme-reviewed"),
   catalogueCount: document.querySelector("#catalogue-count"),
   workflowSteps: Array.from(document.querySelectorAll("[data-workflow-step]")),
+  wizardPanels: Array.from(document.querySelectorAll("[data-wizard-panel]")),
+  wizardBackButtons: Array.from(document.querySelectorAll("[data-wizard-back]")),
+  continuePrepare: document.querySelector("#continue-prepare"),
+  continueReview: document.querySelector("#continue-review"),
+  photoStepNote: document.querySelector("#photo-step-note"),
+  reviewPreviewTabs: Array.from(document.querySelectorAll("[data-review-preview]")),
+  reviewPreviewViews: Array.from(document.querySelectorAll("[data-review-preview-view]")),
+  reviewPhotoImage: document.querySelector("#review-photo-image"),
+  documentPreviewPhoto: document.querySelector("#document-preview-photo"),
+  printPreviewCopies: Array.from(document.querySelectorAll(".print-preview-copy")),
+  downloadAdvisory: document.querySelector("#download-advisory"),
+  downloadWarningDialog: document.querySelector("#download-warning-dialog"),
+  downloadWarningList: document.querySelector("#download-warning-list"),
+  downloadWarningAck: document.querySelector("#download-warning-ack"),
+  downloadAnywayConfirm: document.querySelector("#download-anyway-confirm"),
 };
 
 const ADJUST_CONTROLS = [
@@ -168,6 +182,10 @@ const state = {
   outputDpi: 300,
   outputQuality: 92,
   previewMode: false,
+  wizardStep: 1,
+  reviewPreviewMode: "photo",
+  reviewPreviewUrl: null,
+  downloadAcknowledged: false,
 };
 
 let adjustBakeTimer = 0;
@@ -214,6 +232,7 @@ function bindEvents() {
   elements.captureButton.addEventListener("click", captureCameraFrame);
   elements.autoCapture.addEventListener("change", () => { state.coach.autoCapture = elements.autoCapture.checked; });
   elements.downloadPhoto.addEventListener("click", downloadPhoto);
+  elements.downloadOriginal.addEventListener("click", downloadOriginal);
   elements.downloadReport.addEventListener("click", downloadReport);
   elements.autoFix.addEventListener("click", autoFix);
   elements.printSheet.addEventListener("click", generatePrintSheet);
@@ -228,6 +247,8 @@ function bindEvents() {
   elements.autoLighting.addEventListener("change", handleRenderOptionChange);
   elements.previewMode.addEventListener("change", handlePreviewModeChange);
   elements.gateConfirm.addEventListener("click", confirmProgramme);
+  elements.continuePrepare.addEventListener("click", () => setWizardStep(3));
+  elements.continueReview.addEventListener("click", () => setWizardStep(4));
   elements.checksList.addEventListener("click", handleHumanCheckClick);
   elements.backgroundCleanup.addEventListener("change", handleRenderOptionChange);
   elements.touchupToggle.addEventListener("click", toggleTouchUp);
@@ -243,9 +264,28 @@ function bindEvents() {
 
   for (const step of elements.workflowSteps) {
     step.addEventListener("click", () => {
-      document.getElementById(step.dataset.target)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setWizardStep(Number(step.dataset.workflowStep));
     });
   }
+
+  for (const button of elements.wizardBackButtons) {
+    button.addEventListener("click", () => setWizardStep(Number(button.dataset.wizardBack), { force: true }));
+  }
+
+  for (const tab of elements.reviewPreviewTabs) {
+    tab.addEventListener("click", () => setReviewPreview(tab.dataset.reviewPreview));
+  }
+
+  elements.downloadWarningAck.addEventListener("change", () => {
+    elements.downloadAnywayConfirm.disabled = !elements.downloadWarningAck.checked;
+  });
+  elements.downloadAnywayConfirm.addEventListener("click", () => {
+    if (!elements.downloadWarningAck.checked) return;
+    state.downloadAcknowledged = true;
+    elements.downloadWarningDialog.close();
+    performPhotoDownload();
+  });
+  elements.downloadWarningDialog.addEventListener("close", resetDownloadWarningDialog);
 
   if (elements.uploadDropzone) {
     for (const eventName of ["dragenter", "dragover"]) {
@@ -383,8 +423,10 @@ function updateQueueBadge() {
 }
 
 function handleProfileChange() {
-  confirmProgramme();
   state.profile = RULE_PROFILES.find((profile) => profile.id === elements.profileSelect.value) ?? getDefaultProfile();
+  state.programmeConfirmed = false;
+  state.downloadAcknowledged = false;
+  setWizardStep(1, { force: true, focus: false });
   state.previewMode = false;
   elements.previewMode.checked = false;
   applyProfileAutomationDefaults();
@@ -400,9 +442,11 @@ function handleProfileChange() {
 }
 
 function handleCountryChange() {
-  confirmProgramme();
   const profiles = getProfilesForCountry(elements.countrySelect.value);
   state.profile = profiles[0] ?? getDefaultProfile();
+  state.programmeConfirmed = false;
+  state.downloadAcknowledged = false;
+  setWizardStep(1, { force: true, focus: false });
   state.previewMode = false;
   elements.previewMode.checked = false;
   populateProgrammeSelect(state.profile.country);
@@ -421,6 +465,7 @@ function handleCountryChange() {
 function handleManualChange() {
   if (!state.image || !state.face) return;
 
+  state.downloadAcknowledged = false;
   state.face.centerX = (Number(elements.centerX.value) / 100) * state.image.naturalWidth;
   state.face.centerY = (Number(elements.centerY.value) / 100) * state.image.naturalHeight;
   state.face.headHeight = (Number(elements.headHeight.value) / 100) * state.image.naturalHeight;
@@ -434,6 +479,7 @@ function handleManualChange() {
 }
 
 function handleRenderOptionChange() {
+  state.downloadAcknowledged = false;
   state.backgroundReplaced = elements.backgroundReplace.checked;
   state.enhanceOutput = elements.enhanceOutput.checked;
   state.enhancementMode = elements.enhancementMode.value;
@@ -450,6 +496,7 @@ function handleRenderOptionChange() {
 }
 
 function handlePreviewModeChange() {
+  state.downloadAcknowledged = false;
   state.previewMode = elements.previewMode.checked;
   if (state.previewMode) {
     state.autoStraighten = true;
@@ -632,13 +679,12 @@ function applyTouchupGate() {
 function confirmProgramme() {
   state.programmeConfirmed = true;
   updateCountryGate();
-  renderWorkflowProgress();
+  setWizardStep(2, { force: true });
 }
 
 function updateCountryGate() {
-  if (!elements.countryGate) return;
-  const gated = !state.programmeConfirmed && !state.image && !state.queue.length;
-  elements.countryGate.hidden = !gated;
+  const gated = !state.programmeConfirmed;
+  if (elements.countryGate) elements.countryGate.hidden = !gated;
   // Source intake stays locked until the destination country is chosen.
   elements.fileInput.disabled = gated;
   elements.cameraButton.disabled = gated;
@@ -648,22 +694,56 @@ function updateCountryGate() {
   }
 }
 
+function maxUnlockedWizardStep() {
+  if (!state.programmeConfirmed) return 1;
+  if (!state.image) return 2;
+  if (state.processing || (!state.backendResult && !state.processingError && !state.exportBlob)) return 3;
+  return 4;
+}
+
+function setWizardStep(step, { force = false, focus = true } = {}) {
+  const requested = Math.max(1, Math.min(4, Number(step) || 1));
+  const target = force ? requested : Math.min(requested, maxUnlockedWizardStep());
+  state.wizardStep = target;
+  renderWorkflowProgress();
+  if (target === 4) updateReviewPreview();
+
+  if (focus) {
+    const panel = elements.wizardPanels.find((item) => Number(item.dataset.wizardPanel) === target);
+    panel?.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.setTimeout(() => panel?.querySelector("h3")?.focus({ preventScroll: true }), 260);
+  }
+}
+
 function renderWorkflowProgress() {
-  let current = 1;
-  if (state.programmeConfirmed) current = 2;
-  if (state.image) current = 3;
-  if (state.image && state.decision && !state.processing) {
-    const { failCount, warningCount, unresolvedReviews } = computeLiveCounts();
-    current = failCount > 0 || state.decision.status === "retake" ? 3 : 4;
-    if (state.exportBlob && failCount === 0 && unresolvedReviews === 0 && warningCount === 0) current = 5;
+  const maxUnlocked = maxUnlockedWizardStep();
+  if (state.wizardStep > maxUnlocked) state.wizardStep = maxUnlocked;
+  if (state.wizardStep < 1) state.wizardStep = 1;
+
+  for (const panel of elements.wizardPanels) {
+    const active = Number(panel.dataset.wizardPanel) === state.wizardStep;
+    panel.hidden = !active;
+    panel.classList.toggle("is-active", active);
   }
 
   for (const step of elements.workflowSteps) {
     const index = Number(step.dataset.workflowStep);
-    step.classList.toggle("active", index === current);
-    step.classList.toggle("complete", index < current);
-    step.setAttribute("aria-current", index === current ? "step" : "false");
+    const locked = index > maxUnlocked;
+    step.classList.toggle("active", index === state.wizardStep);
+    step.classList.toggle("complete", index < state.wizardStep);
+    step.classList.toggle("locked", locked);
+    step.disabled = locked;
+    step.setAttribute("aria-current", index === state.wizardStep ? "step" : "false");
+    step.setAttribute("aria-disabled", locked ? "true" : "false");
   }
+
+  elements.continuePrepare.disabled = !state.image || state.processing;
+  elements.continueReview.disabled = !state.image || state.processing;
+  elements.photoStepNote.textContent = state.processing
+    ? "Analyzing pose, crop, lighting and source quality..."
+    : state.image
+      ? "Photo loaded. Continue to inspect and prepare it."
+      : "Upload or capture one photo to continue.";
 }
 
 const EDIT_LABELS = {
@@ -713,6 +793,7 @@ async function loadImageFile(file) {
   state.image = image;
   state.imageName = file.name || "camera-capture.jpg";
   state.originalFile = file;
+  state.downloadAcknowledged = false;
   state.imageMeta = {
     type: file.type || "image/jpeg",
     size: file.size,
@@ -737,6 +818,9 @@ async function loadImageFile(file) {
   state.manualTouchup = false;
   state.beforeDataUrl = null;
   state.manualOverride = false;
+  elements.downloadOriginal.disabled = false;
+  updateReviewPreview();
+  updateDownloadAdvisory();
   setResultView("result");
   setZoom(1);
   renderWorkflowProgress();
@@ -828,6 +912,7 @@ async function processOnServer() {
 
     state.backendResult = result;
     state.processingError = null;
+    state.downloadAcknowledged = false;
     state.face = normalizeServerFace(result.face);
     state.crop = result.crop;
     state.serverChecks = result.checks ?? [];
@@ -868,6 +953,7 @@ async function processOnServer() {
     state.effectiveEdits = {};
     state.beforeDataUrl = null;
     state.processingError = error.message || "The photo could not be analyzed.";
+    state.downloadAcknowledged = false;
     state.sourceQuality = [
       qualityCheck("analysis_error", "Portrait analysis", "fail", state.processingError, "1 clear, unobstructed face"),
     ];
@@ -901,7 +987,12 @@ async function processOnServer() {
     stopScanAnimation();
     scheduleAnalysis();
   } finally {
-    if (seq === processSeq) renderVisionStatus();
+    if (seq === processSeq) {
+      renderVisionStatus();
+      renderWorkflowProgress();
+      updateReviewPreview();
+      updateDownloadAdvisory();
+    }
   }
 }
 
@@ -2361,8 +2452,33 @@ function handleHumanCheckClick(event) {
   } else {
     return;
   }
+  state.downloadAcknowledged = false;
   renderChecks();
   renderDecision();
+}
+
+function getDownloadIssues() {
+  const issues = [];
+  const seen = new Set();
+  const allChecks = [...(state.sourceQuality ?? []), ...(state.checks ?? [])];
+
+  for (const check of allChecks) {
+    const status = effectiveStatus(check);
+    if (!["fail", "warning", "review"].includes(status)) continue;
+    const key = check.id || `${check.label}-${status}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    issues.push({
+      status,
+      label: check.label || "Photo check",
+      detail: check.value || check.target || "Review before submission",
+    });
+  }
+
+  if (state.processingError && !issues.some((issue) => issue.detail === state.processingError)) {
+    issues.unshift({ status: "fail", label: "Photo preparation", detail: state.processingError });
+  }
+  return issues;
 }
 
 function renderChecks() {
@@ -2380,12 +2496,15 @@ function renderChecks() {
   elements.resultSummary.textContent = `${state.profile.label} / ${state.profile.output.widthPx} x ${state.profile.output.heightPx}px${state.previewMode ? " / editing preview" : ""}`;
   elements.overallStatus.textContent = unresolvedReviews ? `${status} / ${unresolvedReviews} to confirm` : `${status}`;
   elements.overallStatus.className = `overall-status ${className}`;
-  const photoReady = failCount === 0 && unresolvedReviews === 0 && Boolean(state.exportBlob);
-  elements.downloadPhoto.disabled = !photoReady;
-  elements.printSheet.disabled = !photoReady;
-  elements.sheetSize.disabled = !photoReady;
-  elements.sheetDpi.disabled = !photoReady;
-  elements.sheetCopies.disabled = !photoReady;
+  const preparedAvailable = Boolean(state.exportBlob && state.processedImage);
+  const downloadIssues = getDownloadIssues();
+  elements.downloadOriginal.disabled = !state.originalFile;
+  elements.downloadPhoto.disabled = !preparedAvailable;
+  elements.downloadPhoto.textContent = downloadIssues.length ? "Download with warnings" : "Download file";
+  elements.printSheet.disabled = !preparedAvailable;
+  elements.sheetSize.disabled = !preparedAvailable;
+  elements.sheetDpi.disabled = !preparedAvailable;
+  elements.sheetCopies.disabled = !preparedAvailable;
   // Touch-up needs a generated photo with a clean-background pass available.
   const hasPhoto = Boolean(state.processedImage && state.backendResult?.ok);
   const touchupBanned = state.profile?.allowedEdits?.background === false && !state.previewMode;
@@ -2396,6 +2515,8 @@ function renderChecks() {
   elements.zoomOut.disabled = !hasPhoto;
   elements.viewCompare.disabled = !(hasPhoto && state.beforeDataUrl);
   elements.downloadReport.disabled = !state.lastReport;
+  updateDownloadAdvisory(downloadIssues);
+  updateReviewPreview();
   elements.checksList.innerHTML = "";
 
   for (const check of state.checks) {
@@ -2449,12 +2570,110 @@ function renderNoResult() {
   renderCorrections();
   elements.compare.hidden = true;
   elements.finalCanvas.hidden = false;
+  elements.downloadOriginal.disabled = !state.originalFile;
   elements.downloadPhoto.disabled = true;
   elements.printSheet.disabled = true;
   elements.sheetSize.disabled = true;
   elements.sheetDpi.disabled = true;
   elements.sheetCopies.disabled = true;
   elements.downloadReport.disabled = true;
+  updateDownloadAdvisory();
+  updateReviewPreview();
+  renderWorkflowProgress();
+}
+
+function setReviewPreview(mode) {
+  const next = ["photo", "document", "print"].includes(mode) ? mode : "photo";
+  state.reviewPreviewMode = next;
+  for (const tab of elements.reviewPreviewTabs) {
+    const active = tab.dataset.reviewPreview === next;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", active ? "true" : "false");
+  }
+  for (const view of elements.reviewPreviewViews) {
+    const active = view.dataset.reviewPreviewView === next;
+    view.hidden = !active;
+    view.classList.toggle("is-active", active);
+  }
+}
+
+function updateReviewPreview() {
+  if (state.reviewPreviewUrl) {
+    URL.revokeObjectURL(state.reviewPreviewUrl);
+    state.reviewPreviewUrl = null;
+  }
+
+  const blob = state.exportBlob;
+  const targets = [elements.reviewPhotoImage, elements.documentPreviewPhoto, ...elements.printPreviewCopies];
+  if (!blob) {
+    for (const image of targets) {
+      image.removeAttribute("src");
+      image.hidden = true;
+    }
+    elements.reviewPhotoImage?.parentElement?.classList.add("is-empty");
+    return;
+  }
+
+  state.reviewPreviewUrl = URL.createObjectURL(blob);
+  for (const image of targets) {
+    image.src = state.reviewPreviewUrl;
+    image.hidden = false;
+  }
+  elements.reviewPhotoImage?.parentElement?.classList.remove("is-empty");
+}
+
+function updateDownloadAdvisory(issues = getDownloadIssues()) {
+  if (!elements.downloadAdvisory) return;
+  const strong = elements.downloadAdvisory.querySelector("strong");
+  const detail = elements.downloadAdvisory.querySelector("span");
+  let status = "pending";
+
+  if (state.processing) {
+    strong.textContent = "Preparing your photo";
+    detail.textContent = "The original is already available. The prepared file will appear when analysis finishes.";
+  } else if (!state.exportBlob) {
+    status = state.originalFile ? "warning" : "pending";
+    strong.textContent = state.originalFile ? "Prepared file unavailable" : "No prepared file yet";
+    detail.textContent = state.originalFile
+      ? "Download the original now or return to the photo step and try another image."
+      : "Your original remains available after upload, even when preparation cannot finish.";
+  } else if (issues.length) {
+    status = "warning";
+    strong.textContent = `${issues.length} issue${issues.length === 1 ? "" : "s"} to review`;
+    detail.textContent = "A retake is recommended, but you can acknowledge the findings and download this file.";
+  } else {
+    status = "ready";
+    strong.textContent = "Prepared file ready";
+    detail.textContent = "No automated failure or warning is currently blocking the recommendation.";
+  }
+
+  elements.downloadAdvisory.className = `download-advisory ${status}`;
+}
+
+function resetDownloadWarningDialog() {
+  elements.downloadWarningAck.checked = false;
+  elements.downloadAnywayConfirm.disabled = true;
+}
+
+function showDownloadWarningDialog(issues) {
+  elements.downloadWarningList.innerHTML = issues
+    .map(
+      (issue) =>
+        `<li class="${escapeHtml(issue.status)}"><strong>${escapeHtml(issue.label)}</strong><span>${escapeHtml(
+          issue.detail,
+        )}</span></li>`,
+    )
+    .join("");
+  resetDownloadWarningDialog();
+
+  if (typeof elements.downloadWarningDialog.showModal === "function") {
+    elements.downloadWarningDialog.showModal();
+    return;
+  }
+  if (window.confirm("This photo has unresolved warnings. Download it anyway?")) {
+    state.downloadAcknowledged = true;
+    performPhotoDownload();
+  }
 }
 
 async function toggleCamera() {
@@ -2834,7 +3053,27 @@ function frameSharpness(canvas) {
   return energy;
 }
 
-async function downloadPhoto() {
+function downloadPhoto() {
+  if (!state.processedImage || !state.exportBlob) return;
+  const issues = getDownloadIssues();
+  if (issues.length && !state.downloadAcknowledged) {
+    showDownloadWarningDialog(issues);
+    return;
+  }
+  performPhotoDownload();
+}
+
+function downloadOriginal() {
+  if (!state.originalFile) return;
+  const originalName = state.originalFile.name || state.imageName || "original-photo.jpg";
+  const dot = originalName.lastIndexOf(".");
+  const base = dot > 0 ? originalName.slice(0, dot) : originalName;
+  const typeExtensions = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
+  const extension = dot > 0 ? originalName.slice(dot + 1).toLowerCase() : typeExtensions[state.originalFile.type] || "jpg";
+  downloadBlob(state.originalFile, `${slugify(base) || "photo"}-original.${extension}`);
+}
+
+async function performPhotoDownload() {
   if (!state.processedImage) return;
   const button = elements.downloadPhoto;
   const originalLabel = button.textContent;
@@ -3126,6 +3365,7 @@ async function finishTouchUp() {
   elements.touchupToggle.textContent = "Clean background";
 
   if (state.touchUp.dirty) {
+    state.downloadAcknowledged = false;
     const mime = state.profile.output.mime || "image/jpeg";
     const quality = state.profile.output.quality ?? 0.92;
     const dataUrl = elements.finalCanvas.toDataURL(mime, quality);
@@ -3145,6 +3385,7 @@ async function resetTouchUp() {
   const base = state.touchUp.serverFinalDataUrl;
   if (!base) return;
   state.touchUp.dirty = false;
+  state.downloadAcknowledged = false;
   state.manualTouchup = false;
   state.exportBlob = dataUrlToBlob(base);
   state.processedImage = await loadImageFromDataUrl(base);
@@ -3185,18 +3426,22 @@ function bindCockpit() {
     resetAdjustments();
   });
   elements.outputFormat.addEventListener("change", () => {
+    state.downloadAcknowledged = false;
     state.outputFormat = elements.outputFormat.value;
     syncOutputControls();
   });
   elements.outputScale.addEventListener("change", () => {
+    state.downloadAcknowledged = false;
     state.outputScale = Number(elements.outputScale.value) === 2 ? 2 : 1;
     updateOutputNote();
   });
   elements.outputDpi.addEventListener("change", () => {
+    state.downloadAcknowledged = false;
     state.outputDpi = Number(elements.outputDpi.value) === 600 ? 600 : 300;
     updateOutputNote();
   });
   elements.outputQuality.addEventListener("input", () => {
+    state.downloadAcknowledged = false;
     state.outputQuality = Number(elements.outputQuality.value);
     elements.qualityVal.textContent = String(state.outputQuality);
     scheduleReanalyze();
@@ -3220,6 +3465,7 @@ function buildAdjustControls() {
 
   for (const input of elements.adjustGrid.querySelectorAll("[data-adjust]")) {
     input.addEventListener("input", () => {
+      state.downloadAcknowledged = false;
       const key = input.dataset.adjust;
       state.adjust[key] = Number(input.value);
       elements.adjustGrid.querySelector(`[data-val="${key}"]`).textContent = input.value;
@@ -3368,6 +3614,8 @@ async function bakeExport() {
   const complianceMime = state.profile.output?.mime ?? "image/jpeg";
   const quality = complianceMime === "image/png" ? undefined : state.outputQuality / 100;
   state.exportBlob = await canvasToBlob(adjustCanvas, complianceMime, quality);
+  updateReviewPreview();
+  updateDownloadAdvisory();
 }
 
 /* ---------- live re-analysis: keep the numbers honest as the photo changes ---------- */
