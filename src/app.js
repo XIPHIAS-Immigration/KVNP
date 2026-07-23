@@ -1,5 +1,5 @@
-import { COUNTRIES, RULE_PROFILES, getDefaultProfile, getProfilesForCountry } from "./rules.js?v=kvnp-studio-34";
-import { initCoach, analyzeFrame, coachAvailable } from "./capture.js?v=kvnp-studio-34";
+import { COUNTRIES, RULE_PROFILES, getDefaultProfile, getProfilesForCountry } from "./rules.js?v=kvnp-studio-35";
+import { initCoach, analyzeFrame, coachAvailable } from "./capture.js?v=kvnp-studio-35";
 
 const elements = {
   fileInput: document.querySelector("#file-input"),
@@ -85,7 +85,10 @@ const elements = {
   uploadDropzone: document.querySelector("#upload-dropzone"),
   programmeOutput: document.querySelector("#programme-output"),
   programmeBackground: document.querySelector("#programme-background"),
+  programmeMode: document.querySelector("#programme-mode"),
+  programmeStatus: document.querySelector("#programme-status"),
   programmeReviewed: document.querySelector("#programme-reviewed"),
+  programmeNotice: document.querySelector("#programme-notice"),
   catalogueCount: document.querySelector("#catalogue-count"),
   workflowSteps: Array.from(document.querySelectorAll("[data-workflow-step]")),
   wizardPanels: Array.from(document.querySelectorAll("[data-wizard-panel]")),
@@ -439,16 +442,16 @@ function renderProgrammeCatalogue() {
   elements.programmeGrid.innerHTML = matches
     .map((profile) => {
       const active = profile.id === state.profile.id;
-      const policyFlags = Object.values(profile.allowedEdits ?? {}).filter((value) => typeof value === "boolean");
-      const validationOnly = policyFlags.length > 0 && policyFlags.every((value) => value === false);
-      const policyLabel = profile.checkerOnly ? "Source checker" : validationOnly ? "Validation only" : "Safe preparation";
+      const meta = getCatalogueMeta(profile);
+      const policyLabel = describeSubmissionMode(meta.submissionMode);
       return `
         <button class="programme-card ${active ? "active" : ""}" type="button" data-profile-id="${escapeHtml(profile.id)}"
           aria-pressed="${active ? "true" : "false"}">
           <span class="programme-country">${escapeHtml(profile.countryName)}</span>
           <strong>${escapeHtml(profile.programme)}</strong>
           <small>${escapeHtml(profile.category)} / ${escapeHtml(profile.delivery)}</small>
-          <span class="programme-policy ${validationOnly ? "validation" : "assisted"}">${policyLabel}</span>
+          <span class="programme-policy ${meta.submissionMode === "checker_only" ? "validation" : "assisted"}">${escapeHtml(policyLabel)}</span>
+          <span class="programme-verified">${meta.verificationStatus === "verified" ? "Verified" : "Researching"}</span>
         </button>`;
     })
     .join("");
@@ -1262,7 +1265,15 @@ function renderProfile() {
   if (elements.programmeBackground) {
     elements.programmeBackground.textContent = describeBackground(profile.background?.mode ?? "plain_light");
   }
-  if (elements.programmeReviewed) elements.programmeReviewed.textContent = profile.lastReviewed ?? "Review pending";
+  const catalogueMeta = getCatalogueMeta(profile);
+  if (elements.programmeMode) elements.programmeMode.textContent = describeSubmissionMode(catalogueMeta.submissionMode);
+  if (elements.programmeStatus) {
+    elements.programmeStatus.textContent = catalogueMeta.verificationStatus === "verified"
+      ? `Verified / ${catalogueMeta.sourceClass.replaceAll("_", " ")}`
+      : "Researching / unavailable";
+  }
+  if (elements.programmeReviewed) elements.programmeReviewed.textContent = catalogueMeta.nextReview ?? "Review pending";
+  renderProgrammeNotice(catalogueMeta);
   if (elements.catalogueCount) elements.catalogueCount.textContent = `${RULE_PROFILES.length} programmes / ${COUNTRIES.length} countries`;
   elements.requirementsList.innerHTML = "";
 
@@ -1436,6 +1447,42 @@ function renderSourceCanvas() {
     canvas.height / 2 + 28,
   );
   sourceCtx.restore();
+}
+
+function getCatalogueMeta(profile) {
+  const submissionMode = profile.submissionMode ?? (profile.checkerOnly ? "checker_only" : "format_only");
+  return {
+    verificationStatus: profile.verificationStatus ?? "verified",
+    sourceClass: profile.sourceClass ?? "official_government",
+    submissionMode,
+    nextReview: profile.nextReview ?? nextReviewDate(profile.lastReviewed, 120),
+  };
+}
+
+function nextReviewDate(lastReviewed, days) {
+  if (!lastReviewed) return null;
+  const date = new Date(`${lastReviewed}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function describeSubmissionMode(mode) {
+  return {
+    safe_prepare: "Safe preparation",
+    format_only: "Format and validate",
+    checker_only: "Source checker only",
+    unavailable: "Not currently supported",
+  }[mode] ?? "Format and validate";
+}
+
+function renderProgrammeNotice(meta) {
+  if (!elements.programmeNotice) return;
+  const checkerOnly = meta.submissionMode === "checker_only";
+  elements.programmeNotice.className = `programme-notice ${checkerOnly ? "checker" : "format"}`;
+  elements.programmeNotice.innerHTML = checkerOnly
+    ? "<strong>Bring or upload the original source</strong><span>This authority requires professional or secure capture. KVNP will measure it and preserve the original, but will not create an edited submission file.</span>"
+    : "<strong>Formatting workflow</strong><span>KVNP can size, encode and validate this programme. Any pixel correction blocked by the authority remains disabled.</span>";
 }
 
 function renderProcessingFailure() {

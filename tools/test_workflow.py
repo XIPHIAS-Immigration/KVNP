@@ -73,11 +73,22 @@ def test_warnings_do_not_gate_file_availability():
 
 def test_guided_catalogue_and_studio_mode_are_present():
     html, app = load_sources()
-    for element_id in ("programme-search", "category-filters", "programme-grid", "coach-banner"):
+    for element_id in (
+        "programme-search",
+        "category-filters",
+        "programme-grid",
+        "programme-mode",
+        "programme-status",
+        "programme-reviewed",
+        "programme-notice",
+        "coach-banner",
+    ):
         assert f'id="{element_id}"' in html, element_id
     assert 'data-workspace-mode="guided"' in html
     assert 'data-workspace-mode="studio"' in html
     assert "function renderProgrammeCatalogue()" in app
+    assert "function getCatalogueMeta(" in app
+    assert "function renderProgrammeNotice(" in app
     assert "function renderCoachBanner(" in app
     assert 'document.body.dataset.workspaceMode = next;' in app
     print("test_guided_catalogue_and_studio_mode_are_present", PASS)

@@ -49,8 +49,8 @@ def _no_duplicate_keys(pairs):
 def test_loads_verified_catalogue():
     data = _load()
     assert isinstance(data, list), "profiles.json must be a JSON array"
-    assert len(data) == 24, f"expected 24 profiles, got {len(data)}"
-    assert len({p["country"] for p in data}) == 17, "expected 17 countries"
+    assert len(data) == 35, f"expected 35 profiles, got {len(data)}"
+    assert len({p["country"] for p in data}) == 26, "expected 26 countries"
     print("test_loads_verified_catalogue", PASS)
 
 
@@ -171,6 +171,17 @@ def test_strict_profiles_are_validation_only():
         "malaysia-evisa-digital-2026-07",
         "india-oci-card-digital-2026-07",
         "canada-pr-card-digital-checker-2026-07",
+        "gb-driving-licence-print-2026-07",
+        "ca-citizenship-grant-digital-checker-2026-07",
+        "es-passport-print-2026-07",
+        "de-government-id-secure-capture-checker-2026-07",
+        "pt-child-citizen-card-digital-checker-2026-07",
+        "at-passport-print-2026-07",
+        "pl-passport-print-2026-07",
+        "be-passport-print-2026-07",
+        "tr-passport-print-2026-07",
+        "ae-passport-renewal-digital-2026-07",
+        "br-child-passport-print-2026-07",
     }
     profiles = {p["id"]: p for p in _load()}
     edit_keys = ("straighten", "tone", "lighting", "background", "enhance", "rescue")
@@ -254,7 +265,48 @@ def test_new_catalogue_dimensions():
     assert (pr["output"]["widthPx"], pr["output"]["heightPx"]) == (1430, 2000)
     assert pr["file"]["maxBytes"] == 4_000_000
     assert pr["checkerOnly"] is True
+
+    assert profiles["gb-driving-licence-print-2026-07"]["category"] == "Driving"
+    assert profiles["ca-citizenship-grant-digital-checker-2026-07"]["checkerOnly"] is True
+    assert profiles["de-government-id-secure-capture-checker-2026-07"]["checkerOnly"] is True
+    assert profiles["pt-child-citizen-card-digital-checker-2026-07"]["checkerOnly"] is True
+
+    expected_print_sizes = {
+        "es-passport-print-2026-07": (26, 32),
+        "at-passport-print-2026-07": (35, 45),
+        "pl-passport-print-2026-07": (35, 45),
+        "be-passport-print-2026-07": (35, 45),
+        "tr-passport-print-2026-07": (50, 60),
+        "ae-passport-renewal-digital-2026-07": (35, 45),
+        "br-child-passport-print-2026-07": (50, 70),
+    }
+    for profile_id, expected in expected_print_sizes.items():
+        output = profiles[profile_id]["output"]
+        assert (output["printWidthMm"], output["printHeightMm"]) == expected
     print("test_new_catalogue_dimensions", PASS)
+
+
+def test_catalogue_trust_metadata():
+    allowed_statuses = {"verified", "researching"}
+    allowed_sources = {"official_government", "official_authority"}
+    allowed_modes = {"format_only", "checker_only"}
+    for profile in _load():
+        status = profile.get("verificationStatus", "verified")
+        source_class = profile.get("sourceClass", "official_government")
+        submission_mode = profile.get(
+            "submissionMode",
+            "checker_only" if profile.get("checkerOnly") else "format_only",
+        )
+        assert status in allowed_statuses, f"{profile['id']}: bad verification status"
+        assert source_class in allowed_sources, f"{profile['id']}: bad source class"
+        assert submission_mode in allowed_modes, f"{profile['id']}: bad submission mode"
+        if profile.get("checkerOnly"):
+            assert submission_mode == "checker_only", \
+                f"{profile['id']}: checker-only profile has wrong submission mode"
+        if profile.get("nextReview"):
+            assert profile["nextReview"] >= profile["lastReviewed"], \
+                f"{profile['id']}: next review predates last review"
+    print("test_catalogue_trust_metadata", PASS)
 
 
 def test_sources_are_reviewable():
@@ -323,6 +375,7 @@ def main():
         test_enhance_disabled_no_aggressive_enhancement_mode,
         test_india_icao_square,
         test_new_catalogue_dimensions,
+        test_catalogue_trust_metadata,
         test_sources_are_reviewable,
         test_drift_guard_ids_in_frontend,
         test_drift_guard_deep_equal_with_node,
