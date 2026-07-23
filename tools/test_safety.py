@@ -102,6 +102,39 @@ def test_extreme_lighting_and_blur_are_blocked():
     print("test_extreme_lighting_and_blur_are_blocked", PASS)
 
 
+def test_posture_checks_separate_pitch_shoulders_and_body_lean():
+    checks = {
+        item["id"]: item
+        for item in server.build_posture_checks(
+            {
+                "pitchOffsetDegrees": -7.1,
+                "shoulderLevelDegrees": 9.0,
+                "bodyLeanPercent": 0.5,
+                "bodyLeanSource": "head over shoulders",
+            }
+        )
+    }
+    assert checks["source_head_pitch"]["status"] == "warning", checks
+    assert "raise chin" in checks["source_head_pitch"]["value"], checks
+    assert checks["source_shoulder_level"]["status"] == "fail", checks
+    assert "one shoulder higher" in checks["source_shoulder_level"]["value"], checks
+    assert checks["source_body_alignment"]["status"] == "pass", checks
+    print("test_posture_checks_separate_pitch_shoulders_and_body_lean", PASS)
+
+
+def test_level_posture_passes():
+    checks = server.build_posture_checks(
+        {
+            "pitchOffsetDegrees": 1.5,
+            "shoulderLevelDegrees": 2.0,
+            "bodyLeanPercent": 4.0,
+            "bodyLeanSource": "shoulders over hips",
+        }
+    )
+    assert all(item["status"] == "pass" for item in checks), checks
+    print("test_level_posture_passes", PASS)
+
+
 def main():
     tests = [
         test_non_portrait_is_rejected,
@@ -110,6 +143,8 @@ def main():
         test_faithful_enhancement_has_bounded_pixel_delta,
         test_iris_gaze_detects_looking_away,
         test_extreme_lighting_and_blur_are_blocked,
+        test_posture_checks_separate_pitch_shoulders_and_body_lean,
+        test_level_posture_passes,
     ]
     for test in tests:
         test()

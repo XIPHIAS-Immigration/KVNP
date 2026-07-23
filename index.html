@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>KVNP Passport Studio</title>
-    <link rel="stylesheet" href="src/styles.css?v=kvnp-studio-32" />
+    <link rel="stylesheet" href="src/styles.css?v=kvnp-studio-33" />
   </head>
   <body>
     <!-- ============ AUTH ============ -->
@@ -403,6 +403,7 @@
               </div>
               <div class="btn-row review-download-actions">
                 <button id="download-original" class="btn" type="button" disabled>Original</button>
+                <button id="background-variant" class="btn" type="button" disabled>Background version</button>
                 <button id="download-photo" class="btn btn-primary" type="button" disabled>Download file</button>
                 <button id="download-report" class="btn" type="button" disabled>Audit report</button>
               </div>
@@ -505,9 +506,16 @@
                 </div>
                 <div id="corrections-card" class="corrections-card" hidden></div>
                 <div id="overall-status" class="overall-status pending">Pending</div>
-                <div class="section-label">Compliance checks</div>
-                <p class="muted-copy">Machine checks are gated by source quality; human-only items stay flagged for review.</p>
+                <div class="review-check-section">
+                  <div class="section-label">Capture audit</div>
+                  <p class="muted-copy">Measured on the original upload. Retake findings cannot be repaired by crop or enhancement.</p>
+                  <div id="review-source-quality-list" class="quality-list"></div>
+                </div>
+                <div class="review-check-section">
+                <div class="section-label">Output compliance</div>
+                <p class="muted-copy">Measured on the prepared file. Human-only items stay flagged until you confirm them.</p>
                 <div id="checks-list" class="checks-list"></div>
+                </div>
                 <p class="disclaimer-note">
                   Automated estimate only - not a government service, not affiliated with any
                   passport or visa authority, and not a guarantee of acceptance. The issuing authority
@@ -542,8 +550,21 @@
       </form>
     </dialog>
 
-    <script src="src/vendor/gsap.min.js?v=kvnp-studio-32"></script>
-    <script src="src/motion.js?v=kvnp-studio-32"></script>
-    <script type="module" src="src/app.js?v=kvnp-studio-32"></script>
+    <dialog id="background-variant-dialog" class="download-warning-dialog">
+      <form method="dialog" class="download-warning-card">
+        <span class="dialog-kicker">Background version</span>
+        <h3 id="background-variant-title">Create a clean-background version?</h3>
+        <p id="background-variant-copy"></p>
+        <div id="background-variant-policy" class="variant-policy"></div>
+        <div class="dialog-actions">
+          <button class="btn" type="submit" value="cancel">Cancel</button>
+          <button id="background-variant-confirm" class="btn btn-primary" type="button">Create and download</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="src/vendor/gsap.min.js?v=kvnp-studio-33"></script>
+    <script src="src/motion.js?v=kvnp-studio-33"></script>
+    <script type="module" src="src/app.js?v=kvnp-studio-33"></script>
   </body>
 </html>

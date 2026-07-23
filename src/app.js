@@ -1,5 +1,5 @@
-import { COUNTRIES, RULE_PROFILES, getDefaultProfile, getProfilesForCountry } from "./rules.js?v=kvnp-studio-32";
-import { initCoach, analyzeFrame, coachAvailable } from "./capture.js?v=kvnp-studio-32";
+import { COUNTRIES, RULE_PROFILES, getDefaultProfile, getProfilesForCountry } from "./rules.js?v=kvnp-studio-33";
+import { initCoach, analyzeFrame, coachAvailable } from "./capture.js?v=kvnp-studio-33";
 
 const elements = {
   fileInput: document.querySelector("#file-input"),
@@ -29,6 +29,7 @@ const elements = {
   checksList: document.querySelector("#checks-list"),
   downloadPhoto: document.querySelector("#download-photo"),
   downloadOriginal: document.querySelector("#download-original"),
+  backgroundVariant: document.querySelector("#background-variant"),
   downloadReport: document.querySelector("#download-report"),
   autoFix: document.querySelector("#auto-fix"),
   sheetSize: document.querySelector("#sheet-size"),
@@ -102,6 +103,12 @@ const elements = {
   downloadWarningList: document.querySelector("#download-warning-list"),
   downloadWarningAck: document.querySelector("#download-warning-ack"),
   downloadAnywayConfirm: document.querySelector("#download-anyway-confirm"),
+  reviewSourceQualityList: document.querySelector("#review-source-quality-list"),
+  backgroundVariantDialog: document.querySelector("#background-variant-dialog"),
+  backgroundVariantTitle: document.querySelector("#background-variant-title"),
+  backgroundVariantCopy: document.querySelector("#background-variant-copy"),
+  backgroundVariantPolicy: document.querySelector("#background-variant-policy"),
+  backgroundVariantConfirm: document.querySelector("#background-variant-confirm"),
 };
 
 const ADJUST_CONTROLS = [
@@ -186,6 +193,7 @@ const state = {
   reviewPreviewMode: "photo",
   reviewPreviewUrl: null,
   downloadAcknowledged: false,
+  backgroundVariantBusy: false,
 };
 
 let adjustBakeTimer = 0;
@@ -233,6 +241,7 @@ function bindEvents() {
   elements.autoCapture.addEventListener("change", () => { state.coach.autoCapture = elements.autoCapture.checked; });
   elements.downloadPhoto.addEventListener("click", downloadPhoto);
   elements.downloadOriginal.addEventListener("click", downloadOriginal);
+  elements.backgroundVariant.addEventListener("click", showBackgroundVariantDialog);
   elements.downloadReport.addEventListener("click", downloadReport);
   elements.autoFix.addEventListener("click", autoFix);
   elements.printSheet.addEventListener("click", generatePrintSheet);
@@ -286,6 +295,7 @@ function bindEvents() {
     performPhotoDownload();
   });
   elements.downloadWarningDialog.addEventListener("close", resetDownloadWarningDialog);
+  elements.backgroundVariantConfirm.addEventListener("click", downloadBackgroundVariant);
 
   if (elements.uploadDropzone) {
     for (const eventName of ["dragenter", "dragover"]) {
@@ -1032,6 +1042,8 @@ function normalizeServerFace(face) {
     faceCount: face.faceCount,
     rollDegrees: face.rollDegrees,
     yawProxy: face.yawProxy,
+    pitchDegrees: face.pitchDegrees,
+    pitchOffsetDegrees: face.pitchOffsetDegrees,
     gazeHorizontalPercent: face.gazeHorizontalPercent,
     gazeVerticalPercent: face.gazeVerticalPercent,
     gazeOffsetPercent: face.gazeOffsetPercent,
@@ -2067,6 +2079,7 @@ function renderSourceQuality() {
 
   const quality = state.sourceQuality ?? [];
   elements.sourceQualityList.innerHTML = "";
+  if (elements.reviewSourceQualityList) elements.reviewSourceQualityList.innerHTML = "";
 
   if (!state.image) {
     elements.retakeGuidance.textContent = "Load a portrait to see whether the source is strong enough.";
@@ -2093,10 +2106,27 @@ function renderSourceQuality() {
       <span class="status-pill">${escapeHtml(item.status)}</span>
     `;
     elements.sourceQualityList.append(row);
+    if (elements.reviewSourceQualityList) elements.reviewSourceQualityList.append(row.cloneNode(true));
   }
 }
 
 function getRetakeGuidance(fails, warnings) {
+  const postureItems = [...fails, ...warnings].filter((item) =>
+    ["source_head_pitch", "source_shoulder_level", "source_body_alignment"].includes(item.id),
+  );
+  if (postureItems.length) {
+    const instructions = [];
+    if (postureItems.some((item) => item.id === "source_head_pitch")) {
+      instructions.push("put the lens at eye level and keep your chin neutral");
+    }
+    if (postureItems.some((item) => item.id === "source_shoulder_level")) {
+      instructions.push("sit upright with both shoulders level and arms relaxed");
+    }
+    if (postureItems.some((item) => item.id === "source_body_alignment")) {
+      instructions.push("center your head over your shoulders without leaning");
+    }
+    return `${fails.length ? "Retake recommended" : "Improve the pose"}: ${instructions.join("; ")}.`;
+  }
   if (fails.some((item) => item.id === "source_face_pixels" || item.id === "source_focus")) {
     return "Retake closer to the camera with brighter light. The current face detail is too weak to rescue cleanly.";
   }
@@ -2515,6 +2545,7 @@ function renderChecks() {
   elements.zoomOut.disabled = !hasPhoto;
   elements.viewCompare.disabled = !(hasPhoto && state.beforeDataUrl);
   elements.downloadReport.disabled = !state.lastReport;
+  renderBackgroundVariantControl();
   updateDownloadAdvisory(downloadIssues);
   updateReviewPreview();
   elements.checksList.innerHTML = "";
@@ -2577,6 +2608,7 @@ function renderNoResult() {
   elements.sheetDpi.disabled = true;
   elements.sheetCopies.disabled = true;
   elements.downloadReport.disabled = true;
+  renderBackgroundVariantControl();
   updateDownloadAdvisory();
   updateReviewPreview();
   renderWorkflowProgress();
@@ -3071,6 +3103,87 @@ function downloadOriginal() {
   const typeExtensions = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
   const extension = dot > 0 ? originalName.slice(dot + 1).toLowerCase() : typeExtensions[state.originalFile.type] || "jpg";
   downloadBlob(state.originalFile, `${slugify(base) || "photo"}-original.${extension}`);
+}
+
+function backgroundVariantIsSubmissionEligible() {
+  return state.profile?.allowedEdits?.background !== false && !isValidationOnlyProfile();
+}
+
+function renderBackgroundVariantControl() {
+  if (!elements.backgroundVariant) return;
+  const eligible = backgroundVariantIsSubmissionEligible();
+  elements.backgroundVariant.disabled = !state.originalFile || state.processing || state.backgroundVariantBusy;
+  elements.backgroundVariant.textContent = state.backgroundVariantBusy
+    ? "Creating..."
+    : eligible
+      ? "Clean-background file"
+      : "Background preview";
+  elements.backgroundVariant.title = eligible
+    ? "Create a separate clean-background file using the selected programme colour"
+    : "Create a watermarked background-removal preview; this programme does not permit a clean altered submission file";
+}
+
+function showBackgroundVariantDialog() {
+  if (!state.originalFile || state.processing) return;
+  const eligible = backgroundVariantIsSubmissionEligible();
+  elements.backgroundVariantTitle.textContent = eligible
+    ? "Create a clean-background version?"
+    : "Create a watermarked background preview?";
+  elements.backgroundVariantCopy.textContent = eligible
+    ? "KVNP will isolate the person, preserve hair, ears and shoulders, and place the selected programme background behind them. The current prepared file will not be replaced."
+    : "This programme does not permit digital background replacement in submission mode. KVNP can still generate a separately named, permanently watermarked preview so you can inspect the matte.";
+  elements.backgroundVariantPolicy.className = `variant-policy ${eligible ? "allowed" : "blocked"}`;
+  elements.backgroundVariantPolicy.innerHTML = eligible
+    ? "<strong>Programme allows this processing path</strong><span>Acceptance is still decided by the issuing authority.</span>"
+    : "<strong>Not a submission file</strong><span>The download will say EDITING PREVIEW - NOT FOR SUBMISSION.</span>";
+  elements.backgroundVariantConfirm.textContent = eligible ? "Create and download" : "Create watermarked preview";
+  elements.backgroundVariantDialog.showModal();
+}
+
+async function downloadBackgroundVariant() {
+  if (!state.originalFile || state.backgroundVariantBusy) return;
+  const eligible = backgroundVariantIsSubmissionEligible();
+  state.backgroundVariantBusy = true;
+  renderBackgroundVariantControl();
+  elements.backgroundVariantConfirm.disabled = true;
+  elements.backgroundVariantConfirm.textContent = "Creating...";
+
+  try {
+    const options = {
+      ...getProcessingOptions(),
+      previewMode: !eligible,
+      backgroundReplaced: true,
+      backgroundColor: state.backgroundColor || "#ffffff",
+      backgroundCleanup: "strong",
+      autoStraighten: false,
+      autoTone: false,
+      autoLighting: false,
+      enhanceOutput: false,
+      enhancementMode: "natural",
+    };
+    const form = new FormData();
+    form.append("image", state.originalFile);
+    form.append("profile", JSON.stringify(state.profile));
+    form.append("options", JSON.stringify(options));
+    const response = await fetch("/api/process", { method: "POST", body: form });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || `HTTP ${response.status}`);
+
+    const blob = dataUrlToBlob(result.finalDataUrl);
+    const suffix = eligible ? "clean-background" : "background-preview-not-for-submission";
+    downloadBlob(blob, `${slugify(state.profile.label)}-${suffix}-${Date.now()}.jpg`);
+    elements.automationSummary.textContent = eligible
+      ? "Separate clean-background file downloaded. The current review result was left unchanged."
+      : "Watermarked background preview downloaded. It is not a submission file.";
+    elements.backgroundVariantDialog.close();
+  } catch (error) {
+    console.error(error);
+    elements.backgroundVariantCopy.textContent = `Background version failed: ${error.message}`;
+  } finally {
+    state.backgroundVariantBusy = false;
+    elements.backgroundVariantConfirm.disabled = false;
+    renderBackgroundVariantControl();
+  }
 }
 
 async function performPhotoDownload() {

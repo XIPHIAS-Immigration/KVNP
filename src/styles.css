@@ -1793,6 +1793,13 @@ input[type="range"] { width: 100%; accent-color: var(--stamp); }
 .download-advisory.warning { border-left-color: var(--warn); background: var(--warn-soft); }
 .download-advisory.warning strong { color: var(--warn); }
 .review-export-controls { border-color: rgba(232, 68, 46, 0.55); background: var(--stamp-soft); }
+.review-check-section {
+  display: grid;
+  gap: 9px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.review-check-section:first-of-type { border-top: 0; padding-top: 0; }
 
 .download-warning-dialog {
   width: min(92vw, 560px);
@@ -1839,6 +1846,17 @@ input[type="range"] { width: 100%; accent-color: var(--stamp); }
 }
 .warning-acknowledgement input { margin-top: 2px; accent-color: var(--stamp); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
+.variant-policy {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--pass);
+  background: var(--pass-soft);
+  padding: 11px 12px;
+}
+.variant-policy.blocked { border-left-color: var(--warn); background: var(--warn-soft); }
+.variant-policy strong { color: var(--text); font-size: 12px; }
+.variant-policy span { color: var(--mut); font-size: 11px; line-height: 1.5; }
 
 @media (max-width: 1080px) {
   .workspace { display: block; }

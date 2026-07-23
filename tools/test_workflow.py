@@ -47,6 +47,8 @@ def test_review_outputs_are_present():
         "download-original",
         "download-photo",
         "download-report",
+        "background-variant",
+        "review-source-quality-list",
         "review-photo-image",
         "document-preview-photo",
         "download-warning-dialog",
@@ -54,6 +56,7 @@ def test_review_outputs_are_present():
     for element_id in required_ids:
         assert f'id="{element_id}"' in html, element_id
     assert "PREVIEW ONLY / NOT AN OFFICIAL DOCUMENT" in html
+    assert 'id="background-variant-dialog"' in html
     print("test_review_outputs_are_present", PASS)
 
 
@@ -75,12 +78,22 @@ def test_original_download_survives_processing_failure():
     print("test_original_download_survives_processing_failure", PASS)
 
 
+def test_background_variant_respects_programme_policy():
+    _, app = load_sources()
+    assert "function backgroundVariantIsSubmissionEligible()" in app
+    assert "previewMode: !eligible" in app
+    assert "background-preview-not-for-submission" in app
+    assert "The current prepared file will not be replaced." in app
+    print("test_background_variant_respects_programme_policy", PASS)
+
+
 def main():
     tests = [
         test_four_stage_structure,
         test_review_outputs_are_present,
         test_warnings_do_not_gate_file_availability,
         test_original_download_survives_processing_failure,
+        test_background_variant_respects_programme_policy,
     ]
     for test in tests:
         test()

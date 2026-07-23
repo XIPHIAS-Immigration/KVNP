@@ -32,15 +32,17 @@ from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parent
-SERVER_VERSION = "python-mediapipe-2026-07-22-framing-audit"
+SERVER_VERSION = "python-mediapipe-2026-07-23-posture-audit"
 MODEL_DIR = ROOT / "models"
 TOOLS_DIR = ROOT / "tools"
 FACE_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task"
 SEGMENTER_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite"
 SUPERRES_MODEL_URL = "https://github.com/Saafke/FSRCNN_Tensorflow/raw/master/models/FSRCNN_x2.pb"
+POSE_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task"
 FACE_MODEL_PATH = MODEL_DIR / "face_landmarker.task"
 SEGMENTER_MODEL_PATH = MODEL_DIR / "selfie_segmenter.tflite"
 SUPERRES_MODEL_PATH = MODEL_DIR / "FSRCNN_x2.pb"
+POSE_MODEL_PATH = MODEL_DIR / "pose_landmarker_lite.task"
 MODNET_MODEL_PATH = MODEL_DIR / "modnet.onnx"
 GFPGAN_MODEL_PATH = MODEL_DIR / "GFPGANv1.4.pth"
 REALESRGAN_MODEL_NAME = "realesrgan-x4plus"
@@ -115,6 +117,11 @@ def ensure_model(path, url):
 ensure_model(FACE_MODEL_PATH, FACE_MODEL_URL)
 ensure_model(SEGMENTER_MODEL_PATH, SEGMENTER_MODEL_URL)
 try:
+    ensure_model(POSE_MODEL_PATH, POSE_MODEL_URL)
+except Exception as error:
+    log_message = f"Pose model unavailable: {error}"
+    print(f"[kvnp] {log_message}", file=sys.stderr, flush=True)
+try:
     ensure_model(SUPERRES_MODEL_PATH, SUPERRES_MODEL_URL)
 except Exception:
     pass
@@ -127,6 +134,7 @@ face_landmarker = vision.FaceLandmarker.create_from_options(
         min_face_detection_confidence=0.55,
         min_face_presence_confidence=0.55,
         output_face_blendshapes=True,
+        output_facial_transformation_matrixes=True,
     )
 )
 image_segmenter = vision.ImageSegmenter.create_from_options(
@@ -137,6 +145,20 @@ image_segmenter = vision.ImageSegmenter.create_from_options(
         output_category_mask=False,
     )
 )
+pose_landmarker = None
+if POSE_MODEL_PATH.exists():
+    try:
+        pose_landmarker = vision.PoseLandmarker.create_from_options(
+            vision.PoseLandmarkerOptions(
+                base_options=mp_python.BaseOptions(model_asset_path=str(POSE_MODEL_PATH)),
+                running_mode=vision.RunningMode.IMAGE,
+                num_poses=1,
+                min_pose_detection_confidence=0.45,
+                min_pose_presence_confidence=0.45,
+            )
+        )
+    except Exception as error:
+        print(f"[kvnp] Pose Landmarker initialization failed: {error}", file=sys.stderr, flush=True)
 superres = None
 if hasattr(cv2, "dnn_superres") and SUPERRES_MODEL_PATH.exists():
     try:
@@ -469,6 +491,7 @@ def health():
         "version": SERVER_VERSION,
         "processor": "python-mediapipe",
         "faceMesh": True,
+        "poseLandmarker": pose_landmarker is not None,
         "selfieSegmentation": True,
         "realEsrgan": real_esrgan_ready(),
         "gfpgan": gfpgan_ready(),
@@ -637,6 +660,7 @@ def process_image(image_bytes, profile, options):
     # artifact - otherwise a retake-worthy capture could be marked "ready".
     mp_image, landmarks, face = detect_face(original_source)
     original_face = dict(face)
+    posture = measure_pose_posture(original_source, original_face)
 
     source = original_source
     if do_tone:
@@ -746,7 +770,7 @@ def process_image(image_bytes, profile, options):
         dpi_final = 300
     output_final = add_preview_watermark(final) if preview_mode else final
     final_bytes = set_jpeg_dpi(encode_jpeg(output_final, profile), dpi_final)
-    overlay = build_overlay(source, landmarks, crop, matte=matte, face=face, profile=profile)
+    overlay = build_overlay(source, landmarks, crop, matte=matte, face=face, profile=profile, posture=posture)
     overlay_bytes = encode_jpeg_bytes(overlay, 88)
     # "Before": the original capture framed to the same output size with no
     # correction/matte/enhancement, for an honest before/after comparison.
@@ -774,6 +798,7 @@ def process_image(image_bytes, profile, options):
         replace_background,
         mask_stats,
         corrections,
+        posture,
     )
     checks = build_checks(
         face,
@@ -832,6 +857,7 @@ def process_image(image_bytes, profile, options):
         "pipeline": pipeline,
         "decision": decision,
         "matte": mask_stats,
+        "posture": posture,
         "checks": checks,
         "corrections": corrections,
         "policyClamped": policy_clamped,
@@ -940,7 +966,26 @@ def estimate_eye_gaze(points, yaw_proxy=0.0):
     }
 
 
-def measure_face(points, face_count):
+def facial_pose_from_matrix(matrix):
+    if matrix is None:
+        return {"pitchDegrees": None, "pitchOffsetDegrees": None}
+    try:
+        rotation = np.asarray(matrix, dtype=np.float64)[:3, :3]
+        sy = math.sqrt(rotation[0, 0] ** 2 + rotation[1, 0] ** 2)
+        pitch = math.degrees(math.atan2(rotation[2, 1], rotation[2, 2]))
+        # MediaPipe's canonical neutral face sits at roughly +8 degrees in this
+        # coordinate frame. Reporting the calibrated offset makes zero mean
+        # "camera level with the face"; negative values mean the chin is down.
+        pitch_offset = pitch - 8.0
+        return {
+            "pitchDegrees": round(float(pitch), 2),
+            "pitchOffsetDegrees": round(float(pitch_offset), 2),
+        }
+    except (TypeError, ValueError, IndexError):
+        return {"pitchDegrees": None, "pitchOffsetDegrees": None}
+
+
+def measure_face(points, face_count, transformation_matrix=None):
     oval = np.array([[points[index]["x"], points[index]["y"]] for index in FACE_OVAL], dtype=np.float32)
     min_x, min_y = oval.min(axis=0)
     max_x, max_y = oval.max(axis=0)
@@ -980,6 +1025,7 @@ def measure_face(points, face_count):
         "eyeY": round((left_eye["y"] + right_eye["y"]) / 2.0, 2),
         "mouthGapPercent": round(float(mouth_gap), 2),
         "eyeOpenness": eye_openness,
+        **facial_pose_from_matrix(transformation_matrix),
         **gaze,
         "bounds": {
             "minX": round(float(min_x), 2),
@@ -1130,8 +1176,96 @@ def detect_face(source_bgr):
     if len(faces) != 1:
         raise ValueError(f"Multiple faces detected ({len(faces)}). Use a photo containing only one person.")
     landmarks = get_landmarks(faces[0], width, height)
-    face = measure_face(landmarks, len(faces))
+    matrices = result.facial_transformation_matrixes or []
+    face = measure_face(landmarks, len(faces), matrices[0] if matrices else None)
     return mp_image, landmarks, face
+
+
+def measure_pose_posture(source_bgr, face):
+    """Measure shoulder level and upper-body alignment on the original capture.
+
+    Face Landmarker answers head geometry; Pose Landmarker supplies the shoulder
+    line and, when visible, the hip axis. Tight portraits fall back to checking
+    whether the head is centered over the shoulders.
+    """
+    posture = {
+        "available": False,
+        "shoulderLevelDegrees": None,
+        "shoulderSignedDegrees": None,
+        "bodyLeanPercent": None,
+        "bodyLeanSource": None,
+        "pitchOffsetDegrees": face.get("pitchOffsetDegrees"),
+        "shoulderPoints": None,
+    }
+    if pose_landmarker is None:
+        return posture
+
+    try:
+        height, width = source_bgr.shape[:2]
+        result = pose_landmarker.detect(build_mp_image(source_bgr))
+        poses = result.pose_landmarks or []
+        if not poses:
+            return posture
+        points = poses[0]
+
+        def landmark(index):
+            point = points[index]
+            return {
+                "x": float(point.x),
+                "y": float(point.y),
+                "visibility": float(getattr(point, "visibility", 0.0) or 0.0),
+                "presence": float(getattr(point, "presence", 0.0) or 0.0),
+            }
+
+        left_shoulder = landmark(11)
+        right_shoulder = landmark(12)
+        shoulder_confidence = min(
+            left_shoulder["visibility"],
+            left_shoulder["presence"],
+            right_shoulder["visibility"],
+            right_shoulder["presence"],
+        )
+        if shoulder_confidence < 0.45:
+            return posture
+
+        dx = right_shoulder["x"] - left_shoulder["x"]
+        dy = right_shoulder["y"] - left_shoulder["y"]
+        shoulder_width = max(1e-4, math.hypot(dx, dy))
+        raw_angle = math.degrees(math.atan2(dy, dx))
+        signed_angle = ((raw_angle + 90.0) % 180.0) - 90.0
+        shoulder_mid_x = (left_shoulder["x"] + right_shoulder["x"]) / 2.0
+        posture.update(
+            {
+                "available": True,
+                "shoulderLevelDegrees": round(abs(float(signed_angle)), 2),
+                "shoulderSignedDegrees": round(float(signed_angle), 2),
+                "shoulderPoints": [
+                    [round(left_shoulder["x"] * width, 1), round(left_shoulder["y"] * height, 1)],
+                    [round(right_shoulder["x"] * width, 1), round(right_shoulder["y"] * height, 1)],
+                ],
+            }
+        )
+
+        left_hip = landmark(23)
+        right_hip = landmark(24)
+        hip_confidence = min(
+            left_hip["visibility"],
+            left_hip["presence"],
+            right_hip["visibility"],
+            right_hip["presence"],
+        )
+        if hip_confidence >= 0.45:
+            hip_mid_x = (left_hip["x"] + right_hip["x"]) / 2.0
+            posture["bodyLeanPercent"] = round(abs(shoulder_mid_x - hip_mid_x) / shoulder_width * 100.0, 2)
+            posture["bodyLeanSource"] = "shoulders over hips"
+        else:
+            face_x = float(face["centerX"]) / max(1.0, float(width))
+            posture["bodyLeanPercent"] = round(abs(face_x - shoulder_mid_x) / shoulder_width * 100.0, 2)
+            posture["bodyLeanSource"] = "head over shoulders"
+        return posture
+    except Exception as error:
+        log_warn_once(f"Pose measurement failed: {error}")
+        return posture
 
 
 def rotate_image(image, angle_deg, center):
@@ -2581,7 +2715,7 @@ def draw_dashed_line(image, start, end, color, thickness=2, dash=14, gap=9):
         cv2.line(image, p1, p2, color, thickness, lineType=cv2.LINE_AA)
 
 
-def build_overlay(source_bgr, points, crop, matte=None, face=None, profile=None):
+def build_overlay(source_bgr, points, crop, matte=None, face=None, profile=None, posture=None):
     source = ensure_bgr(source_bgr)
     dim = source.copy()
     cv2.rectangle(dim, (0, 0), (source.shape[1], source.shape[0]), (10, 24, 39), thickness=-1)
@@ -2640,6 +2774,10 @@ def build_overlay(source_bgr, points, crop, matte=None, face=None, profile=None)
         level_status = threshold_status(roll, 4.0, 7.0)
         direction_status = threshold_status(yaw, 9.0, 14.0)
         gaze_status = "review" if gaze is None else threshold_status(abs(float(gaze)), 3.0, 4.0)
+        pitch_offset = (posture or {}).get("pitchOffsetDegrees")
+        pitch_status = "review" if pitch_offset is None else threshold_status(abs(float(pitch_offset)), 5.0, 9.0)
+        shoulder_level = (posture or {}).get("shoulderLevelDegrees")
+        shoulder_level_status = "review" if shoulder_level is None else threshold_status(float(shoulder_level), 4.0, 7.0)
         shoulder_status = "review"
         shoulder_room = None
         source_background_status = "review"
@@ -2656,6 +2794,7 @@ def build_overlay(source_bgr, points, crop, matte=None, face=None, profile=None)
         if profile:
             source_background = background_stats(source, profile, replaced=False)
             source_background_status = source_background["status"]
+            source_background_value = source_background["value"]
 
         status_colors = {
             "pass": (125, 217, 65),
@@ -2683,6 +2822,14 @@ def build_overlay(source_bgr, points, crop, matte=None, face=None, profile=None)
             chin = (int(round(points[CHIN]["x"])), int(round(points[CHIN]["y"])))
             cv2.line(overlay, forehead, chin, level_color, guide_thickness, cv2.LINE_AA)
 
+        shoulder_points = (posture or {}).get("shoulderPoints")
+        if shoulder_points and len(shoulder_points) == 2:
+            p1 = tuple(int(round(value)) for value in shoulder_points[0])
+            p2 = tuple(int(round(value)) for value in shoulder_points[1])
+            cv2.line(overlay, p1, p2, status_colors[shoulder_level_status], guide_thickness, cv2.LINE_AA)
+            cv2.circle(overlay, p1, max(3, crop_thickness + 1), status_colors[shoulder_level_status], -1, cv2.LINE_AA)
+            cv2.circle(overlay, p2, max(3, crop_thickness + 1), status_colors[shoulder_level_status], -1, cv2.LINE_AA)
+
         eye_rule = ((profile or {}).get("head") or {}).get("eye")
         if eye_rule and eye_rule.get("targetFromTopPercent") is not None:
             target_eye_y = int(round(y + h * float(eye_rule["targetFromTopPercent"]) / 100.0))
@@ -2699,8 +2846,10 @@ def build_overlay(source_bgr, points, crop, matte=None, face=None, profile=None)
         status_label = {"pass": "PASS", "warning": "CHECK", "fail": "RETAKE", "review": "CHECK"}
         rows = [
             ("HEAD LEVEL", level_status, f'{roll:.1f} DEG'),
+            ("CHIN / CAMERA", pitch_status, "N/A" if pitch_offset is None else f'{abs(float(pitch_offset)):.1f} DEG'),
             ("HEAD DIRECTION", direction_status, f'{yaw:.1f}%'),
             ("EYE GAZE", gaze_status, "N/A" if gaze is None else f'{abs(float(gaze)):.1f}%'),
+            ("SHOULDER LEVEL", shoulder_level_status, "N/A" if shoulder_level is None else f'{float(shoulder_level):.1f} DEG'),
             ("SHOULDER FRAME", shoulder_status, "N/A" if shoulder_room is None else f'{shoulder_room:.1f}%'),
             ("SOURCE BACKGROUND", source_background_status, source_background_value),
         ]
@@ -2959,7 +3108,68 @@ def build_checks(face, crop, profile, stats, background_stats_result, output_byt
     return checks
 
 
-def build_source_quality(source_bgr, face, profile, source_stats, face_stats, source_bytes, background_replaced, mask_stats, corrections=None):
+def build_posture_checks(posture):
+    posture = posture or {}
+    pitch = posture.get("pitchOffsetDegrees")
+    shoulder_level = posture.get("shoulderLevelDegrees")
+    body_lean = posture.get("bodyLeanPercent")
+
+    if pitch is None:
+        pitch_check = check("source_head_pitch", "Chin and camera level", "review", "not measurable", "chin neutral, camera at eye level")
+    else:
+        pitch_note = "chin neutral"
+        if float(pitch) < -5.0:
+            pitch_note = "chin down - raise chin and place lens at eye level"
+        elif float(pitch) > 5.0:
+            pitch_note = "chin raised - lower chin and place lens at eye level"
+        pitch_check = check(
+            "source_head_pitch",
+            "Chin and camera level",
+            threshold_status(abs(float(pitch)), 5.0, 9.0),
+            f"{abs(float(pitch)):.1f} deg offset / {pitch_note}",
+            "<= 5 deg / neutral chin",
+        )
+
+    if shoulder_level is None:
+        shoulder_check = check("source_shoulder_level", "Shoulder level", "review", "not measurable", "both shoulders level and relaxed")
+    else:
+        shoulder_note = "level"
+        if float(shoulder_level) > 4.0:
+            shoulder_note = "one shoulder higher - sit upright and relax both arms"
+        shoulder_check = check(
+            "source_shoulder_level",
+            "Shoulder level",
+            threshold_status(float(shoulder_level), 4.0, 7.0),
+            f"{float(shoulder_level):.1f} deg / {shoulder_note}",
+            "<= 4 deg / shoulders level",
+        )
+
+    if body_lean is None:
+        alignment_check = check("source_body_alignment", "Body alignment", "review", "not measurable", "head centered over shoulders")
+    else:
+        source = posture.get("bodyLeanSource") or "upper body"
+        alignment_check = check(
+            "source_body_alignment",
+            "Body alignment",
+            threshold_status(float(body_lean), 10.0, 18.0),
+            f"{float(body_lean):.1f}% offset / {source}",
+            "<= 10% / sit upright, do not lean",
+        )
+    return [pitch_check, shoulder_check, alignment_check]
+
+
+def build_source_quality(
+    source_bgr,
+    face,
+    profile,
+    source_stats,
+    face_stats,
+    source_bytes,
+    background_replaced,
+    mask_stats,
+    corrections=None,
+    posture=None,
+):
     """Assess the ORIGINAL capture. Dimensions we can auto-correct (tilt via
     straighten, exposure via tone) are not failed when the correction was
     applied, but unrecoverable problems - highlight/shadow clipping, turned head
@@ -3029,6 +3239,7 @@ def build_source_quality(source_bgr, face, profile, source_stats, face_stats, so
         check("source_noise", "Input noise", threshold_status(face_noise, 9, 14), f"{face_noise:.1f}", "low grain before enhancement"),
         check("source_lighting", "Input lighting", lighting_status, lighting_value, "even exposure, no clipping"),
         check("source_pose", "Capture pose", pose_status, pose_value, "front-facing, level head"),
+        *build_posture_checks(posture),
         check("source_background_path", "Source background", background_status, background_value, "programme-required plain background"),
         check("source_file", "Source file", "pass", format_bytes(source_bytes), "original image retained for audit"),
     ]
@@ -3039,9 +3250,9 @@ def build_pipeline_report(background_replaced, mask_stats, enhanced, enhancement
         {
             "id": "geometry",
             "label": "Geometry",
-            "engine": "MediaPipe Face Landmarker",
+            "engine": "MediaPipe Face + Pose Landmarkers",
             "status": "pass",
-            "detail": "478-point face mesh plus matte head silhouette, pose, mouth, crop placement",
+            "detail": "478-point face mesh, chin pitch, shoulder level, body alignment and crop placement",
         },
         {
             "id": "matting",
@@ -3083,17 +3294,25 @@ def build_decision(source_quality, checks, pipeline):
         for item in [*source_quality, *checks]
     )
     gaze_failure = any(item["id"] == "eye_gaze" and item["status"] == "fail" for item in checks)
-    unfixable_failure = background_failure or gaze_failure
+    posture_failure = any(
+        item["id"] in {"source_head_pitch", "source_shoulder_level", "source_body_alignment"} and item["status"] == "fail"
+        for item in source_quality
+    )
+    unfixable_failure = background_failure or gaze_failure or posture_failure
 
     if source_failures or unfixable_failure:
         status = "retake"
         title = "Retake source photo"
         if background_failure and gaze_failure:
             message = "Retake against the required plain background while looking directly into the camera lens."
+        elif background_failure and posture_failure:
+            message = "Retake against the required plain background while sitting upright with a neutral chin and level shoulders."
         elif background_failure:
             message = "The selected programme requires a plain capture background and does not permit replacing this one digitally."
         elif gaze_failure:
             message = "The eyes are not aligned with the camera. Retake while looking directly into the lens."
+        elif posture_failure:
+            message = "The capture posture is unsuitable. Retake with the lens at eye level, a neutral chin and both shoulders level."
         else:
             message = "The input has a capture problem that cannot be repaired safely for this programme."
     elif fail_items:
@@ -3123,8 +3342,17 @@ def build_decision(source_quality, checks, pipeline):
             actions.append("Use a sharper, higher-resolution source")
         if any(item["id"] == "source_lighting" and item["status"] == "fail" for item in source_quality):
             actions.append("Use brighter, even light without clipping")
-        if any(item["id"] in {"source_pose", "face_direction", "head_tilt"} and item["status"] == "fail" for item in [*source_quality, *checks]):
+        if any(item["id"] in {"source_pose", "source_head_pitch", "face_direction", "head_tilt"} and item["status"] == "fail" for item in [*source_quality, *checks]):
             actions.append("Keep the head level and face the camera directly")
+    pitch_issue = next((item for item in source_quality if item["id"] == "source_head_pitch" and item["status"] != "pass"), None)
+    if pitch_issue:
+        actions.append("Place the lens at eye level and keep the chin neutral; do not lean down toward the camera")
+    shoulder_issue = next((item for item in source_quality if item["id"] == "source_shoulder_level" and item["status"] != "pass"), None)
+    if shoulder_issue:
+        actions.append("Sit upright with both shoulders level and both arms relaxed")
+    alignment_issue = next((item for item in source_quality if item["id"] == "source_body_alignment" and item["status"] != "pass"), None)
+    if alignment_issue:
+        actions.append("Center the head over the shoulders and avoid leaning sideways")
     if any(item["id"] == "background_cleanup" and item["status"] != "pass" and item["value"] != "disabled" for item in checks):
         actions.append("Review hair and shoulder edges")
     if any(item["id"] == "shoulder_framing" and item["status"] != "pass" for item in checks):
@@ -3161,6 +3389,13 @@ def model_inventory():
             "stage": "matting",
             "status": "ready" if SEGMENTER_MODEL_PATH.exists() else "missing",
             "weight": SEGMENTER_MODEL_PATH.name,
+        },
+        {
+            "id": "mediapipe_pose_landmarker",
+            "label": "MediaPipe Pose Landmarker Lite",
+            "stage": "posture",
+            "status": "ready" if pose_landmarker is not None else "optional-not-installed",
+            "weight": POSE_MODEL_PATH.name,
         },
         {
             "id": "modnet",
