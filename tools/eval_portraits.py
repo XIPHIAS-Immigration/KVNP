@@ -1,9 +1,11 @@
-"""Evaluation harness: measure the assisted-editing pipeline on real portraits.
+"""Evaluation harness: measure programme suitability on casual real portraits.
 
 For each portrait we run the pipeline twice for the same programme:
   BEFORE  - just crop/resize to spec, no corrections (autoCorrect off, no bg, no enhance)
-  AFTER   - full corrective pipeline (straighten + tone + bg replace + strong cleanup + enhance)
-and report the decision + failing checks for each, so the lift is measurable.
+  AFTER   - request the full preparation pipeline, which the selected strict
+            programme policy is expected to clamp to permitted operations
+and report the decision + failing checks for each. A normal portrait is not
+treated as a compliant passport source merely because processing succeeded.
 
 Run:  python tools/eval_portraits.py
 """
@@ -84,7 +86,8 @@ def verdict(before, after):
 def main():
     images = sorted(glob.glob(str(ROOT / "screenshots" / "eval" / "raw" / "px_*.jpg")))
     images += [str(ROOT / "screenshots" / "eval" / "raw" / "test_pexels.jpg")]
-    print(f"Evaluating {len(images)} real portraits on assisted-editing profile (BEFORE=no help, AFTER=faithful pipeline)\n")
+    print(f"Evaluating {len(images)} casual real portraits against a strict submission profile")
+    print("BEFORE=no help; AFTER=requested preparation with programme policy enforced\n")
     print(f"{'image':22} {'BEFORE':>9} {'AFTER':>9}  {'verdict':22} corrections / remaining fails")
     print("-" * 110)
     t0 = time.time()

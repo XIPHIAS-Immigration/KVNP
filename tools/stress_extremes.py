@@ -51,9 +51,19 @@ OPTIONS = {
 }
 EXPORTABLE = {"ready", "review", "policy_review"}
 BASES = (
-    "px_1681010.jpg",  # textured hair, outdoor background
-    "px_614810.jpg",   # frontal portrait, strongly uneven source lighting
-    "px_3763188.jpg",  # slight yaw, indoor background
+    "px_1043471.jpg",
+    "px_1239291.jpg",
+    "px_1681010.jpg",
+    "px_220453.jpg",
+    "px_2379004.jpg",
+    "px_2613260.jpg",
+    "px_3763188.jpg",
+    "px_614810.jpg",
+    "px_762020.jpg",
+    "px_774909.jpg",
+    "px_91227.jpg",
+    "px_936119.jpg",
+    "test_pexels.jpg",
 )
 
 

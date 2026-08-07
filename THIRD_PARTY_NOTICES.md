@@ -32,6 +32,16 @@ not legal advice.
   these as product assets/marketing without re-checking each image. They are dev
   fixtures, not part of the product.
 
+## Guest demonstration portraits
+
+- `assets/demo/*` contains 24 Pexels portraits used by the guest walkthrough.
+  The source photo IDs and in-product test purposes are recorded in
+  `src/demo-library.js`.
+- These portraits are used under the Pexels license published at
+  https://www.pexels.com/license/. The photographers and depicted people do not
+  endorse KVNP Studio. Re-check the license and each source page before a public
+  commercial release.
+
 ## Action items before commercial release
 
 - [ ] Confirm GFPGAN/facexlib weight terms; gate or remove the "strong"/Rescue path if non-commercial.

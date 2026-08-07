@@ -1,5 +1,6 @@
-import { COUNTRIES, RULE_PROFILES, getDefaultProfile, getProfilesForCountry } from "./rules.js?v=kvnp-studio-35";
-import { initCoach, analyzeFrame, coachAvailable } from "./capture.js?v=kvnp-studio-35";
+import { COUNTRIES, RULE_PROFILES, getDefaultProfile, getProfilesForCountry } from "./rules.js?v=kvnp-studio-43";
+import { initCoach, analyzeFrame, coachAvailable } from "./capture.js?v=kvnp-studio-43";
+import { DEMO_FILTERS, DEMO_PORTRAITS } from "./demo-library.js?v=kvnp-studio-43";
 
 const elements = {
   fileInput: document.querySelector("#file-input"),
@@ -59,6 +60,9 @@ const elements = {
   gateConfirm: document.querySelector("#gate-confirm"),
   policyList: document.querySelector("#policy-list"),
   previewMode: document.querySelector("#preview-mode"),
+  editModeTitle: document.querySelector("#edit-mode-title"),
+  editModeDescription: document.querySelector("#edit-mode-description"),
+  editModeLabel: document.querySelector("#edit-mode-label"),
   touchupToggle: document.querySelector("#touchup-toggle"),
   touchupBrush: document.querySelector("#touchup-brush"),
   touchupSize: document.querySelector("#touchup-size"),
@@ -83,6 +87,18 @@ const elements = {
   presetSave: document.querySelector("#preset-save"),
   presetDelete: document.querySelector("#preset-delete"),
   uploadDropzone: document.querySelector("#upload-dropzone"),
+  demoLibrary: document.querySelector("#demo-library"),
+  demoLibraryCount: document.querySelector("#demo-library-count"),
+  demoFilters: document.querySelector("#demo-filters"),
+  demoGrid: document.querySelector("#demo-grid"),
+  demoStart: document.querySelector("#demo-start"),
+  demoWalkthrough: document.querySelector("#demo-walkthrough"),
+  demoWalkthroughTitle: document.querySelector("#demo-walkthrough-title"),
+  demoWalkthroughDetail: document.querySelector("#demo-walkthrough-detail"),
+  demoWalkthroughPrimary: document.querySelector("#demo-walkthrough-primary"),
+  demoWalkthroughSecondary: document.querySelector("#demo-walkthrough-secondary"),
+  demoWalkthroughClose: document.querySelector("#demo-walkthrough-close"),
+  demoWalkthroughSteps: Array.from(document.querySelectorAll("[data-demo-step]")),
   programmeOutput: document.querySelector("#programme-output"),
   programmeBackground: document.querySelector("#programme-background"),
   programmeMode: document.querySelector("#programme-mode"),
@@ -90,6 +106,32 @@ const elements = {
   programmeReviewed: document.querySelector("#programme-reviewed"),
   programmeNotice: document.querySelector("#programme-notice"),
   catalogueCount: document.querySelector("#catalogue-count"),
+  selectedCountryCode: document.querySelector("#selected-country-code"),
+  selectedCategoryIcon: document.querySelector("#selected-category-icon"),
+  selectedProgrammeCountry: document.querySelector("#selected-programme-country"),
+  selectedProgrammeName: document.querySelector("#selected-programme-name"),
+  selectedProgrammeDelivery: document.querySelector("#selected-programme-delivery"),
+  inspectorProfileName: document.querySelector("#inspector-profile-name"),
+  inspectorProfileSpec: document.querySelector("#inspector-profile-spec"),
+  inspectorPolicyChip: document.querySelector("#inspector-policy-chip"),
+  studioToolTabs: Array.from(document.querySelectorAll("[data-studio-tool]")),
+  studioToolPanels: Array.from(document.querySelectorAll("[data-studio-panel]")),
+  studioCropSpec: document.querySelector("#studio-crop-spec"),
+  studioCropControls: document.querySelector("#studio-crop-controls"),
+  studioToneControls: document.querySelector("#studio-tone-controls"),
+  studioAdjustments: document.querySelector("#studio-adjustments"),
+  studioBackgroundControls: document.querySelector("#studio-background-controls"),
+  studioTouchupControls: document.querySelector("#studio-touchup-controls"),
+  studioAdvancedControls: document.querySelector("#studio-advanced-controls"),
+  studioModeSlot: document.querySelector("#studio-mode-slot"),
+  studioOpenButtons: Array.from(document.querySelectorAll("[data-studio-open]")),
+  tonePresetButtons: Array.from(document.querySelectorAll("[data-tone-preset]")),
+  toneHistogram: document.querySelector("#tone-histogram"),
+  studioOutputCanvas: document.querySelector("#studio-output-canvas"),
+  studioOutputMime: document.querySelector("#studio-output-mime"),
+  studioOutputPrint: document.querySelector("#studio-output-print"),
+  studioOutputBackground: document.querySelector("#studio-output-background"),
+  studioOutputPolicy: document.querySelector("#studio-output-policy"),
   workflowSteps: Array.from(document.querySelectorAll("[data-workflow-step]")),
   wizardPanels: Array.from(document.querySelectorAll("[data-wizard-panel]")),
   wizardBackButtons: Array.from(document.querySelectorAll("[data-wizard-back]")),
@@ -119,18 +161,41 @@ const elements = {
   coachBanner: document.querySelector("#coach-banner"),
   coachDirective: document.querySelector("#coach-directive"),
   coachDetail: document.querySelector("#coach-detail"),
+  captureReadiness: document.querySelector("#capture-readiness"),
+  captureReadinessGrid: document.querySelector("#capture-readiness-grid"),
+  readinessScore: document.querySelector("#readiness-score"),
+  autoCaptureState: document.querySelector("#auto-capture-state"),
+  prepareSourceState: document.querySelector("#prepare-source-state"),
+  prepareSourceDetail: document.querySelector("#prepare-source-detail"),
+  prepareChangeState: document.querySelector("#prepare-change-state"),
+  prepareChangeDetail: document.querySelector("#prepare-change-detail"),
+  prepareOutputState: document.querySelector("#prepare-output-state"),
+  prepareOutputDetail: document.querySelector("#prepare-output-detail"),
+  reviewVerdict: document.querySelector("#review-verdict"),
+  verdictRecommendation: document.querySelector("#verdict-recommendation"),
+  verdictRecommendationDetail: document.querySelector("#verdict-recommendation-detail"),
+  verdictFile: document.querySelector("#verdict-file"),
+  verdictFileDetail: document.querySelector("#verdict-file-detail"),
+  verdictAction: document.querySelector("#verdict-action"),
+  verdictActionDetail: document.querySelector("#verdict-action-detail"),
 };
 
 const ADJUST_CONTROLS = [
-  { key: "brightness", label: "Brightness", min: -100, max: 100 },
-  { key: "contrast", label: "Contrast", min: -100, max: 100 },
-  { key: "saturation", label: "Saturation", min: -100, max: 100 },
-  { key: "warmth", label: "Warmth", min: -100, max: 100 },
-  { key: "tint", label: "Tint", min: -100, max: 100 },
-  { key: "highlights", label: "Highlights", min: -100, max: 100 },
-  { key: "shadows", label: "Shadows", min: -100, max: 100 },
-  { key: "sharpness", label: "Sharpness", min: 0, max: 100 },
+  { group: "White balance", key: "warmth", label: "Temperature", min: -100, max: 100 },
+  { group: "White balance", key: "tint", label: "Green / magenta", min: -100, max: 100 },
+  { group: "Light", key: "exposure", label: "Exposure", min: -50, max: 50 },
+  { group: "Light", key: "brightness", label: "Brightness", min: -100, max: 100 },
+  { group: "Light", key: "contrast", label: "Contrast", min: -100, max: 100 },
+  { group: "Light", key: "highlights", label: "Highlights", min: -100, max: 100 },
+  { group: "Light", key: "shadows", label: "Shadows", min: -100, max: 100 },
+  { group: "Colour tuning", key: "saturation", label: "Saturation", min: -100, max: 100 },
+  { group: "Colour tuning", key: "red", label: "Red channel", min: -100, max: 100 },
+  { group: "Colour tuning", key: "green", label: "Green channel", min: -100, max: 100 },
+  { group: "Colour tuning", key: "blue", label: "Blue channel", min: -100, max: 100 },
+  { group: "Detail", key: "sharpness", label: "Sharpness", min: 0, max: 100 },
 ];
+
+const EMPTY_ADJUSTMENTS = Object.fromEntries(ADJUST_CONTROLS.map(({ key }) => [key, 0]));
 
 const BG_PRESETS = [
   { name: "White", color: "#ffffff" },
@@ -140,6 +205,20 @@ const BG_PRESETS = [
   { name: "Cream", color: "#f3ece0" },
   { name: "Sky", color: "#cfe0f4" },
 ];
+
+const CATEGORY_ICONS = {
+  Passport: "passport",
+  Visa: "visa",
+  Identity: "identity",
+  Residence: "residence",
+  Driving: "driving",
+  Citizenship: "citizenship",
+  Child: "child",
+};
+
+function iconMarkup(name) {
+  return `<svg class="ui-icon" aria-hidden="true"><use href="#icon-${escapeHtml(name)}"></use></svg>`;
+}
 
 const adjustCanvas = document.createElement("canvas");
 const adjustCtx = adjustCanvas.getContext("2d", { willReadFrequently: true });
@@ -190,7 +269,7 @@ const state = {
   touchUp: { active: false, dirty: false, painting: false, brush: 26 },
   coach: { metrics: null, lastAnalyze: 0, readySince: 0, captured: false, autoCapture: true },
   programmeConfirmed: false,
-  adjust: { brightness: 0, contrast: 0, saturation: 0, warmth: 0, tint: 0, highlights: 0, shadows: 0, sharpness: 0 },
+  adjust: { ...EMPTY_ADJUSTMENTS },
   guides: false,
   zoom: 1,
   resultView: "result",
@@ -207,6 +286,11 @@ const state = {
   workspaceMode: "guided",
   catalogueQuery: "",
   catalogueCategory: "All",
+  studioTool: "crop",
+  demoFilter: "All",
+  demoSelected: null,
+  demoWalkthroughActive: false,
+  guestSession: false,
 };
 
 let adjustBakeTimer = 0;
@@ -226,10 +310,12 @@ let serverTimer = 0;
 
 function init() {
   restoreWorkspaceMode();
+  mountStudioControls();
   populateCountrySelect();
   populateProgrammeSelect(state.profile.country);
   renderCategoryFilters();
   renderProgrammeCatalogue();
+  renderDemoLibrary();
   applyProfileAutomationDefaults();
   renderProfile();
   renderEmptyCanvas();
@@ -254,7 +340,12 @@ function bindEvents() {
   elements.profileSelect.addEventListener("change", handleProfileChange);
   elements.cameraButton.addEventListener("click", toggleCamera);
   elements.captureButton.addEventListener("click", captureCameraFrame);
-  elements.autoCapture.addEventListener("change", () => { state.coach.autoCapture = elements.autoCapture.checked; });
+  elements.autoCapture.addEventListener("change", () => {
+    state.coach.autoCapture = elements.autoCapture.checked;
+    if (state.cameraStream) renderCaptureReadiness(state.coach.metrics);
+    else if (state.sourceQuality.length) renderAnalyzedReadiness(state.sourceQuality);
+    else renderCaptureReadiness(null);
+  });
   elements.downloadPhoto.addEventListener("click", downloadPhoto);
   elements.downloadOriginal.addEventListener("click", downloadOriginal);
   elements.backgroundVariant.addEventListener("click", showBackgroundVariantDialog);
@@ -331,6 +422,24 @@ function bindEvents() {
   for (const button of elements.workspaceModeButtons) {
     button.addEventListener("click", () => setWorkspaceMode(button.dataset.workspaceMode));
   }
+  for (const button of elements.studioToolTabs) {
+    button.addEventListener("click", () => setStudioTool(button.dataset.studioTool));
+  }
+  for (const button of elements.studioOpenButtons) {
+    button.addEventListener("click", () => {
+      setStudioTool(button.dataset.studioOpen);
+      elements.studioModeSlot?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }
+  for (const button of elements.tonePresetButtons) {
+    button.addEventListener("click", () => applyTonePreset(button.dataset.tonePreset));
+  }
+  elements.demoFilters?.addEventListener("click", handleDemoFilterClick);
+  elements.demoGrid?.addEventListener("click", handleDemoPortraitClick);
+  elements.demoStart?.addEventListener("click", startDemoWalkthrough);
+  elements.demoWalkthroughPrimary?.addEventListener("click", handleDemoWalkthroughPrimary);
+  elements.demoWalkthroughSecondary?.addEventListener("click", handleDemoWalkthroughSecondary);
+  elements.demoWalkthroughClose?.addEventListener("click", closeDemoWalkthrough);
 
   if (elements.uploadDropzone) {
     for (const eventName of ["dragenter", "dragover"]) {
@@ -400,7 +509,7 @@ function setWorkspaceMode(mode, { persist = true } = {}) {
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", active ? "true" : "false");
   }
-  if (next === "studio") document.querySelector(".studio-details")?.setAttribute("open", "");
+  if (next === "studio") document.querySelector(".studio-advanced")?.setAttribute("open", "");
   if (persist) {
     try {
       localStorage.setItem("kvnp-workspace-mode", next);
@@ -410,15 +519,68 @@ function setWorkspaceMode(mode, { persist = true } = {}) {
   }
 }
 
+function moveStudioNode(node, target) {
+  if (node && target) target.append(node);
+}
+
+function mountStudioControls() {
+  moveStudioNode(elements.autoStraighten?.closest(".switch-row"), elements.studioCropControls);
+  moveStudioNode(elements.centerX?.closest(".manual-details"), elements.studioCropControls);
+  moveStudioNode(elements.measurements, elements.studioCropControls);
+
+  moveStudioNode(elements.autoTone?.closest(".switch-row"), elements.studioToneControls);
+  moveStudioNode(elements.autoLighting?.closest(".switch-row"), elements.studioToneControls);
+  moveStudioNode(elements.enhanceOutput?.closest(".switch-row"), elements.studioToneControls);
+  moveStudioNode(document.querySelector('label[for="enhancement-mode"]'), elements.studioToneControls);
+  moveStudioNode(elements.enhancementMode, elements.studioToneControls);
+  const adjustmentPanel = elements.adjustGrid?.closest(".adjust-panel");
+  if (adjustmentPanel) adjustmentPanel.open = true;
+  moveStudioNode(adjustmentPanel, elements.studioAdjustments);
+
+  moveStudioNode(elements.backgroundPolicyNote, elements.studioBackgroundControls);
+  moveStudioNode(elements.backgroundReplace?.closest(".switch-row"), elements.studioBackgroundControls);
+  moveStudioNode(document.querySelector('label[for="background-cleanup"]'), elements.studioBackgroundControls);
+  moveStudioNode(elements.backgroundCleanup, elements.studioBackgroundControls);
+  moveStudioNode(document.querySelector('label[for="background-color"]'), elements.studioBackgroundControls);
+  moveStudioNode(elements.backgroundColor?.closest(".bg-color-row"), elements.studioBackgroundControls);
+  moveStudioNode(elements.touchupToggle?.closest(".touchup-bar"), elements.studioTouchupControls);
+
+  moveStudioNode(elements.previewMode?.closest(".preview-mode-card"), elements.studioModeSlot);
+  moveStudioNode(elements.rerunVision?.closest(".automation-card"), elements.studioAdvancedControls);
+  moveStudioNode(elements.pipelineReport, elements.studioAdvancedControls);
+
+  setStudioTool(state.studioTool);
+}
+
+function setStudioTool(tool) {
+  const next = ["crop", "tone", "background", "output"].includes(tool) ? tool : "crop";
+  state.studioTool = next;
+  for (const button of elements.studioToolTabs) {
+    const active = button.dataset.studioTool === next;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+  }
+  for (const panel of elements.studioToolPanels) {
+    const active = panel.dataset.studioPanel === next;
+    panel.hidden = !active;
+    panel.classList.toggle("active", active);
+  }
+  if (next === "tone") renderToneHistogram();
+}
+
 function renderCategoryFilters() {
   if (!elements.categoryFilters) return;
   const categories = ["All", ...new Set(RULE_PROFILES.map((profile) => profile.category).filter(Boolean))];
   elements.categoryFilters.innerHTML = categories
     .map((category) => {
       const active = category === state.catalogueCategory;
+      const count = category === "All"
+        ? RULE_PROFILES.length
+        : RULE_PROFILES.filter((profile) => profile.category === category).length;
+      const icon = category === "All" ? "passport" : CATEGORY_ICONS[category] ?? "identity";
       return `<button class="category-filter ${active ? "active" : ""}" type="button" data-category="${escapeHtml(
         category,
-      )}" aria-pressed="${active ? "true" : "false"}">${escapeHtml(category)}</button>`;
+      )}" aria-pressed="${active ? "true" : "false"}">${iconMarkup(icon)}<span>${escapeHtml(category)}</span><small>${count}</small></button>`;
     })
     .join("");
 }
@@ -444,14 +606,20 @@ function renderProgrammeCatalogue() {
       const active = profile.id === state.profile.id;
       const meta = getCatalogueMeta(profile);
       const policyLabel = describeSubmissionMode(meta.submissionMode);
+      const categoryIcon = CATEGORY_ICONS[profile.category] ?? "identity";
+      const output = `${profile.output.widthPx} x ${profile.output.heightPx}`;
       return `
         <button class="programme-card ${active ? "active" : ""}" type="button" data-profile-id="${escapeHtml(profile.id)}"
           aria-pressed="${active ? "true" : "false"}">
+          <span class="programme-code">${escapeHtml(profile.country)}</span>
+          <span class="programme-icon">${iconMarkup(categoryIcon)}</span>
           <span class="programme-country">${escapeHtml(profile.countryName)}</span>
           <strong>${escapeHtml(profile.programme)}</strong>
-          <small>${escapeHtml(profile.category)} / ${escapeHtml(profile.delivery)}</small>
-          <span class="programme-policy ${meta.submissionMode === "checker_only" ? "validation" : "assisted"}">${escapeHtml(policyLabel)}</span>
-          <span class="programme-verified">${meta.verificationStatus === "verified" ? "Verified" : "Researching"}</span>
+          <span class="programme-spec">${escapeHtml(profile.delivery)} / ${escapeHtml(output)} px</span>
+          <span class="programme-card-foot">
+            <span class="programme-policy ${meta.submissionMode === "checker_only" ? "validation" : "assisted"}">${escapeHtml(policyLabel)}</span>
+            <span class="programme-verified">${meta.verificationStatus === "verified" ? "Verified" : "Researching"}</span>
+          </span>
         </button>`;
     })
     .join("");
@@ -488,7 +656,186 @@ function addFilesToQueue(files) {
     if (!firstNewId) firstNewId = id;
   }
   renderQueue();
-  if (firstNewId) selectJob(firstNewId);
+  if (firstNewId) return selectJob(firstNewId);
+  return Promise.resolve();
+}
+
+function renderDemoLibrary() {
+  if (!elements.demoGrid || !elements.demoFilters) return;
+  elements.demoFilters.innerHTML = DEMO_FILTERS.map((filter) => {
+    const count = filter === "All" ? DEMO_PORTRAITS.length : DEMO_PORTRAITS.filter((item) => item.category === filter).length;
+    const active = filter === state.demoFilter;
+    return `<button class="demo-filter ${active ? "active" : ""}" type="button" data-demo-filter="${escapeHtml(filter)}" aria-pressed="${active ? "true" : "false"}">${escapeHtml(filter)} <span>${count}</span></button>`;
+  }).join("");
+
+  const portraits = state.demoFilter === "All"
+    ? DEMO_PORTRAITS
+    : DEMO_PORTRAITS.filter((item) => item.category === state.demoFilter);
+  if (elements.demoLibraryCount) {
+    elements.demoLibraryCount.textContent = state.demoFilter === "All"
+      ? `${DEMO_PORTRAITS.length} cases`
+      : `${portraits.length} of ${DEMO_PORTRAITS.length}`;
+  }
+  elements.demoGrid.innerHTML = portraits.map((portrait) => {
+    const selected = portrait.id === state.demoSelected;
+    const resultStatus = selected && state.decision ? String(state.decision.status ?? "review").replaceAll("_", " ") : "";
+    const resultStatusClass = selected && state.decision ? String(state.decision.status ?? "review").replaceAll("_", "-") : "";
+    return `
+      <button class="demo-case ${selected ? "active" : ""}" type="button" data-demo-id="${escapeHtml(portrait.id)}" aria-pressed="${selected ? "true" : "false"}">
+        <span class="demo-case-image">
+          <img src="${escapeHtml(portrait.path)}" alt="" loading="lazy" />
+          <span class="demo-case-category">${escapeHtml(portrait.category)}</span>
+          ${resultStatus ? `<span class="demo-case-result status-${escapeHtml(resultStatusClass)}">${escapeHtml(resultStatus)}</span>` : ""}
+        </span>
+        <span class="demo-case-copy">
+          <strong>${escapeHtml(portrait.title)}</strong>
+          <small>${escapeHtml(portrait.lesson)}</small>
+          <span>Run this case</span>
+        </span>
+      </button>`;
+  }).join("");
+}
+
+function handleDemoFilterClick(event) {
+  const button = event.target.closest("[data-demo-filter]");
+  if (!button) return;
+  state.demoFilter = DEMO_FILTERS.includes(button.dataset.demoFilter) ? button.dataset.demoFilter : "All";
+  renderDemoLibrary();
+}
+
+function handleDemoPortraitClick(event) {
+  const button = event.target.closest("[data-demo-id]");
+  if (!button) return;
+  const portrait = DEMO_PORTRAITS.find((item) => item.id === button.dataset.demoId);
+  if (portrait) loadDemoPortrait(portrait, button);
+}
+
+async function loadDemoPortrait(portrait, button) {
+  state.demoSelected = portrait.id;
+  state.demoWalkthroughActive = true;
+  renderDemoLibrary();
+  renderDemoWalkthrough();
+  const loaded = await loadSamplePortrait({
+    source: portrait.path,
+    filename: `demo-${portrait.id}.jpg`,
+    label: portrait.title,
+    button,
+  });
+  if (loaded) renderDemoWalkthrough();
+}
+
+async function loadSamplePortrait({ source, filename, label, button }) {
+  if (!source || button?.disabled) return false;
+  button.disabled = true;
+  button.classList.add("loading");
+  try {
+    const response = await fetch(source);
+    if (!response.ok) throw new Error(`Sample unavailable (${response.status})`);
+    const blob = await response.blob();
+    await addFilesToQueue([new File([blob], filename || "studio-sample.jpg", { type: blob.type || "image/jpeg" })]);
+    if (elements.photoStepNote) elements.photoStepNote.textContent = `${label} sample loaded. Continue when analysis finishes.`;
+    return true;
+  } catch (error) {
+    console.error(error);
+    if (elements.photoStepNote) elements.photoStepNote.textContent = "That sample could not be loaded. Choose Upload photo instead.";
+    return false;
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.classList.remove("loading");
+    }
+  }
+}
+
+function startDemoWalkthrough() {
+  state.demoWalkthroughActive = true;
+  renderDemoWalkthrough();
+  if (!state.demoSelected) elements.demoGrid?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function closeDemoWalkthrough() {
+  state.demoWalkthroughActive = false;
+  renderDemoWalkthrough();
+}
+
+function handleDemoWalkthroughPrimary() {
+  if (!state.demoSelected) {
+    setWizardStep(2, { force: true });
+    window.setTimeout(() => elements.demoGrid?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+    return;
+  }
+  if (state.wizardStep === 1) {
+    confirmProgramme();
+  } else if (state.wizardStep === 2) {
+    setWizardStep(3);
+  } else if (state.wizardStep === 3) {
+    setWizardStep(4);
+  } else {
+    setWizardStep(2, { force: true });
+    window.setTimeout(() => elements.demoLibrary?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+  }
+}
+
+function handleDemoWalkthroughSecondary() {
+  if (state.wizardStep === 3) {
+    if (!state.previewMode) {
+      elements.previewMode.checked = true;
+      handlePreviewModeChange();
+    }
+    setStudioTool("tone");
+    elements.studioModeSlot?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  setWizardStep(1, { force: true });
+}
+
+function renderDemoWalkthrough() {
+  if (!elements.demoWalkthrough) return;
+  const visible = state.guestSession && state.demoWalkthroughActive;
+  elements.demoWalkthrough.hidden = !visible;
+  if (!visible) return;
+
+  const portrait = DEMO_PORTRAITS.find((item) => item.id === state.demoSelected);
+  let step = portrait ? Math.max(1, state.wizardStep) : 1;
+  if (step > 4) step = 4;
+  for (const item of elements.demoWalkthroughSteps) {
+    const index = Number(item.dataset.demoStep);
+    item.classList.toggle("active", index === step);
+    item.classList.toggle("complete", index < step);
+  }
+
+  const counts = state.image ? computeLiveCounts() : { failCount: 0, warningCount: 0, unresolvedReviews: 0 };
+  if (!portrait) {
+    elements.demoWalkthroughTitle.textContent = "1 / Choose a demonstration portrait";
+    elements.demoWalkthroughDetail.textContent = "Pick a strong source or a deliberate failure case. Every card explains what the model should inspect.";
+    elements.demoWalkthroughPrimary.textContent = "Choose a portrait";
+    elements.demoWalkthroughPrimary.disabled = false;
+    elements.demoWalkthroughSecondary.textContent = "Change programme";
+    return;
+  }
+
+  if (state.wizardStep === 1) {
+    elements.demoWalkthroughTitle.textContent = `Programme comparison / ${portrait.title}`;
+    elements.demoWalkthroughDetail.textContent = `Choose another country or document. The portrait stays the same while crop, file and policy rules change. Test goal: ${portrait.lesson}`;
+    elements.demoWalkthroughPrimary.textContent = "Use this programme";
+  } else if (state.wizardStep === 2) {
+    elements.demoWalkthroughTitle.textContent = state.processing ? `Analyzing / ${portrait.title}` : `Source findings / ${portrait.title}`;
+    elements.demoWalkthroughDetail.textContent = state.processing
+      ? "MediaPipe is measuring face geometry, pose, eyes, shoulders, lighting, background and usable detail."
+      : `${counts.failCount} fail, ${counts.warningCount} warning, ${counts.unresolvedReviews} human review. ${portrait.lesson}`;
+    elements.demoWalkthroughPrimary.textContent = state.processing ? "Analyzing..." : "Open preparation";
+  } else if (state.wizardStep === 3) {
+    elements.demoWalkthroughTitle.textContent = `Prepare / ${portrait.title}`;
+    elements.demoWalkthroughDetail.textContent = "Compare before and after, inspect the official crop, then open colour tools. Strict programmes keep exploratory edits in Studio preview.";
+    elements.demoWalkthroughPrimary.textContent = "Review result";
+  } else {
+    const verdict = state.decision?.title ?? "Review the measured result";
+    elements.demoWalkthroughTitle.textContent = `Result / ${verdict}`;
+    elements.demoWalkthroughDetail.textContent = `${counts.failCount} fail, ${counts.warningCount} warning, ${counts.unresolvedReviews} human review. The report separates source defects, formatting and actual pixel edits.`;
+    elements.demoWalkthroughPrimary.textContent = "Try another portrait";
+  }
+  elements.demoWalkthroughPrimary.disabled = Boolean(state.processing);
+  elements.demoWalkthroughSecondary.textContent = state.wizardStep === 3 ? "Open colour tools" : "Change programme";
 }
 
 async function selectJob(id) {
@@ -651,6 +998,7 @@ function handlePreviewModeChange() {
     applyProfileAutomationDefaults();
   }
   renderPolicyList();
+  renderEditIntent();
   updateOutputNote();
   if (state.originalFile) scheduleServerProcessing();
   else scheduleAnalysis();
@@ -722,6 +1070,38 @@ function applyPolicyControlGate() {
   // Touch-up paints over the background, so it is gated by the same background policy.
   applyTouchupGate();
   updateBackgroundPolicyNote();
+  renderStudioToolPolicy();
+  renderEditIntent();
+}
+
+function renderEditIntent() {
+  if (!elements.previewMode || !elements.editModeTitle) return;
+  const card = elements.previewMode.closest(".preview-mode-card");
+  card?.setAttribute("data-active", state.previewMode ? "true" : "false");
+  if (state.previewMode) {
+    elements.editModeTitle.textContent = "Studio preview active";
+    elements.editModeDescription.textContent =
+      "All identity-preserving colour, lighting and backdrop tools are unlocked. Strict-programme previews remain visibly marked as non-submission files.";
+    elements.editModeLabel.textContent = "Return to application file";
+  } else {
+    elements.editModeTitle.textContent = "Application file";
+    elements.editModeDescription.textContent =
+      "The selected programme controls which edits can reach the application export. Framing and quality checks always remain available.";
+    elements.editModeLabel.textContent = "Unlock studio preview";
+  }
+}
+
+function renderStudioToolPolicy() {
+  const allowed = state.profile?.allowedEdits ?? {};
+  for (const tab of elements.studioToolTabs) {
+    const tool = tab.dataset.studioTool;
+    const locked = !state.previewMode && (
+      (tool === "tone" && allowed.tone === false && allowed.lighting === false && allowed.enhance === false)
+      || (tool === "background" && allowed.background === false)
+    );
+    tab.classList.toggle("policy-locked", locked);
+    tab.title = locked ? `Submission edits are not permitted for ${state.profile.countryName} ${state.profile.programme}` : "";
+  }
 }
 
 function updateBackgroundPolicyNote() {
@@ -790,11 +1170,15 @@ function applyAdjustmentPolicyGate() {
     input.title = validationOnly ? `Pixel adjustments are not permitted for ${state.profile.countryName}` : "";
   }
   if (elements.adjustReset) elements.adjustReset.disabled = validationOnly;
+  for (const button of elements.tonePresetButtons) {
+    button.disabled = validationOnly;
+    button.title = validationOnly ? `Use Studio preview to explore colour changes for ${state.profile.countryName}` : "";
+  }
   const manualDetails = document.querySelector(".manual-details");
   manualDetails?.classList.toggle("policy-locked", validationOnly);
   for (const input of manualDetails?.querySelectorAll("input") ?? []) input.disabled = validationOnly;
   if (validationOnly) state.manualOverride = false;
-  if (elements.autoFix) elements.autoFix.textContent = validationOnly ? "Recheck photo" : "Prepare photo";
+  if (elements.autoFix) elements.autoFix.textContent = validationOnly ? "Recheck photo" : "Auto prepare";
   syncAdjustControls();
 }
 
@@ -877,6 +1261,7 @@ function renderWorkflowProgress() {
     : state.image
       ? "Photo loaded. Continue to inspect and prepare it."
       : "Upload or capture one photo to continue.";
+  renderDemoWalkthrough();
 }
 
 const EDIT_LABELS = {
@@ -1266,6 +1651,50 @@ function renderProfile() {
     elements.programmeBackground.textContent = describeBackground(profile.background?.mode ?? "plain_light");
   }
   const catalogueMeta = getCatalogueMeta(profile);
+  const categoryIcon = CATEGORY_ICONS[profile.category] ?? "identity";
+  const printSize = profile.output.printWidthMm && profile.output.printHeightMm
+    ? `${profile.output.printWidthMm} x ${profile.output.printHeightMm} mm`
+    : "Digital file";
+  const mimeLabel = {
+    "image/jpeg": "JPEG",
+    "image/png": "PNG",
+    "image/webp": "WebP",
+  }[profile.output.mime] ?? profile.output.mime ?? "Required format";
+  const editKeys = ["straighten", "tone", "lighting", "background", "enhance"];
+  const editable = editKeys.some((key) => profile.allowedEdits?.[key] !== false);
+
+  if (elements.selectedCountryCode) elements.selectedCountryCode.textContent = profile.country;
+  if (elements.selectedCategoryIcon) elements.selectedCategoryIcon.setAttribute("href", `#icon-${categoryIcon}`);
+  if (elements.selectedProgrammeCountry) elements.selectedProgrammeCountry.textContent = profile.countryName;
+  if (elements.selectedProgrammeName) elements.selectedProgrammeName.textContent = profile.programme;
+  if (elements.selectedProgrammeDelivery) {
+    elements.selectedProgrammeDelivery.textContent = `${profile.category} / ${profile.delivery} / ${output}`;
+  }
+  if (elements.inspectorProfileName) elements.inspectorProfileName.textContent = `${profile.countryName} ${profile.programme}`;
+  if (elements.inspectorProfileSpec) elements.inspectorProfileSpec.textContent = `${output} / ${head}`;
+  if (elements.inspectorPolicyChip) {
+    elements.inspectorPolicyChip.textContent = editable ? "Assisted edits" : "Format only";
+    elements.inspectorPolicyChip.classList.toggle("locked", !editable);
+  }
+  if (elements.studioCropSpec) {
+    const eyeTarget = profile.head?.eye?.targetFromTopPercent;
+    elements.studioCropSpec.innerHTML = `
+      <div><span>Canvas</span><strong>${escapeHtml(output)}</strong></div>
+      <div><span>Head target</span><strong>${escapeHtml(`${profile.head.targetPercent ?? "-"}%`)}</strong></div>
+      <div><span>Eye line</span><strong>${escapeHtml(eyeTarget ? `${eyeTarget}% from top` : "Programme range")}</strong></div>
+      <div><span>Top margin</span><strong>${escapeHtml(`${profile.head.topMarginPercent ?? "-"}%`)}</strong></div>`;
+  }
+  if (elements.studioOutputCanvas) elements.studioOutputCanvas.textContent = output;
+  if (elements.studioOutputMime) elements.studioOutputMime.textContent = mimeLabel;
+  if (elements.studioOutputPrint) elements.studioOutputPrint.textContent = printSize;
+  if (elements.studioOutputBackground) {
+    elements.studioOutputBackground.textContent = describeBackground(profile.background?.mode ?? "plain_light");
+  }
+  if (elements.studioOutputPolicy) {
+    elements.studioOutputPolicy.textContent = editable
+      ? "Permitted corrections are disclosed in the audit report. Face shape and identity remain unchanged."
+      : "This programme requires original pixels. KVNP will crop, size and validate the photo without retouching it.";
+  }
   if (elements.programmeMode) elements.programmeMode.textContent = describeSubmissionMode(catalogueMeta.submissionMode);
   if (elements.programmeStatus) {
     elements.programmeStatus.textContent = catalogueMeta.verificationStatus === "verified"
@@ -2251,12 +2680,14 @@ function renderSourceQuality() {
   if (!state.image) {
     elements.retakeGuidance.textContent = "Load a portrait to see whether the source is strong enough.";
     renderCoachBanner("idle", "Add a portrait to begin", "KVNP will check camera level, shoulders, gaze, lighting and usable detail.");
+    renderCaptureReadiness(null);
     return;
   }
 
   if (!quality.length) {
     elements.retakeGuidance.textContent = "Waiting for Python quality analysis.";
     renderCoachBanner("working", "Inspecting your photo", "Measuring pose, gaze, lighting, background and usable facial detail.");
+    renderCaptureReadiness({ processing: true });
     return;
   }
 
@@ -2271,6 +2702,7 @@ function renderSourceQuality() {
   } else {
     renderCoachBanner("ready", "Capture looks strong", guidance);
   }
+  renderAnalyzedReadiness(quality);
 
   for (const item of quality) {
     const row = document.createElement("article");
@@ -2292,6 +2724,93 @@ function renderCoachBanner(tone, directive, detail) {
   elements.coachBanner.dataset.tone = tone;
   elements.coachDirective.textContent = directive;
   elements.coachDetail.textContent = detail;
+}
+
+const READINESS_GROUPS = [
+  { label: "Framing", live: ["center", "distance"], analyzed: ["source_resolution", "source_face_pixels"] },
+  { label: "Head & shoulders", live: ["level", "pitch", "straight"], analyzed: ["source_head_pitch", "source_shoulder_level", "source_body_alignment"] },
+  { label: "Eyes & gaze", live: ["eyes", "gaze"], analyzed: ["eye_gaze", "eyes_open"] },
+  { label: "Expression", live: ["neutral"], analyzed: ["mouth"] },
+  { label: "Lighting", live: ["light", "even"], analyzed: ["source_lighting", "brightness", "contrast"] },
+  { label: "Detail", live: [], analyzed: ["source_focus", "source_noise", "sharpness"] },
+];
+
+function readinessStatus(items) {
+  if (!items.length) return "pending";
+  const statuses = items.map((item) => item.status);
+  if (statuses.includes("fail")) return "fail";
+  if (statuses.includes("warning")) return "warning";
+  if (statuses.includes("review") || statuses.includes("pending")) return "review";
+  return "pass";
+}
+
+function renderReadinessItems(items, scoreLabel, tone, autoLabel) {
+  if (!elements.captureReadiness || !elements.captureReadinessGrid) return;
+  elements.captureReadiness.dataset.tone = tone;
+  elements.readinessScore.textContent = scoreLabel;
+  elements.autoCaptureState.textContent = autoLabel;
+  elements.captureReadinessGrid.innerHTML = items.length
+    ? items.map((item) => `
+        <article class="readiness-item ${escapeHtml(item.status)}">
+          <span class="readiness-mark" aria-hidden="true"></span>
+          <div><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.detail)}</small></div>
+        </article>`).join("")
+    : '<span class="readiness-empty">Live guidance appears here when a face is visible.</span>';
+}
+
+function renderCaptureReadiness(metrics, now = performance.now()) {
+  if (!metrics) {
+    renderReadinessItems([], "Waiting for photo", "idle", state.coach.autoCapture ? "Auto capture armed" : "Manual capture");
+    return;
+  }
+  if (metrics.processing) {
+    renderReadinessItems([], "Analyzing source", "working", "Uploaded photo");
+    return;
+  }
+  if (!metrics.present) {
+    renderReadinessItems([], metrics.fallback ? "Live scoring unavailable" : "Face not detected", "warning", "Move into frame");
+    return;
+  }
+
+  const factors = metrics.factors ?? [];
+  const items = READINESS_GROUPS.map((group) => {
+    const matches = factors.filter((factor) => group.live.includes(factor.id));
+    if (!matches.length) return { label: group.label, status: "review", detail: "Checked after capture" };
+    const worst = matches.reduce((current, factor) => !current || factor.s < current.s ? factor : current, null);
+    const status = worst.s >= 0.75 ? "pass" : worst.s >= 0.4 ? "warning" : "fail";
+    return { label: group.label, status, detail: status === "pass" ? "Ready" : worst.hint };
+  });
+  const held = state.coach.readySince ? Math.max(0, now - state.coach.readySince) : 0;
+  const autoLabel = !state.coach.autoCapture
+    ? "Manual capture"
+    : metrics.ready
+      ? `Hold still ${Math.min(100, Math.round(held / 8))}%`
+      : "Auto capture waiting";
+  renderReadinessItems(items, `${metrics.score}/100`, metrics.ready ? "ready" : "warning", autoLabel);
+}
+
+function renderAnalyzedReadiness(quality) {
+  const items = READINESS_GROUPS.map((group) => {
+    const matches = quality.filter((check) => group.analyzed.includes(check.id));
+    const status = readinessStatus(matches);
+    const issue = matches.find((check) => check.status === "fail")
+      ?? matches.find((check) => check.status === "warning")
+      ?? matches.find((check) => check.status === "review");
+    return {
+      label: group.label,
+      status,
+      detail: issue ? issue.value : status === "pass" ? "Ready" : "Review in final checks",
+    };
+  });
+  const failed = items.filter((item) => item.status === "fail").length;
+  const warned = items.filter((item) => item.status === "warning").length;
+  const tone = failed ? "fail" : warned ? "warning" : "ready";
+  const summary = failed
+    ? `${failed} capture issue${failed === 1 ? "" : "s"}`
+    : warned
+      ? `${warned} improvement${warned === 1 ? "" : "s"}`
+      : "Capture ready";
+  renderReadinessItems(items, summary, tone, "Uploaded photo analyzed");
 }
 
 function getRetakeGuidance(fails, warnings) {
@@ -2377,6 +2896,7 @@ function renderDecision() {
   if (!decision) {
     elements.decisionCard.className = "decision-card pending";
     elements.decisionCard.innerHTML = "<strong>Waiting for image</strong><span>Load a portrait to generate a decision.</span>";
+    renderDemoLibrary();
     return;
   }
 
@@ -2398,6 +2918,7 @@ function renderDecision() {
     <small>${failCount} fail / ${warningCount} warning / ${unresolvedReviews} review</small>
     ${actions ? `<ul>${actions}</ul>` : ""}
   `;
+  renderDemoLibrary();
 }
 
 const MANUAL_TOUCHUP_ENTRY = {
@@ -2512,6 +3033,56 @@ function renderCorrections() {
     <ul>${items}</ul>
     <small>Measured means software analysis only. Formatted means crop, size or encoding. Changed means pixels were modified. Blocked means the selected submission policy prevented that tool.</small>
   `;
+  renderPreparationReceipt(changedCount);
+}
+
+function renderPreparationReceipt(changedCount = null) {
+  if (!elements.prepareSourceState) return;
+  const quality = state.sourceQuality ?? [];
+  const fails = quality.filter((item) => item.status === "fail").length;
+  const warnings = quality.filter((item) => item.status === "warning").length;
+  const correctionIds = new Set((state.corrections ?? []).map((item) => item.id));
+  const extraEffectiveEdits = Number(Boolean(state.effectiveEdits?.background && !correctionIds.has("background")))
+    + Number(Boolean(state.effectiveEdits?.enhance && !correctionIds.has("enhance")));
+  const browserAdjustment = Number(Object.values(state.adjust ?? {}).some((value) => Number(value) !== 0));
+  const actualChangedCount = changedCount
+    ?? (state.corrections ?? []).length
+      + Number(state.manualTouchup)
+      + extraEffectiveEdits
+      + browserAdjustment;
+
+  elements.prepareSourceState.textContent = !state.image
+    ? "Waiting"
+    : fails
+      ? "Retake advised"
+      : warnings
+        ? "Usable with review"
+        : "Source ready";
+  elements.prepareSourceDetail.textContent = !state.image
+    ? "Add a photo to begin."
+    : fails
+      ? `${fails} source defect${fails === 1 ? "" : "s"} cannot be repaired safely.`
+      : warnings
+        ? `${warnings} source warning${warnings === 1 ? "" : "s"} remains visible.`
+        : "Pose, lighting and usable detail passed automated checks.";
+
+  elements.prepareChangeState.textContent = actualChangedCount
+    ? `${actualChangedCount} disclosed edit${actualChangedCount === 1 ? "" : "s"}`
+    : "No pixel edits";
+  elements.prepareChangeDetail.textContent = actualChangedCount
+    ? "See the processing audit in Review for every applied operation."
+    : "Only crop, size and file encoding were produced.";
+
+  const outputReady = Boolean(state.exportBlob && state.processedImage);
+  const formatLabel = state.outputFormat === "application/pdf"
+    ? "PDF"
+    : (state.outputFormat.split("/")[1] ?? "file").toUpperCase();
+  elements.prepareOutputState.textContent = outputReady
+    ? `${state.profile.output.widthPx} x ${state.profile.output.heightPx}px ready`
+    : "Not prepared";
+  elements.prepareOutputDetail.textContent = outputReady
+    ? `${state.profile.delivery} ${formatLabel} output; identity geometry unchanged.`
+    : "The programme controls size, crop and permitted processing.";
 }
 
 const SCAN_PERIOD_MS = 1700;
@@ -2736,6 +3307,8 @@ function renderChecks() {
   elements.downloadReport.disabled = !state.lastReport;
   renderBackgroundVariantControl();
   updateDownloadAdvisory(downloadIssues);
+  renderReviewVerdict(downloadIssues);
+  renderPreparationReceipt();
   updateReviewPreview();
   elements.checksList.innerHTML = "";
 
@@ -2799,6 +3372,8 @@ function renderNoResult() {
   elements.downloadReport.disabled = true;
   renderBackgroundVariantControl();
   updateDownloadAdvisory();
+  renderReviewVerdict();
+  renderPreparationReceipt(0);
   updateReviewPreview();
   renderWorkflowProgress();
 }
@@ -2873,6 +3448,68 @@ function updateDownloadAdvisory(issues = getDownloadIssues()) {
   }
 
   elements.downloadAdvisory.className = `download-advisory ${status}`;
+}
+
+function renderReviewVerdict(issues = getDownloadIssues()) {
+  if (!elements.reviewVerdict) return;
+  const { failCount, warningCount, unresolvedReviews } = computeLiveCounts();
+  const prepared = Boolean(state.exportBlob && state.processedImage);
+  const hasOriginal = Boolean(state.originalFile);
+  const checkerOnly = state.profile?.checkerOnly === true;
+  const ready = prepared && !checkerOnly && failCount === 0 && warningCount === 0 && unresolvedReviews === 0;
+  const tone = ready ? "ready" : failCount ? "fail" : issues.length ? "warning" : "pending";
+  elements.reviewVerdict.dataset.tone = tone;
+
+  elements.verdictRecommendation.textContent = !state.image
+    ? "Waiting for photo"
+    : ready
+      ? "Recommended to submit"
+      : failCount
+        ? "Retake recommended"
+        : unresolvedReviews
+          ? "Human review required"
+          : warningCount
+            ? "Downloadable with warnings"
+            : checkerOnly
+              ? "Source check only"
+              : "Preparation incomplete";
+  elements.verdictRecommendationDetail.textContent = !state.image
+    ? "No assessment is available yet."
+    : ready
+      ? "Automated checks pass and human items are confirmed."
+      : `${failCount} fail, ${warningCount} warning, ${unresolvedReviews} human confirmation${unresolvedReviews === 1 ? "" : "s"}.`;
+
+  elements.verdictFile.textContent = prepared && !checkerOnly
+    ? "Prepared file available"
+    : hasOriginal
+      ? "Original available"
+      : "Original unavailable";
+  elements.verdictFileDetail.textContent = prepared && !checkerOnly
+    ? "JPEG, PNG, WebP, PDF and print-sheet controls are available."
+    : hasOriginal
+      ? checkerOnly
+        ? "This programme permits checking the untouched source only."
+        : "Preparation failed or has not finished; the source remains downloadable."
+      : "Upload a photo to unlock downloads.";
+
+  elements.verdictAction.textContent = !state.image
+    ? "Add a portrait"
+    : ready
+      ? "Download the required file"
+      : failCount
+        ? "Return to Photo and retake"
+        : unresolvedReviews
+          ? "Confirm the human checks"
+          : issues.length
+            ? "Review warnings before download"
+            : checkerOnly
+              ? "Use the authority capture route"
+              : "Prepare the photo";
+  elements.verdictActionDetail.textContent = ready
+    ? "Use Required size for online submission or Print sheet for physical copies."
+    : failCount
+      ? "Crop or enhancement cannot safely repair failed capture conditions."
+      : "Warnings never hide the original or lock an available prepared file.";
 }
 
 function resetDownloadWarningDialog() {
@@ -2954,6 +3591,8 @@ function stopCamera() {
   elements.cameraFeed.hidden = true;
   elements.captureButton.disabled = true;
   elements.cameraButton.textContent = "Camera";
+  if (state.sourceQuality.length) renderAnalyzedReadiness(state.sourceQuality);
+  else renderCaptureReadiness(null);
 }
 
 function renderCameraFrame() {
@@ -2984,6 +3623,7 @@ function renderCameraFrame() {
     if (metrics) {
       if (metrics.present && metrics.faceBox) appendLightingFactors(metrics, fit);
       state.coach.metrics = metrics;
+      renderCaptureReadiness(metrics, now);
     }
   }
   if (state.coach.metrics) drawCoachOverlay(fit, state.coach.metrics, now);
@@ -3758,16 +4398,21 @@ function bindCockpit() {
 }
 
 function buildAdjustControls() {
-  elements.adjustGrid.innerHTML = ADJUST_CONTROLS.map(
-    (control) => `
+  let activeGroup = "";
+  elements.adjustGrid.innerHTML = ADJUST_CONTROLS.map((control) => {
+    const groupHeading = control.group !== activeGroup
+      ? `<div class="adjust-group"><span>${control.group}</span></div>`
+      : "";
+    activeGroup = control.group;
+    return `${groupHeading}
       <div class="adjust-row">
         <div class="adjust-head">
           <span>${control.label}</span>
           <span class="adjust-val" data-val="${control.key}">${state.adjust[control.key]}</span>
         </div>
-        <input type="range" data-adjust="${control.key}" min="${control.min}" max="${control.max}" value="${state.adjust[control.key]}" />
-      </div>`,
-  ).join("");
+        <input type="range" data-adjust="${control.key}" min="${control.min}" max="${control.max}" value="${state.adjust[control.key]}" aria-label="${control.label}" />
+      </div>`;
+  }).join("");
 
   for (const input of elements.adjustGrid.querySelectorAll("[data-adjust]")) {
     input.addEventListener("input", () => {
@@ -3782,6 +4427,21 @@ function buildAdjustControls() {
     });
   }
   applyAdjustmentPolicyGate();
+  renderToneHistogram();
+}
+
+function applyTonePreset(preset) {
+  if (isValidationOnlyProfile() && !state.previewMode) return;
+  Object.assign(state.adjust, EMPTY_ADJUSTMENTS);
+  if (preset === "brighter") Object.assign(state.adjust, { exposure: 12, shadows: 10, contrast: 4 });
+  if (preset === "warmer") Object.assign(state.adjust, { warmth: 12, tint: 3, saturation: 4 });
+  if (preset === "mono") Object.assign(state.adjust, { saturation: -100, contrast: 6 });
+  state.downloadAcknowledged = false;
+  syncAdjustControls();
+  setResultView("result");
+  applyAdjustments();
+  renderCorrections();
+  scheduleReanalyze();
 }
 
 function syncAdjustControls() {
@@ -3824,9 +4484,11 @@ function applyAdjustments() {
   finalCtx.clearRect(0, 0, width, height);
   finalCtx.drawImage(adjustCanvas, 0, 0, width, height);
   if (state.guides) drawGuides(finalCtx, width, height);
+  renderToneHistogram();
 }
 
 function applyTone(data, adjust) {
+  const exposure = 2 ** (adjust.exposure / 100);
   const brightness = adjust.brightness * 1.5; // -150..150
   const c = adjust.contrast;
   const contrastF = (259 * (c * 2.55 + 255)) / (255 * (259 - c * 2.55));
@@ -3835,6 +4497,9 @@ function applyTone(data, adjust) {
   const tint = adjust.tint * 0.6;
   const hi = adjust.highlights / 100;
   const sh = adjust.shadows / 100;
+  const redMix = 1 + adjust.red / 400;
+  const greenMix = 1 + adjust.green / 400;
+  const blueMix = 1 + adjust.blue / 400;
 
   for (let i = 0; i < data.length; i += 4) {
     let r = data[i];
@@ -3847,9 +4512,9 @@ function applyTone(data, adjust) {
     const highW = luma0 * luma0;
     const zone = sh * 70 * shadowW + hi * 70 * highW;
 
-    r += brightness + warmth + zone;
-    g += brightness + tint + zone;
-    b += brightness - warmth + zone;
+    r = r * exposure + brightness + warmth + zone;
+    g = g * exposure + brightness + tint + zone;
+    b = b * exposure + brightness - warmth + zone;
 
     r = contrastF * (r - 128) + 128;
     g = contrastF * (g - 128) + 128;
@@ -3862,10 +4527,68 @@ function applyTone(data, adjust) {
       b = luma + (b - luma) * sat;
     }
 
+    r *= redMix;
+    g *= greenMix;
+    b *= blueMix;
+
     data[i] = clamp255(r);
     data[i + 1] = clamp255(g);
     data[i + 2] = clamp255(b);
   }
+}
+
+function renderToneHistogram() {
+  const canvas = elements.toneHistogram;
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const width = canvas.width;
+  const height = canvas.height;
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#090a0b";
+  ctx.fillRect(0, 0, width, height);
+  ctx.strokeStyle = "rgba(255,255,255,0.08)";
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i += 1) {
+    const x = Math.round((width * i) / 4) + 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, height);
+    ctx.stroke();
+  }
+
+  if (!state.processedImage || !adjustCanvas.width || !adjustCanvas.height) return;
+  let pixels;
+  try {
+    pixels = adjustCtx.getImageData(0, 0, adjustCanvas.width, adjustCanvas.height).data;
+  } catch {
+    return;
+  }
+  const channels = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)];
+  const pixelCount = pixels.length / 4;
+  const stride = Math.max(1, Math.floor(pixelCount / 120000));
+  for (let pixel = 0; pixel < pixelCount; pixel += stride) {
+    const index = pixel * 4;
+    channels[0][pixels[index]] += 1;
+    channels[1][pixels[index + 1]] += 1;
+    channels[2][pixels[index + 2]] += 1;
+  }
+  const peak = Math.max(1, ...channels.flatMap((channel) => Array.from(channel)));
+  const colours = ["rgba(255,75,65,0.82)", "rgba(66,218,132,0.76)", "rgba(63,153,255,0.82)"];
+  ctx.globalCompositeOperation = "lighter";
+  channels.forEach((channel, channelIndex) => {
+    ctx.strokeStyle = colours[channelIndex];
+    ctx.lineWidth = 1.35;
+    ctx.beginPath();
+    for (let value = 0; value < 256; value += 1) {
+      const x = (value / 255) * (width - 1);
+      const normalized = Math.sqrt(channel[value] / peak);
+      const y = height - 4 - normalized * (height - 10);
+      if (value === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  });
+  ctx.globalCompositeOperation = "source-over";
 }
 
 function applySharpen(ctx, width, height, amount) {
@@ -4178,7 +4901,7 @@ function applyPreset(name) {
   state.outputScale = preset.outputScale === 2 ? 2 : 1;
   state.outputDpi = preset.outputDpi === 600 ? 600 : 300;
   state.outputQuality = preset.outputQuality ?? 92;
-  Object.assign(state.adjust, { brightness: 0, contrast: 0, saturation: 0, warmth: 0, tint: 0, highlights: 0, shadows: 0, sharpness: 0 }, preset.adjust ?? {});
+  Object.assign(state.adjust, EMPTY_ADJUSTMENTS, preset.adjust ?? {});
 
   elements.backgroundReplace.checked = state.backgroundReplaced;
   elements.enhanceOutput.checked = state.enhanceOutput;
@@ -4391,6 +5114,8 @@ function hideAuthError() {
 }
 
 function applyAccount(user) {
+  state.guestSession = !user;
+  document.body.dataset.guest = state.guestSession ? "true" : "false";
   if (user) {
     const label = user.name || user.email;
     authEls.accountName.textContent = label;
@@ -4403,6 +5128,10 @@ function applyAccount(user) {
     authEls.accountAvatar.textContent = "G";
     authEls.logout.style.display = "none";
   }
+  if (elements.demoLibrary) elements.demoLibrary.hidden = !state.guestSession;
+  if (!state.guestSession) state.demoWalkthroughActive = false;
+  renderDemoLibrary();
+  renderDemoWalkthrough();
 }
 
 async function submitAuth(event) {

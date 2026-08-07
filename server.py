@@ -282,6 +282,7 @@ def resolve_profile(client_profile):
 
 app = FastAPI(title="KVNP Holdings Inc Passport Photo Studio")
 app.mount("/src", StaticFiles(directory=ROOT / "src"), name="src")
+app.mount("/assets", StaticFiles(directory=ROOT / "assets"), name="assets")
 app.mount("/screenshots", StaticFiles(directory=ROOT / "screenshots"), name="screenshots")
 app.mount("/docs", StaticFiles(directory=ROOT / "docs"), name="docs")
 

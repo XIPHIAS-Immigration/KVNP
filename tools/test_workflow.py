@@ -82,6 +82,24 @@ def test_guided_catalogue_and_studio_mode_are_present():
         "programme-reviewed",
         "programme-notice",
         "coach-banner",
+        "capture-readiness",
+        "capture-readiness-grid",
+        "preparation-receipt",
+        "review-verdict",
+        "verdict-recommendation",
+        "verdict-file",
+        "verdict-action",
+        "selected-country-code",
+        "selected-programme-name",
+        "studio-crop-spec",
+        "studio-crop-controls",
+        "studio-tone-controls",
+        "studio-background-controls",
+        "studio-output-canvas",
+        "studio-output-policy",
+        "studio-mode-slot",
+        "edit-mode-title",
+        "tone-histogram",
     ):
         assert f'id="{element_id}"' in html, element_id
     assert 'data-workspace-mode="guided"' in html
@@ -90,8 +108,59 @@ def test_guided_catalogue_and_studio_mode_are_present():
     assert "function getCatalogueMeta(" in app
     assert "function renderProgrammeNotice(" in app
     assert "function renderCoachBanner(" in app
+    assert "function renderCaptureReadiness(" in app
+    assert "function renderPreparationReceipt(" in app
+    assert "function renderReviewVerdict(" in app
+    assert "function mountStudioControls(" in app
+    assert "function setStudioTool(" in app
+    assert "function renderEditIntent(" in app
+    assert "function loadSamplePortrait(" in app
+    assert "function renderToneHistogram(" in app
+    assert "const CATEGORY_ICONS =" in app
     assert 'document.body.dataset.workspaceMode = next;' in app
     print("test_guided_catalogue_and_studio_mode_are_present", PASS)
+
+
+def test_colour_workstation_is_complete():
+    html, app = load_sources()
+    for key in ("exposure", "brightness", "contrast", "saturation", "warmth", "tint", "highlights", "shadows", "red", "green", "blue", "sharpness"):
+        assert f'key: "{key}"' in app, key
+    assert 'data-studio-open="tone"' in html
+    assert 'data-tone-preset="natural"' in html
+    assert "function applyTonePreset(" in app
+    assert "All identity-preserving colour, lighting and backdrop tools are unlocked" in app
+    print("test_colour_workstation_is_complete", PASS)
+
+
+def test_guest_demo_library_and_walkthrough():
+    html, app = load_sources()
+    demo = (ROOT / "src" / "demo-library.js").read_text(encoding="utf-8")
+    server = (ROOT / "server.py").read_text(encoding="utf-8")
+    portraits = sorted((ROOT / "assets" / "demo").glob("*.jpg"))
+    for element_id in (
+        "demo-library",
+        "demo-library-count",
+        "demo-filters",
+        "demo-grid",
+        "demo-start",
+        "demo-walkthrough",
+        "demo-walkthrough-primary",
+        "demo-walkthrough-secondary",
+        "demo-walkthrough-close",
+    ):
+        assert f'id="{element_id}"' in html, element_id
+    assert demo.count('path: "assets/demo/') == 24
+    assert len(portraits) == 24, len(portraits)
+    assert all(path.stat().st_size > 10_000 for path in portraits)
+    assert "function renderDemoLibrary()" in app
+    assert "function loadDemoPortrait(" in app
+    assert "function renderDemoWalkthrough()" in app
+    assert "elements.previewMode.checked = true;" in app
+    assert "handlePreviewModeChange();" in app
+    assert "elements.demoLibrary.hidden = !state.guestSession;" in app
+    assert 'document.body.dataset.guest = state.guestSession ? "true" : "false";' in app
+    assert 'app.mount("/assets", StaticFiles(directory=ROOT / "assets"), name="assets")' in server
+    print("test_guest_demo_library_and_walkthrough", PASS)
 
 
 def test_original_download_survives_processing_failure():
@@ -117,6 +186,8 @@ def main():
         test_review_outputs_are_present,
         test_warnings_do_not_gate_file_availability,
         test_guided_catalogue_and_studio_mode_are_present,
+        test_colour_workstation_is_complete,
+        test_guest_demo_library_and_walkthrough,
         test_original_download_survives_processing_failure,
         test_background_variant_respects_programme_policy,
     ]

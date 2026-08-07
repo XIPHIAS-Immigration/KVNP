@@ -4,9 +4,56 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>KVNP Passport Studio</title>
-    <link rel="stylesheet" href="src/styles.css?v=kvnp-studio-33" />
+    <link rel="stylesheet" href="src/styles.css?v=kvnp-studio-43" />
   </head>
   <body>
+    <svg class="icon-sprite" aria-hidden="true">
+      <symbol id="icon-passport" viewBox="0 0 24 24">
+        <path d="M4 3.5A1.5 1.5 0 0 1 5.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H5.5A1.5 1.5 0 0 1 4 20.5z" />
+        <path d="M8 2v20M11 8h6M11 16h6" />
+        <circle cx="14" cy="12" r="2.5" />
+      </symbol>
+      <symbol id="icon-visa" viewBox="0 0 24 24">
+        <path d="M2 16.5 22 8l-2.5-2.5-6.2 1.8L9 3 7 4l2 5-4.5 1.3L2 8.5l-1 1zM13 13l4 5" />
+      </symbol>
+      <symbol id="icon-identity" viewBox="0 0 24 24">
+        <rect x="2" y="5" width="20" height="14" rx="2" />
+        <circle cx="8" cy="11" r="2.5" />
+        <path d="M4.5 16c.8-1.8 2-2.7 3.5-2.7s2.7.9 3.5 2.7M14 10h5M14 14h4" />
+      </symbol>
+      <symbol id="icon-residence" viewBox="0 0 24 24">
+        <path d="m3 11 9-8 9 8M5 10v10h14V10M9 20v-6h6v6" />
+      </symbol>
+      <symbol id="icon-driving" viewBox="0 0 24 24">
+        <path d="m5 17-2-1v-5l2-5h14l2 5v5l-2 1M5 11h14M7 14h.01M17 14h.01M6 17v3M18 17v3" />
+      </symbol>
+      <symbol id="icon-citizenship" viewBox="0 0 24 24">
+        <path d="m12 2 3 3 4-.5.5 4 3 3-3 3-.5 4-4-.5-3 3-3-3-4 .5-.5-4-3-3 3-3 .5-4 4 .5z" />
+        <path d="m9 12 2 2 4-4" />
+      </symbol>
+      <symbol id="icon-child" viewBox="0 0 24 24">
+        <circle cx="12" cy="8" r="4" />
+        <path d="M5 22c.7-5 3-7.5 7-7.5s6.3 2.5 7 7.5M8 3 6 1M16 3l2-2" />
+      </symbol>
+      <symbol id="icon-search" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-4-4" />
+      </symbol>
+      <symbol id="icon-crop" viewBox="0 0 24 24">
+        <path d="M6 2v16a2 2 0 0 0 2 2h14M2 6h16a2 2 0 0 1 2 2v14" />
+      </symbol>
+      <symbol id="icon-tone" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 3a9 9 0 0 1 0 18z" />
+      </symbol>
+      <symbol id="icon-background" viewBox="0 0 24 24">
+        <path d="M4 4h16v16H4zM4 12h16M12 4v16" />
+        <path d="m4 4 8 8 8-8M4 20l8-8 8 8" />
+      </symbol>
+      <symbol id="icon-output" viewBox="0 0 24 24">
+        <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
+      </symbol>
+    </svg>
     <!-- ============ AUTH ============ -->
     <div id="auth-view" class="auth-view">
       <div class="auth-aside">
@@ -137,6 +184,25 @@
           </button>
         </nav>
 
+        <aside id="demo-walkthrough" class="demo-walkthrough" aria-live="polite" hidden>
+          <div class="demo-walkthrough-copy">
+            <span class="section-label">Guest walkthrough</span>
+            <strong id="demo-walkthrough-title">Choose a demonstration portrait</strong>
+            <small id="demo-walkthrough-detail">The guide will explain what the model measures and what it leaves untouched.</small>
+          </div>
+          <ol class="demo-walkthrough-steps" aria-label="Demonstration progress">
+            <li data-demo-step="1">Portrait</li>
+            <li data-demo-step="2">Analyze</li>
+            <li data-demo-step="3">Prepare</li>
+            <li data-demo-step="4">Review</li>
+          </ol>
+          <div class="demo-walkthrough-actions">
+            <button id="demo-walkthrough-secondary" class="btn btn-sm" type="button">Change programme</button>
+            <button id="demo-walkthrough-primary" class="btn btn-sm btn-primary" type="button">Choose a portrait</button>
+            <button id="demo-walkthrough-close" class="icon-btn" type="button" title="Close walkthrough" aria-label="Close walkthrough">X</button>
+          </div>
+        </aside>
+
         <main class="workspace">
           <!-- SOURCE -->
           <section id="photo-card" class="card source-card wizard-panel" data-wizard-panel="2" aria-labelledby="source-title" hidden>
@@ -162,6 +228,39 @@
               <strong id="coach-directive">Add a portrait to begin</strong>
               <small id="coach-detail">KVNP will check camera level, shoulders, gaze, lighting and usable detail.</small>
             </div>
+
+            <div id="capture-readiness" class="capture-readiness" data-tone="idle" aria-live="polite">
+              <div class="readiness-head">
+                <div>
+                  <span class="section-label">Capture readiness</span>
+                  <strong id="readiness-score">Waiting for photo</strong>
+                </div>
+                <span id="auto-capture-state" class="auto-capture-state">Auto capture armed</span>
+              </div>
+              <div id="capture-readiness-grid" class="capture-readiness-grid">
+                <span class="readiness-empty">Live guidance appears here when a face is visible.</span>
+              </div>
+            </div>
+
+            <section id="demo-library" class="demo-library" aria-labelledby="demo-library-title" hidden>
+              <div class="demo-library-head">
+                <div>
+                  <span class="section-label">Guest demo lab</span>
+                  <strong id="demo-library-title">See the model work on real-world portraits</strong>
+                  <small>Choose a case, follow the analysis, then switch country or colour settings to compare the result.</small>
+                </div>
+                <div class="demo-library-summary">
+                  <span id="demo-library-count">24 cases</span>
+                  <button id="demo-start" class="btn btn-sm btn-primary" type="button">Start walkthrough</button>
+                </div>
+              </div>
+              <div id="demo-filters" class="demo-filters" role="group" aria-label="Demonstration portrait type"></div>
+              <div id="demo-grid" class="demo-grid" aria-live="polite"></div>
+              <div class="demo-library-foot">
+                <span>Each card states what it is testing. A good-looking portrait may still correctly receive a retake result.</span>
+                <a href="https://www.pexels.com/license/" target="_blank" rel="noreferrer">Demo portraits via Pexels</a>
+              </div>
+            </section>
 
             <div id="upload-dropzone" class="stage">
               <canvas id="source-canvas" width="900" height="620"></canvas>
@@ -198,76 +297,102 @@
               <span id="catalogue-count" class="catalogue-count">35 programmes</span>
             </div>
 
-            <div class="catalogue-intro">
-              <span class="catalogue-kicker">Find your document</span>
-              <strong>What are you preparing?</strong>
-              <p>Search by country or document. KVNP will load the correct output, capture guidance and editing policy.</p>
+            <div class="destination-hero">
+              <div class="catalogue-intro">
+                <span class="catalogue-kicker">Destination library</span>
+                <strong>Choose the document. We set the studio.</strong>
+                <p>Every preset loads its official crop, file size, background rule and permitted corrections.</p>
+              </div>
+              <div class="catalogue-metrics" aria-label="Programme coverage">
+                <span><strong>35</strong> programmes</span>
+                <span><strong>26</strong> countries</span>
+                <span><strong>7</strong> document types</span>
+              </div>
             </div>
 
             <div class="catalogue-tools">
               <label class="catalogue-search" for="programme-search">
-                <span class="field-label">Search countries and programmes</span>
-                <input id="programme-search" type="search" autocomplete="off" placeholder="Try Canada, passport, identity card..." />
+                <svg class="ui-icon" aria-hidden="true"><use href="#icon-search"></use></svg>
+                <input id="programme-search" type="search" autocomplete="off" aria-label="Search countries and programmes" placeholder="Search country or document" />
               </label>
               <div id="category-filters" class="category-filters" role="group" aria-label="Document category"></div>
             </div>
 
             <div id="programme-grid" class="programme-grid" aria-live="polite"></div>
 
-            <div class="field-grid">
-              <label class="field">
-                <span class="field-label">Country</span>
-                <select id="country-select"></select>
-              </label>
-              <label class="field">
-                <span class="field-label">Programme</span>
-                <select id="profile-select"></select>
-              </label>
-            </div>
-
-            <div class="programme-brief" aria-label="Selected programme summary">
-              <div><span>Output</span><strong id="programme-output">-</strong></div>
-              <div><span>Background</span><strong id="programme-background">-</strong></div>
-              <div><span>Workflow</span><strong id="programme-mode">-</strong></div>
-              <div><span>Rule status</span><strong id="programme-status">-</strong></div>
-              <div><span>Next review</span><strong id="programme-reviewed">-</strong></div>
-            </div>
+            <section class="selected-programme" aria-label="Selected programme">
+              <div class="selected-programme-mark">
+                <span id="selected-country-code">--</span>
+                <svg class="ui-icon" aria-hidden="true"><use id="selected-category-icon" href="#icon-passport"></use></svg>
+              </div>
+              <div class="selected-programme-copy">
+                <span id="selected-programme-country">Select a country</span>
+                <h4 id="selected-programme-name">Choose a programme</h4>
+                <small id="selected-programme-delivery">Official specifications appear here</small>
+              </div>
+              <div class="programme-brief" aria-label="Selected programme summary">
+                <div><span>File</span><strong id="programme-output">-</strong></div>
+                <div><span>Backdrop</span><strong id="programme-background">-</strong></div>
+                <div><span>Studio mode</span><strong id="programme-mode">-</strong></div>
+                <div><span>Rules</span><strong id="programme-status">-</strong></div>
+                <div><span>Reviewed</span><strong id="programme-reviewed">-</strong></div>
+              </div>
+            </section>
 
             <div id="programme-notice" class="programme-notice" role="status"></div>
 
+            <details class="official-details">
+              <summary>
+                <span>Official requirements and sources</span>
+                <small>Open the full rule card</small>
+              </summary>
+              <div class="official-details-body">
+                <div class="field-grid">
+                  <label class="field">
+                    <span class="field-label">Country</span>
+                    <select id="country-select"></select>
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Programme</span>
+                    <select id="profile-select"></select>
+                  </label>
+                </div>
+                <div id="requirements-list" class="requirements-list"></div>
+                <div class="section-label policy-title">Submission policy</div>
+                <div id="policy-list" class="policy-list"></div>
+                <div id="source-links" class="source-links"></div>
+              </div>
+            </details>
+
             <div class="preset-bar">
-              <select id="preset-select" title="Saved presets">
-                <option value="">Presets…</option>
+              <select id="preset-select" title="Saved studio presets">
+                <option value="">Saved presets</option>
               </select>
               <button id="preset-save" class="btn btn-sm" type="button">Save</button>
               <button id="preset-delete" class="btn btn-sm" type="button" title="Delete preset">Delete</button>
             </div>
 
-            <div id="requirements-list" class="requirements-list"></div>
-
-            <div class="section-label policy-title">Submission policy</div>
-            <div id="policy-list" class="policy-list"></div>
-            <div id="source-links" class="source-links"></div>
-
             <div class="destination-assurance">
-              <strong>Rules first, photo second</strong>
-              <span>This choice controls the crop, output, background checks and which edits are permitted.</span>
+              <strong>Programme-aware by design</strong>
+              <span>Formatting is automatic. Pixel edits are enabled only when this programme allows them.</span>
             </div>
 
-            <details class="studio-details">
+            <details id="processing-controls-source" class="studio-details processing-controls-source" hidden>
               <summary>
                 <span>Advanced processing</span>
                 <small>Models, preview tools and manual placement</small>
               </summary>
               <div class="studio-details-body">
-            <div class="preview-mode-card">
-              <div>
-                <strong>Editing preview</strong>
-                <span>Test cleanup tools on a permanently watermarked, non-submission result.</span>
+            <div class="preview-mode-card" data-active="false">
+              <div class="edit-intent-copy">
+                <span class="section-label">Editing intent</span>
+                <strong id="edit-mode-title">Application file</strong>
+                <span id="edit-mode-description">Programme rules decide which pixel edits can affect the application file.</span>
               </div>
-              <label class="mini-toggle" for="preview-mode">
+              <label class="edit-mode-toggle" for="preview-mode">
                 <input id="preview-mode" type="checkbox" />
-                Enable preview
+                <span class="edit-mode-track" aria-hidden="true"><span></span></span>
+                <span id="edit-mode-label">Unlock studio preview</span>
               </label>
             </div>
 
@@ -362,11 +487,23 @@
             <div class="card-head">
               <div>
                 <span class="card-step">Step 03</span>
-                <h3 id="result-title">Prepared photo</h3>
+                <h3 id="result-title">Photo studio</h3>
                 <p id="result-summary">Waiting for an image.</p>
               </div>
-              <div class="btn-row">
-                <button id="auto-fix" class="btn btn-primary" type="button" disabled>Prepare photo</button>
+              <div class="btn-row prepare-commands">
+                <button class="btn studio-command" type="button" data-studio-open="crop">
+                  <svg class="ui-icon" aria-hidden="true"><use href="#icon-crop"></use></svg>
+                  Frame
+                </button>
+                <button class="btn studio-command" type="button" data-studio-open="tone">
+                  <svg class="ui-icon" aria-hidden="true"><use href="#icon-tone"></use></svg>
+                  Adjust colour
+                </button>
+                <button class="btn studio-command" type="button" data-studio-open="background">
+                  <svg class="ui-icon" aria-hidden="true"><use href="#icon-background"></use></svg>
+                  Backdrop
+                </button>
+                <button id="auto-fix" class="btn btn-primary" type="button" disabled>Auto prepare</button>
               </div>
             </div>
 
@@ -412,7 +549,117 @@
                   <div id="adjust-grid" class="adjust-grid"></div>
                 </details>
 
+                <div id="preparation-receipt" class="preparation-receipt" aria-live="polite">
+                  <article>
+                    <span>Source</span>
+                    <strong id="prepare-source-state">Waiting</strong>
+                    <small id="prepare-source-detail">Add a photo to begin.</small>
+                  </article>
+                  <article>
+                    <span>Processing</span>
+                    <strong id="prepare-change-state">No changes</strong>
+                    <small id="prepare-change-detail">Every applied edit will be disclosed.</small>
+                  </article>
+                  <article>
+                    <span>Output</span>
+                    <strong id="prepare-output-state">Not prepared</strong>
+                    <small id="prepare-output-detail">The programme controls size and format.</small>
+                  </article>
+                </div>
+
               </div>
+
+              <aside class="studio-inspector" aria-label="Photo preparation tools">
+                <div class="inspector-head">
+                  <div>
+                    <span class="section-label">Active preset</span>
+                    <strong id="inspector-profile-name">Programme not selected</strong>
+                    <small id="inspector-profile-spec">Crop and file rules will appear here.</small>
+                  </div>
+                  <span id="inspector-policy-chip" class="inspector-policy-chip">Waiting</span>
+                </div>
+
+                <div id="studio-mode-slot" class="studio-mode-slot"></div>
+
+                <div class="inspector-tabs" role="tablist" aria-label="Studio tools">
+                  <button class="inspector-tab active" type="button" role="tab" aria-selected="true" data-studio-tool="crop">
+                    <svg class="ui-icon" aria-hidden="true"><use href="#icon-crop"></use></svg>
+                    <span>Crop</span>
+                  </button>
+                  <button class="inspector-tab" type="button" role="tab" aria-selected="false" data-studio-tool="tone">
+                    <svg class="ui-icon" aria-hidden="true"><use href="#icon-tone"></use></svg>
+                    <span>Tone</span>
+                  </button>
+                  <button class="inspector-tab" type="button" role="tab" aria-selected="false" data-studio-tool="background">
+                    <svg class="ui-icon" aria-hidden="true"><use href="#icon-background"></use></svg>
+                    <span>Backdrop</span>
+                  </button>
+                  <button class="inspector-tab" type="button" role="tab" aria-selected="false" data-studio-tool="output">
+                    <svg class="ui-icon" aria-hidden="true"><use href="#icon-output"></use></svg>
+                    <span>Output</span>
+                  </button>
+                </div>
+
+                <section class="inspector-panel active" role="tabpanel" data-studio-panel="crop">
+                  <div class="inspector-panel-intro">
+                    <span>Official framing</span>
+                    <strong>Face position and canvas</strong>
+                    <p>Auto-fit uses the selected programme's head size, eye line and top-margin targets.</p>
+                  </div>
+                  <div id="studio-crop-spec" class="studio-spec-grid"></div>
+                  <div id="studio-crop-controls" class="studio-control-stack"></div>
+                </section>
+
+                <section class="inspector-panel" role="tabpanel" data-studio-panel="tone" hidden>
+                  <div class="inspector-panel-intro">
+                    <span>Colour workstation</span>
+                    <strong>White balance, light and tone</strong>
+                    <p>Adjust the photograph without reshaping the face. Application mode still enforces the selected programme.</p>
+                  </div>
+                  <div class="tone-quick-actions" role="group" aria-label="Colour presets">
+                    <button class="btn btn-sm" type="button" data-tone-preset="natural">Natural</button>
+                    <button class="btn btn-sm" type="button" data-tone-preset="brighter">Brighter</button>
+                    <button class="btn btn-sm" type="button" data-tone-preset="warmer">Warmer</button>
+                    <button class="btn btn-sm" type="button" data-tone-preset="mono">B&amp;W</button>
+                  </div>
+                  <div class="tone-histogram-card">
+                    <div><span>RGB histogram</span><small>Live output range</small></div>
+                    <canvas id="tone-histogram" width="360" height="104" aria-label="Red, green and blue tonal histogram"></canvas>
+                  </div>
+                  <div id="studio-tone-controls" class="studio-control-stack"></div>
+                  <div id="studio-adjustments" class="studio-control-stack"></div>
+                </section>
+
+                <section class="inspector-panel" role="tabpanel" data-studio-panel="background" hidden>
+                  <div class="inspector-panel-intro">
+                    <span>Optional variant</span>
+                    <strong>Backdrop tools</strong>
+                    <p>Background replacement is never assumed. It is enabled only when the programme policy permits it.</p>
+                  </div>
+                  <div id="studio-background-controls" class="studio-control-stack"></div>
+                  <div id="studio-touchup-controls" class="studio-control-stack"></div>
+                </section>
+
+                <section class="inspector-panel" role="tabpanel" data-studio-panel="output" hidden>
+                  <div class="inspector-panel-intro">
+                    <span>Delivery</span>
+                    <strong>Required file</strong>
+                    <p>The submission preset remains exact. Convenience formats are offered separately at download.</p>
+                  </div>
+                  <div class="studio-output-card">
+                    <div><span>Canvas</span><strong id="studio-output-canvas">-</strong></div>
+                    <div><span>Format</span><strong id="studio-output-mime">-</strong></div>
+                    <div><span>Print size</span><strong id="studio-output-print">-</strong></div>
+                    <div><span>Background</span><strong id="studio-output-background">-</strong></div>
+                  </div>
+                  <p id="studio-output-policy" class="studio-output-policy">Select a programme to load its output policy.</p>
+                </section>
+
+                <details class="studio-advanced">
+                  <summary>Processing details</summary>
+                  <div id="studio-advanced-controls" class="studio-control-stack"></div>
+                </details>
+              </aside>
 
             </div>
 
@@ -437,6 +684,24 @@
                 <button id="download-photo" class="btn btn-primary" type="button" disabled>Download file</button>
                 <button id="download-report" class="btn" type="button" disabled>Audit report</button>
               </div>
+            </div>
+
+            <div id="review-verdict" class="review-verdict" data-tone="pending" aria-live="polite">
+              <article>
+                <span>Recommendation</span>
+                <strong id="verdict-recommendation">Waiting for photo</strong>
+                <small id="verdict-recommendation-detail">No assessment is available yet.</small>
+              </article>
+              <article>
+                <span>File availability</span>
+                <strong id="verdict-file">Original unavailable</strong>
+                <small id="verdict-file-detail">Upload a photo to unlock downloads.</small>
+              </article>
+              <article>
+                <span>Safest next action</span>
+                <strong id="verdict-action">Add a portrait</strong>
+                <small id="verdict-action-detail">Use a clear, recent, front-facing photograph.</small>
+              </article>
             </div>
 
             <div class="review-layout">
@@ -593,8 +858,8 @@
       </form>
     </dialog>
 
-    <script src="src/vendor/gsap.min.js?v=kvnp-studio-35"></script>
-    <script src="src/motion.js?v=kvnp-studio-35"></script>
-    <script type="module" src="src/app.js?v=kvnp-studio-35"></script>
+    <script src="src/vendor/gsap.min.js?v=kvnp-studio-43"></script>
+    <script src="src/motion.js?v=kvnp-studio-43"></script>
+    <script type="module" src="src/app.js?v=kvnp-studio-43"></script>
   </body>
 </html>
