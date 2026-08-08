@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kvnp
+      POSTGRES_USER: kvnp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kvnp -d kvnp"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - kvnp_postgres:/var/lib/postgresql/data
+
+  app:
+    depends_on:
+      model-init:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+    environment:
+      KVNP_DATABASE_URL: postgresql+psycopg://kvnp:${POSTGRES_PASSWORD}@db:5432/kvnp
+
+volumes:
+  kvnp_postgres:

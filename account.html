@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>My workspace | KVNP Studio</title>
+    <link rel="stylesheet" href="/src/portal.css?v=kvnp-platform-1" />
+  </head>
+  <body>
+    <header class="portal-bar">
+      <a class="portal-brand" href="/"><span>KV</span><strong>KVNP Studio</strong></a>
+      <nav>
+        <a href="/app">New photo</a>
+        <a class="active" href="/account">My workspace</a>
+        <a id="admin-link" href="/admin" hidden>Admin</a>
+        <button id="sign-out" class="quiet-button" type="button">Sign out</button>
+      </nav>
+    </header>
+
+    <main class="portal-shell">
+      <section class="portal-intro">
+        <div>
+          <span class="eyebrow">Customer workspace</span>
+          <h1 id="welcome-title">Your application photos</h1>
+          <p>Find prepared applications, purchase history, and support in one place.</p>
+        </div>
+        <a class="primary-button" href="/app">Create new photo</a>
+      </section>
+
+      <section class="metric-strip" aria-label="Account summary">
+        <article><span>Applications</span><strong id="metric-projects">0</strong></article>
+        <article><span>Purchased packs</span><strong id="metric-paid">0</strong></article>
+        <article><span>Ready to download</span><strong id="metric-ready">0</strong></article>
+      </section>
+
+      <section class="portal-section">
+        <div class="section-heading">
+          <div><span class="eyebrow">Applications</span><h2>Recent work</h2></div>
+          <span id="project-count" class="muted">Loading</span>
+        </div>
+        <div id="project-list" class="project-list"><p class="empty-state">Loading your workspace...</p></div>
+      </section>
+
+      <section class="portal-section">
+        <div class="section-heading">
+          <div><span class="eyebrow">Payments</span><h2>Orders and receipts</h2></div>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Reference</th><th>Product</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead>
+            <tbody id="order-list"><tr><td colspan="5">No orders yet.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="support-band">
+        <div class="support-copy">
+          <span class="eyebrow">Customer support</span>
+          <h2>Tell us what went wrong.</h2>
+          <p>Include the country and programme. Do not send payment-card information.</p>
+        </div>
+        <form id="enquiry-form" class="support-form">
+          <label><span>Subject</span><input id="enquiry-subject" required minlength="3" maxlength="200" placeholder="Photo, download, or payment question" /></label>
+          <label><span>Message</span><textarea id="enquiry-message" required minlength="10" maxlength="5000" rows="5" placeholder="Describe the issue and the application programme."></textarea></label>
+          <div id="enquiry-status" class="form-status" aria-live="polite"></div>
+          <button class="primary-button" type="submit">Send enquiry</button>
+        </form>
+      </section>
+    </main>
+    <script type="module" src="/src/account.js?v=kvnp-platform-1"></script>
+  </body>
+</html>

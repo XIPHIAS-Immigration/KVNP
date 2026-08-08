@@ -193,6 +193,26 @@ def test_general_studio_has_clean_exports():
     print("test_general_studio_has_clean_exports", PASS)
 
 
+def test_product_lifecycle_ui_is_present():
+    html, app = load_sources()
+    for element_id in (
+        "applicant-name",
+        "purchase-band",
+        "purchase-price",
+        "purchase-button",
+        "mock-payment-button",
+        "workspace-link",
+        "admin-workspace-link",
+    ):
+        assert f'id="{element_id}"' in html, element_id
+    assert "function persistProject(" in app
+    assert "function renderCommerce(" in app
+    assert "function authorizeDownload(" in app
+    assert (ROOT / "account.html").exists()
+    assert (ROOT / "admin.html").exists()
+    print("test_product_lifecycle_ui_is_present", PASS)
+
+
 def main():
     tests = [
         test_four_stage_structure,
@@ -204,6 +224,7 @@ def main():
         test_original_download_survives_processing_failure,
         test_background_variant_respects_programme_policy,
         test_general_studio_has_clean_exports,
+        test_product_lifecycle_ui_is_present,
     ]
     for test in tests:
         test()

@@ -9,7 +9,6 @@ import math
 import os
 import secrets
 import shutil
-import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -23,12 +22,17 @@ import cv2
 import mediapipe as mp
 import numpy as np
 import uvicorn
-from fastapi import FastAPI, File, Form, Request, UploadFile
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHashError, VerifyMismatchError
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision
 from PIL import Image
+
+import kvnp_platform as platform
+from kvnp_payments import gateway_for
 
 
 ROOT = Path(__file__).resolve().parent
@@ -295,112 +299,129 @@ app.mount("/docs", StaticFiles(directory=ROOT / "docs"), name="docs")
 
 
 # ============================================================
-# Accounts / sessions (local SQLite, signed session cookie)
+# Accounts / sessions
 # ============================================================
 DATA_DIR = Path(os.environ.get("KVNP_DATA_DIR", str(ROOT / "data"))).resolve()
-DB_PATH = DATA_DIR / "kvnp.db"
-SECRET_PATH = DATA_DIR / "secret.key"
+ARTIFACT_DIR = (DATA_DIR / "artifacts").resolve()
+ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
 SESSION_COOKIE = "kvnp_session"
 SESSION_TTL = 60 * 60 * 24 * 30  # 30 days
 PBKDF2_ROUNDS = 200_000
+PASSWORD_HASHER = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=2)
+COOKIE_SECURE = os.getenv("KVNP_COOKIE_SECURE", "false").strip().lower() in {"1", "true", "yes"}
+DATABASE_BACKEND = platform.initialise(DATA_DIR)
+PAYMENT_MODE = os.getenv("KVNP_PAYMENT_MODE", "disabled").strip().lower()
+PAYMENT_GATEWAY = gateway_for(PAYMENT_MODE)
+ALLOW_MOCK_PAYMENTS = os.getenv("KVNP_ALLOW_MOCK_PAYMENTS", "false").strip().lower() in {"1", "true", "yes"}
+COMMERCE_ENFORCED = os.getenv("KVNP_COMMERCE_ENFORCED", "false").strip().lower() in {"1", "true", "yes"}
+APPLICATION_PRICE_MINOR = max(100, int(os.getenv("KVNP_APPLICATION_PRICE_MINOR", "19900")))
+APPLICATION_CURRENCY = os.getenv("KVNP_APPLICATION_CURRENCY", "INR").strip().upper()[:3] or "INR"
+AUTH_FAILURES = {}
 
 
-def get_secret():
-    env_secret = os.environ.get("KVNP_SESSION_SECRET")
-    if env_secret:
-        return hashlib.sha256(env_secret.encode("utf-8")).digest()
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    if SECRET_PATH.exists():
-        return SECRET_PATH.read_bytes()
-    secret = secrets.token_bytes(32)
-    SECRET_PATH.write_bytes(secret)
-    return secret
-
-
-SESSION_SECRET = get_secret()
-
-
-def db_connect():
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def init_db():
-    with db_connect() as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                email TEXT UNIQUE NOT NULL,
-                name TEXT,
-                pw_hash TEXT NOT NULL,
-                pw_salt TEXT NOT NULL,
-                created_at INTEGER NOT NULL
-            )
-            """
-        )
-
-
-init_db()
-
-
-def hash_password(password, salt=None):
+def hash_legacy_password(password, salt):
     salt = salt or secrets.token_hex(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), PBKDF2_ROUNDS)
     return digest.hex(), salt
 
 
-def sign_session(user_id):
-    issued = int(time.time())
-    payload = f"{user_id}.{issued}".encode("utf-8")
-    body = base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
-    signature = hmac.new(SESSION_SECRET, body.encode("ascii"), hashlib.sha256).hexdigest()
-    return f"{body}.{signature}"
+def verify_user_password(user, password):
+    if user.password_hash:
+        try:
+            valid = PASSWORD_HASHER.verify(user.password_hash, password)
+            if valid and PASSWORD_HASHER.check_needs_rehash(user.password_hash):
+                platform.upgrade_legacy_password(user.id, PASSWORD_HASHER.hash(password))
+            return bool(valid)
+        except (VerifyMismatchError, InvalidHashError):
+            return False
+    if not user.legacy_pw_hash or not user.legacy_pw_salt:
+        return False
+    candidate, _ = hash_legacy_password(password, user.legacy_pw_salt)
+    if not hmac.compare_digest(candidate, user.legacy_pw_hash):
+        return False
+    platform.upgrade_legacy_password(user.id, PASSWORD_HASHER.hash(password))
+    return True
 
 
-def verify_session(token):
-    if not token or token.count(".") != 1:
-        return None
-    body, signature = token.split(".", 1)
-    try:
-        # body.encode('ascii') is inside the try so a non-ASCII cookie yields a
-        # clean null user (logged-out), never an unhandled 500.
-        expected = hmac.new(SESSION_SECRET, body.encode("ascii"), hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(signature, expected):
-            return None
-        padded = body + "=" * (-len(body) % 4)
-        user_id, issued = base64.urlsafe_b64decode(padded).decode("utf-8").split(".")
-        if int(time.time()) - int(issued) > SESSION_TTL:
-            return None
-        return int(user_id)
-    except Exception:
-        return None
-
-
-def user_public(row):
-    return {"id": row["id"], "email": row["email"], "name": row["name"] or row["email"].split("@")[0]}
+def current_identity(request):
+    return platform.resolve_auth_session(request.cookies.get(SESSION_COOKIE))
 
 
 def current_user(request):
-    user_id = verify_session(request.cookies.get(SESSION_COOKIE))
-    if user_id is None:
-        return None
-    with db_connect() as conn:
-        row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-    return user_public(row) if row else None
+    identity = current_identity(request)
+    return platform.user_dict(identity[0]) if identity else None
 
 
-def set_session_cookie(response, user_id):
+def require_identity(request):
+    identity = current_identity(request)
+    if not identity:
+        raise HTTPException(status_code=401, detail="Sign in to continue.")
+    return identity
+
+
+def require_csrf(request, identity):
+    supplied = request.headers.get("x-kvnp-csrf", "")
+    if not supplied or not hmac.compare_digest(supplied, identity[1].csrf_token):
+        raise HTTPException(status_code=403, detail="Security token expired. Refresh and try again.")
+
+
+def require_admin(request, csrf=False):
+    identity = require_identity(request)
+    if identity[0].role != "admin":
+        raise HTTPException(status_code=403, detail="Administrator access required.")
+    if csrf:
+        require_csrf(request, identity)
+    return identity
+
+
+def authenticated_response(user):
+    token, csrf_token = platform.create_auth_session(user.id, SESSION_TTL)
+    response = JSONResponse({"ok": True, "user": platform.user_dict(user), "csrfToken": csrf_token})
     response.set_cookie(
         SESSION_COOKIE,
-        sign_session(user_id),
+        token,
         max_age=SESSION_TTL,
         httponly=True,
+        secure=COOKIE_SECURE,
         samesite="lax",
         path="/",
     )
+    return response
+
+
+def read_json_body_error():
+    return JSONResponse({"ok": False, "error": "Invalid JSON body."}, status_code=422)
+
+
+def normalise_email(value):
+    return str(value or "").strip().lower()
+
+
+def valid_email(email):
+    try:
+        local, domain = email.rsplit("@", 1)
+        return bool(local and "." in domain and len(email) <= 320)
+    except Exception:
+        return False
+
+
+def auth_attempt_key(request, email):
+    client = request.client.host if request.client else "unknown"
+    return hashlib.sha256(f"{client}|{email}".encode("utf-8")).hexdigest()
+
+
+def enforce_login_throttle(request, email):
+    key = auth_attempt_key(request, email)
+    cutoff = time.time() - 600
+    attempts = [item for item in AUTH_FAILURES.get(key, []) if item > cutoff]
+    AUTH_FAILURES[key] = attempts
+    if len(attempts) >= 8:
+        raise HTTPException(status_code=429, detail="Too many sign-in attempts. Try again in ten minutes.")
+    return key
+
+
+def record_login_failure(key):
+    AUTH_FAILURES.setdefault(key, []).append(time.time())
 
 
 @app.post("/api/auth/signup")
@@ -408,30 +429,22 @@ async def auth_signup(request: Request):
     try:
         body = await request.json()
     except Exception:
-        return JSONResponse({"ok": False, "error": "Invalid JSON body."}, status_code=422)
-    email = str(body.get("email", "")).strip().lower()
+        return read_json_body_error()
+    email = normalise_email(body.get("email"))
     password = str(body.get("password", ""))
     name = str(body.get("name", "")).strip()
-    if "@" not in email or "." not in email.split("@")[-1]:
+    if not valid_email(email):
         return JSONResponse({"ok": False, "error": "Enter a valid email address."}, status_code=422)
-    if len(password) < 6:
-        return JSONResponse({"ok": False, "error": "Password must be at least 6 characters."}, status_code=422)
-
-    pw_hash, pw_salt = hash_password(password)
+    if len(name) < 2 or len(name) > 120:
+        return JSONResponse({"ok": False, "error": "Enter your full name."}, status_code=422)
+    if len(password) < 8 or len(password) > 256:
+        return JSONResponse({"ok": False, "error": "Password must be 8 to 256 characters."}, status_code=422)
     try:
-        with db_connect() as conn:
-            cursor = conn.execute(
-                "INSERT INTO users (email, name, pw_hash, pw_salt, created_at) VALUES (?, ?, ?, ?, ?)",
-                (email, name or None, pw_hash, pw_salt, int(time.time())),
-            )
-            user_id = cursor.lastrowid
-            row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-    except sqlite3.IntegrityError:
+        user = platform.create_user(email, name, PASSWORD_HASHER.hash(password))
+    except ValueError:
         return JSONResponse({"ok": False, "error": "An account with this email already exists."}, status_code=409)
 
-    response = JSONResponse({"ok": True, "user": user_public(row)})
-    set_session_cookie(response, row["id"])
-    return response
+    return authenticated_response(user)
 
 
 @app.post("/api/auth/login")
@@ -439,26 +452,25 @@ async def auth_login(request: Request):
     try:
         body = await request.json()
     except Exception:
-        return JSONResponse({"ok": False, "error": "Invalid JSON body."}, status_code=422)
-    email = str(body.get("email", "")).strip().lower()
+        return read_json_body_error()
+    email = normalise_email(body.get("email"))
     password = str(body.get("password", ""))
-    with db_connect() as conn:
-        row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
-    # One generic response + a dummy compare when the user is missing, so neither
-    # the message nor the timing reveals whether an email is registered.
-    salt = row["pw_salt"] if row else "0" * 32
-    expected = row["pw_hash"] if row else "0" * 64
-    candidate, _ = hash_password(password, salt)
-    if row is None or not hmac.compare_digest(candidate, expected):
+    attempt_key = enforce_login_throttle(request, email)
+    user = platform.get_user_by_email(email)
+    if user is None:
+        hash_legacy_password(password, "0" * 32)
+    if user is None or not verify_user_password(user, password):
+        record_login_failure(attempt_key)
         return JSONResponse({"ok": False, "error": "Invalid email or password."}, status_code=401)
 
-    response = JSONResponse({"ok": True, "user": user_public(row)})
-    set_session_cookie(response, row["id"])
-    return response
+    AUTH_FAILURES.pop(attempt_key, None)
+    platform.touch_login(user.id)
+    return authenticated_response(user)
 
 
 @app.post("/api/auth/logout")
-def auth_logout():
+def auth_logout(request: Request):
+    platform.revoke_auth_session(request.cookies.get(SESSION_COOKIE))
     response = JSONResponse({"ok": True})
     response.delete_cookie(SESSION_COOKIE, path="/")
     return response
@@ -466,7 +478,292 @@ def auth_logout():
 
 @app.get("/api/auth/me")
 def auth_me(request: Request):
-    return {"ok": True, "user": current_user(request)}
+    identity = current_identity(request)
+    return {
+        "ok": True,
+        "user": platform.user_dict(identity[0]) if identity else None,
+        "csrfToken": identity[1].csrf_token if identity else None,
+    }
+
+
+def commerce_config(user=None):
+    return {
+        "mode": PAYMENT_MODE,
+        "enabled": PAYMENT_MODE in {"mock", "slice"},
+        "enforced": COMMERCE_ENFORCED,
+        "mockCompletionAvailable": PAYMENT_MODE == "mock" and ALLOW_MOCK_PAYMENTS,
+        "product": {
+            "code": "application-pack",
+            "label": "Application photo pack",
+            "amountMinor": APPLICATION_PRICE_MINOR,
+            "currency": APPLICATION_CURRENCY,
+            "includes": [
+                "Programme-sized JPEG",
+                "PNG or PDF copy",
+                "Print sheet",
+                "Photo audit report",
+                "30-day re-download access",
+            ],
+        },
+        "signedIn": bool(user),
+    }
+
+
+@app.get("/api/commerce/config")
+def get_commerce_config(request: Request):
+    return {"ok": True, **commerce_config(current_user(request))}
+
+
+@app.get("/api/account/summary")
+def account_summary(request: Request):
+    identity = require_identity(request)
+    return {
+        "ok": True,
+        "user": platform.user_dict(identity[0]),
+        "projects": platform.list_projects(identity[0].id),
+        "orders": platform.list_orders(identity[0].id),
+        "commerce": commerce_config(identity[0]),
+    }
+
+
+@app.get("/api/projects")
+def projects_list(request: Request):
+    identity = require_identity(request)
+    return {"ok": True, "projects": platform.list_projects(identity[0].id)}
+
+
+@app.post("/api/projects")
+async def projects_save(request: Request):
+    identity = require_identity(request)
+    require_csrf(request, identity)
+    try:
+        body = await request.json()
+        project = platform.save_project(identity[0].id, body)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="This project belongs to another account.")
+    except Exception as error:
+        return JSONResponse({"ok": False, "error": str(error)}, status_code=422)
+    return {"ok": True, "project": platform.project_dict(project, bool(platform.active_entitlement(identity[0].id, project.id)))}
+
+
+def validated_project_uuid(project_id):
+    try:
+        return str(uuid.UUID(str(project_id)))
+    except (TypeError, ValueError, AttributeError):
+        raise HTTPException(status_code=404, detail="Project not found.")
+
+
+def cleanup_expired_artifact_files():
+    for stored_path in platform.remove_expired_artifacts():
+        candidate = Path(stored_path).resolve()
+        if ARTIFACT_DIR in candidate.parents and candidate.is_file():
+            try:
+                candidate.unlink()
+            except OSError:
+                pass
+
+
+@app.post("/api/projects/{project_id}/artifact")
+async def project_artifact_upload(project_id: str, request: Request, image: UploadFile = File(...)):
+    identity = require_identity(request)
+    require_csrf(request, identity)
+    project_id = validated_project_uuid(project_id)
+    if not platform.get_owned_project(identity[0].id, project_id):
+        raise HTTPException(status_code=404, detail="Project not found.")
+    cleanup_expired_artifact_files()
+    payload = await image.read()
+    if not payload or len(payload) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=422, detail="Prepared file must be between 1 byte and 20 MB.")
+    decoded = cv2.imdecode(np.frombuffer(payload, dtype=np.uint8), cv2.IMREAD_COLOR)
+    if decoded is None:
+        raise HTTPException(status_code=422, detail="Prepared artifact is not a valid image.")
+    ok, encoded = cv2.imencode(".jpg", decoded, [cv2.IMWRITE_JPEG_QUALITY, 95])
+    if not ok:
+        raise HTTPException(status_code=422, detail="Prepared artifact could not be encoded.")
+    target_dir = (ARTIFACT_DIR / str(identity[0].id) / project_id).resolve()
+    if ARTIFACT_DIR not in target_dir.parents:
+        raise HTTPException(status_code=422, detail="Invalid artifact destination.")
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / "prepared.jpg"
+    temporary = target_dir / "prepared.tmp"
+    temporary.write_bytes(encoded.tobytes())
+    temporary.replace(target)
+    artifact = platform.register_artifact(
+        identity[0].id,
+        project_id,
+        str(target),
+        "image/jpeg",
+        target.stat().st_size,
+    )
+    return {"ok": True, "artifact": {"available": True, "bytes": artifact.bytes, "expiresAt": artifact.expires_at}}
+
+
+@app.get("/api/projects/{project_id}/artifact")
+def project_artifact_download(project_id: str, request: Request):
+    identity = require_identity(request)
+    project_id = validated_project_uuid(project_id)
+    project = platform.get_owned_project(identity[0].id, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    entitlement = platform.active_entitlement(identity[0].id, project_id)
+    if COMMERCE_ENFORCED and not entitlement:
+        raise HTTPException(status_code=402, detail="Purchase required before downloading this prepared file.")
+    artifact = platform.get_artifact(identity[0].id, project_id)
+    if not artifact:
+        raise HTTPException(status_code=404, detail="No saved prepared file is available for this application.")
+    artifact_path = Path(artifact.storage_path).resolve()
+    if ARTIFACT_DIR not in artifact_path.parents or not artifact_path.is_file():
+        raise HTTPException(status_code=404, detail="The saved prepared file has expired.")
+    platform.record_download(identity[0].id, project_id, "saved_prepared", artifact.format, artifact.bytes, False)
+    filename = f"kvnp-{project.profile_id}-{project_id[:8]}.jpg"
+    return FileResponse(artifact_path, media_type=artifact.format, filename=filename)
+
+
+@app.post("/api/checkout/start")
+async def checkout_start(request: Request):
+    identity = require_identity(request)
+    require_csrf(request, identity)
+    if PAYMENT_MODE == "disabled":
+        return JSONResponse({"ok": False, "error": "Online checkout is not open yet."}, status_code=503)
+    try:
+        body = await request.json()
+        project_id = str(body.get("projectId") or "")
+        order = platform.create_order(
+            identity[0].id,
+            project_id,
+            APPLICATION_PRICE_MINOR,
+            APPLICATION_CURRENCY,
+            PAYMENT_GATEWAY.name,
+        )
+        order_data = platform.order_dict(order)
+        checkout = PAYMENT_GATEWAY.create_checkout(order_data, str(request.base_url) + "app")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Save this project to your account before checkout.")
+    except RuntimeError as error:
+        return JSONResponse({"ok": False, "error": str(error)}, status_code=503)
+    platform.record_event("checkout_started", identity[0].id, project_id, metadata={"orderId": order.id})
+    return {
+        "ok": True,
+        "order": order_data,
+        "checkout": {
+            "provider": checkout.provider,
+            "status": checkout.status,
+            "url": checkout.checkout_url,
+            "development": checkout.development,
+        },
+    }
+
+
+@app.post("/api/checkout/mock/complete")
+async def checkout_mock_complete(request: Request):
+    identity = require_identity(request)
+    require_csrf(request, identity)
+    if PAYMENT_MODE != "mock" or not ALLOW_MOCK_PAYMENTS:
+        raise HTTPException(status_code=404, detail="Development checkout is disabled.")
+    body = await request.json()
+    try:
+        order = platform.complete_mock_order(identity[0].id, str(body.get("orderId") or ""))
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="This order belongs to another account.")
+    except ValueError:
+        raise HTTPException(status_code=409, detail="This order cannot be completed.")
+    platform.record_event("payment_completed", identity[0].id, order.project_id, metadata={"orderId": order.id})
+    return {"ok": True, "order": platform.order_dict(order), "entitled": True}
+
+
+@app.post("/api/downloads/authorize")
+async def authorize_download(request: Request):
+    identity = require_identity(request)
+    require_csrf(request, identity)
+    body = await request.json()
+    project_id = str(body.get("projectId") or "")
+    file_kind = str(body.get("fileKind") or "prepared")
+    project = platform.get_owned_project(identity[0].id, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    entitled = bool(platform.active_entitlement(identity[0].id, project_id))
+    if COMMERCE_ENFORCED and file_kind != "original" and not entitled:
+        return JSONResponse(
+            {"ok": False, "error": "Purchase this application pack to unlock prepared files."},
+            status_code=402,
+        )
+    platform.record_download(
+        identity[0].id,
+        project_id,
+        file_kind,
+        str(body.get("format") or "unknown"),
+        int(body.get("bytes") or 0) or None,
+        bool(body.get("warningAcknowledged")),
+    )
+    platform.record_event("download_completed", identity[0].id, project_id, metadata={"fileKind": file_kind})
+    return {"ok": True, "entitled": entitled, "enforced": COMMERCE_ENFORCED}
+
+
+@app.post("/api/events")
+async def events_create(request: Request):
+    identity = current_identity(request)
+    try:
+        body = await request.json()
+        platform.record_event(
+            str(body.get("name") or ""),
+            identity[0].id if identity else None,
+            str(body.get("projectId") or "") or None,
+            str(body.get("anonymousId") or "") or None,
+            body.get("metadata") if isinstance(body.get("metadata"), dict) else {},
+        )
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid event."}, status_code=422)
+    return {"ok": True}
+
+
+@app.post("/api/enquiries")
+async def enquiries_create(request: Request):
+    identity = current_identity(request)
+    try:
+        body = await request.json()
+    except Exception:
+        return read_json_body_error()
+    name = str(body.get("name") or "").strip()
+    email = normalise_email(body.get("email"))
+    subject = str(body.get("subject") or "").strip()
+    message = str(body.get("message") or "").strip()
+    if (
+        len(name) < 2
+        or len(name) > 160
+        or not valid_email(email)
+        or len(subject) < 3
+        or len(subject) > 200
+        or len(message) < 10
+        or len(message) > 5000
+    ):
+        return JSONResponse({"ok": False, "error": "Complete every enquiry field."}, status_code=422)
+    item = platform.create_enquiry(identity[0].id if identity else None, name, email, subject, message)
+    platform.record_event("enquiry_created", identity[0].id if identity else None, metadata={"enquiryId": item.id})
+    return {"ok": True, "reference": item.id[:8].upper()}
+
+
+@app.get("/api/admin/dashboard")
+def admin_dashboard(request: Request):
+    require_admin(request)
+    return {"ok": True, **platform.admin_dashboard(), "commerce": commerce_config(current_user(request))}
+
+
+@app.patch("/api/admin/enquiries/{enquiry_id}")
+async def admin_enquiry_update(enquiry_id: str, request: Request):
+    identity = require_admin(request, csrf=True)
+    body = await request.json()
+    try:
+        item = platform.update_enquiry(
+            identity[0].id,
+            enquiry_id,
+            str(body.get("status") or "new"),
+            str(body.get("adminNote") or ""),
+        )
+    except ValueError:
+        return JSONResponse({"ok": False, "error": "Invalid enquiry status."}, status_code=422)
+    if not item:
+        raise HTTPException(status_code=404, detail="Enquiry not found.")
+    return {"ok": True, "enquiry": platform.enquiry_dict(item)}
 
 
 @app.get("/")
@@ -485,6 +782,16 @@ def app_page():
 @app.get("/studio")
 def studio_page():
     return FileResponse(ROOT / "index.html")
+
+
+@app.get("/account")
+def account_page():
+    return FileResponse(ROOT / "account.html")
+
+
+@app.get("/admin")
+def admin_page():
+    return FileResponse(ROOT / "admin.html")
 
 
 @app.get("/api/profiles")
@@ -507,6 +814,8 @@ def health():
         "gfpgan": gfpgan_ready(),
         "modnet": modnet_active(),
         "guidedFilter": HAS_GUIDED_FILTER,
+        "database": DATABASE_BACKEND,
+        "commerceMode": PAYMENT_MODE,
         "models": model_inventory(),
     }
 

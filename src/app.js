@@ -142,6 +142,8 @@ const elements = {
   reviewPreviewViews: Array.from(document.querySelectorAll("[data-review-preview-view]")),
   reviewPhotoImage: document.querySelector("#review-photo-image"),
   documentPreviewPhoto: document.querySelector("#document-preview-photo"),
+  documentPreviewApplicant: document.querySelector("#document-preview-applicant"),
+  documentPreviewProgramme: document.querySelector("#document-preview-programme"),
   printPreviewCopies: Array.from(document.querySelectorAll(".print-preview-copy")),
   downloadAdvisory: document.querySelector("#download-advisory"),
   downloadWarningDialog: document.querySelector("#download-warning-dialog"),
@@ -178,6 +180,16 @@ const elements = {
   verdictFileDetail: document.querySelector("#verdict-file-detail"),
   verdictAction: document.querySelector("#verdict-action"),
   verdictActionDetail: document.querySelector("#verdict-action-detail"),
+  applicantName: document.querySelector("#applicant-name"),
+  purchaseBand: document.querySelector("#purchase-band"),
+  purchaseDetail: document.querySelector("#purchase-detail"),
+  purchaseIncludes: document.querySelector("#purchase-includes"),
+  purchasePrice: document.querySelector("#purchase-price"),
+  purchaseStatus: document.querySelector("#purchase-status"),
+  purchaseButton: document.querySelector("#purchase-button"),
+  mockPaymentButton: document.querySelector("#mock-payment-button"),
+  workspaceLink: document.querySelector("#workspace-link"),
+  adminWorkspaceLink: document.querySelector("#admin-workspace-link"),
 };
 
 const ADJUST_CONTROLS = [
@@ -291,6 +303,12 @@ const state = {
   demoSelected: null,
   demoWalkthroughActive: false,
   guestSession: false,
+  account: null,
+  csrfToken: null,
+  projectId: null,
+  entitlement: false,
+  commerce: null,
+  order: null,
 };
 
 let adjustBakeTimer = 0;
@@ -307,8 +325,10 @@ const finalCtx = elements.finalCanvas.getContext("2d");
 
 let analysisTimer = 0;
 let serverTimer = 0;
+let projectSaveTimer = 0;
 
 function init() {
+  trackProductEvent("studio_opened");
   restoreWorkspaceMode();
   mountStudioControls();
   populateCountrySelect();
@@ -332,6 +352,266 @@ function init() {
   renderSourceQuality();
   renderQueue();
   renderWorkflowProgress();
+  loadCommerceConfig();
+}
+
+async function loadCommerceConfig() {
+  try {
+    const response = await fetch("/api/commerce/config", { credentials: "same-origin" });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    state.commerce = data;
+  } catch (error) {
+    state.commerce = {
+      mode: "disabled",
+      enabled: false,
+      enforced: false,
+      product: { amountMinor: 0, currency: "INR", includes: [] },
+    };
+  }
+  renderCommerce();
+}
+
+function formatCommerceMoney(minor, currency) {
+  try {
+    return new Intl.NumberFormat("en-IN", { style: "currency", currency }).format((minor || 0) / 100);
+  } catch (_error) {
+    return `${currency} ${((minor || 0) / 100).toFixed(2)}`;
+  }
+}
+
+function renderCommerce(message = "") {
+  if (!elements.purchaseBand || !state.commerce) return;
+  const product = state.commerce.product ?? {};
+  elements.purchaseIncludes.innerHTML = (product.includes ?? []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+  elements.purchasePrice.textContent = formatCommerceMoney(product.amountMinor, product.currency || "INR");
+  elements.mockPaymentButton.hidden = true;
+
+  if (state.entitlement) {
+    elements.purchaseBand.dataset.state = "paid";
+    elements.purchaseStatus.textContent = "Purchased / downloads unlocked";
+    elements.purchaseDetail.textContent = message || "This application pack belongs to your account. Prepared exports and print files are unlocked.";
+    elements.purchaseButton.textContent = "Open my workspace";
+    elements.purchaseButton.disabled = false;
+    return;
+  }
+  if (!state.commerce.enabled) {
+    elements.purchaseBand.dataset.state = "disabled";
+    elements.purchaseStatus.textContent = "Gateway connection pending";
+    elements.purchaseDetail.textContent = "The complete customer, order, and download system is ready. Online charging opens after Slice merchant onboarding.";
+    elements.purchaseButton.textContent = "Payments opening soon";
+    elements.purchaseButton.disabled = true;
+    return;
+  }
+  elements.purchaseBand.dataset.state = "ready";
+  elements.purchaseStatus.textContent = state.account ? "One-time purchase" : "Account required at checkout";
+  elements.purchaseDetail.textContent = message || (state.account
+    ? "Purchase this prepared application once, then return to every included file from your workspace."
+    : "You can prepare the photo as a guest. Sign in before checkout so the purchase and downloads have a secure owner.");
+  elements.purchaseButton.textContent = state.account ? "Unlock application pack" : "Sign in to purchase";
+  elements.purchaseButton.disabled = !state.processedImage && Boolean(state.account);
+  if (state.order?.status === "pending" && state.commerce.mockCompletionAvailable) {
+    elements.mockPaymentButton.hidden = false;
+  }
+}
+
+function scheduleProjectSave() {
+  window.clearTimeout(projectSaveTimer);
+  projectSaveTimer = window.setTimeout(() => persistProject(state.processedImage ? "prepared" : "draft"), 500);
+}
+
+async function persistProject(status = "draft") {
+  if (!state.account || !state.csrfToken || !state.profile) return null;
+  const payload = {
+    id: state.projectId,
+    applicantName: elements.applicantName?.value.trim() || state.account.name || "",
+    profileId: state.profile.id,
+    countryCode: state.profile.country,
+    programmeLabel: state.profile.label,
+    status,
+    resultStatus: state.decision?.status || null,
+    summary: {
+      output: `${state.profile.output.widthPx}x${state.profile.output.heightPx}`,
+      warnings: state.checks.filter((item) => item.status === "warning").length,
+      failures: state.checks.filter((item) => item.status === "fail").length,
+      backgroundReplaced: Boolean(state.effectiveEdits?.background),
+    },
+  };
+  try {
+    const response = await fetch("/api/projects", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json", "x-kvnp-csrf": state.csrfToken },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || data.detail || `HTTP ${response.status}`);
+    state.projectId = data.project.id;
+    state.entitlement = Boolean(data.project.entitled);
+    renderCommerce();
+    return data.project;
+  } catch (error) {
+    console.warn("Project save failed", error);
+    return null;
+  }
+}
+
+async function savePreparedArtifact() {
+  if (!state.account || !state.csrfToken || !state.projectId || !state.exportBlob) return false;
+  const form = new FormData();
+  form.append("image", state.exportBlob, "prepared.jpg");
+  try {
+    const response = await fetch(`/api/projects/${encodeURIComponent(state.projectId)}/artifact`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "x-kvnp-csrf": state.csrfToken },
+      body: form,
+    });
+    return response.ok;
+  } catch (_error) {
+    return false;
+  }
+}
+
+async function restoreRequestedProject() {
+  const requested = new URLSearchParams(location.search).get("project");
+  if (!requested || !state.account) return;
+  try {
+    const response = await fetch("/api/account/summary", { credentials: "same-origin" });
+    const data = await response.json();
+    const project = (data.projects ?? []).find((item) => item.id === requested);
+    if (!project) return;
+    const profile = RULE_PROFILES.find((item) => item.id === project.profileId);
+    if (!profile) return;
+    state.projectId = project.id;
+    state.entitlement = Boolean(project.entitled);
+    state.profile = profile;
+    elements.countrySelect.value = profile.country;
+    populateProgrammeSelect(profile.country);
+    elements.profileSelect.value = profile.id;
+    handleProfileChange();
+    elements.applicantName.value = project.applicantName || "";
+    state.programmeConfirmed = true;
+    updateCountryGate();
+    setWizardStep(2, { force: true, focus: false });
+    renderCommerce(project.artifactAvailable
+      ? "Your saved prepared file is available from My workspace. Upload another source here only when you want to prepare a replacement."
+      : "This programme and applicant have been restored. Add a photo to continue the application.");
+  } catch (error) {
+    console.warn("Could not restore project", error);
+  }
+}
+
+async function startCheckout() {
+  if (state.entitlement) {
+    location.href = "/account";
+    return;
+  }
+  if (!state.account) {
+    showAuthView();
+    authEls.subtitle.textContent = "Sign in so this purchase and its downloads belong to you.";
+    return;
+  }
+  const project = await persistProject("prepared");
+  if (!project) {
+    renderCommerce("Your application could not be saved. Refresh and try again before payment.");
+    return;
+  }
+  elements.purchaseButton.disabled = true;
+  elements.purchaseButton.textContent = "Starting checkout...";
+  try {
+    const response = await fetch("/api/checkout/start", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json", "x-kvnp-csrf": state.csrfToken },
+      body: JSON.stringify({ projectId: state.projectId }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || data.detail || `HTTP ${response.status}`);
+    state.order = data.order;
+    if (data.checkout?.url) {
+      location.href = data.checkout.url;
+      return;
+    }
+    renderCommerce(data.checkout?.development
+      ? "Development checkout created. Complete the test payment to verify the entitlement and download flow."
+      : "Checkout created. Continue with the payment provider.");
+  } catch (error) {
+    renderCommerce(error.message);
+  }
+}
+
+async function completeMockPayment() {
+  if (!state.order || !state.csrfToken) return;
+  elements.mockPaymentButton.disabled = true;
+  elements.mockPaymentButton.textContent = "Completing...";
+  try {
+    const response = await fetch("/api/checkout/mock/complete", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json", "x-kvnp-csrf": state.csrfToken },
+      body: JSON.stringify({ orderId: state.order.id }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || data.detail || `HTTP ${response.status}`);
+    state.order = data.order;
+    state.entitlement = true;
+    renderCommerce("Test payment completed. This is the exact point where a verified Slice webhook will grant access later.");
+  } catch (error) {
+    renderCommerce(error.message);
+  } finally {
+    elements.mockPaymentButton.disabled = false;
+    elements.mockPaymentButton.textContent = "Complete test payment";
+  }
+}
+
+async function authorizeDownload(fileKind, fileFormat, size = null) {
+  if (!state.commerce?.enforced) {
+    if (state.account && state.projectId && state.csrfToken) {
+      fetch("/api/downloads/authorize", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json", "x-kvnp-csrf": state.csrfToken },
+        body: JSON.stringify({ projectId: state.projectId, fileKind, format: fileFormat, bytes: size, warningAcknowledged: state.downloadAcknowledged }),
+      }).catch(() => {});
+    }
+    return true;
+  }
+  if (!state.account) {
+    renderCommerce("Sign in and purchase this application pack to download prepared files.");
+    elements.purchaseBand?.scrollIntoView({ behavior: "smooth", block: "center" });
+    return false;
+  }
+  if (!state.projectId && !(await persistProject("prepared"))) return false;
+  const response = await fetch("/api/downloads/authorize", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json", "x-kvnp-csrf": state.csrfToken },
+    body: JSON.stringify({ projectId: state.projectId, fileKind, format: fileFormat, bytes: size, warningAcknowledged: state.downloadAcknowledged }),
+  });
+  const data = await response.json();
+  if (!response.ok || !data.ok) {
+    renderCommerce(data.error || data.detail || "Purchase required before download.");
+    elements.purchaseBand?.scrollIntoView({ behavior: "smooth", block: "center" });
+    return false;
+  }
+  state.entitlement = Boolean(data.entitled);
+  renderCommerce();
+  return true;
+}
+
+function trackProductEvent(name, metadata = {}) {
+  let anonymousId = "";
+  try {
+    anonymousId = localStorage.getItem("kvnp-anonymous-id") || crypto.randomUUID();
+    localStorage.setItem("kvnp-anonymous-id", anonymousId);
+  } catch (_error) {}
+  fetch("/api/events", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name, projectId: state.projectId, anonymousId, metadata }),
+  }).catch(() => {});
 }
 
 function bindEvents() {
@@ -403,6 +683,9 @@ function bindEvents() {
   });
   elements.downloadWarningDialog.addEventListener("close", resetDownloadWarningDialog);
   elements.backgroundVariantConfirm.addEventListener("click", downloadBackgroundVariant);
+  elements.applicantName?.addEventListener("input", scheduleProjectSave);
+  elements.purchaseButton?.addEventListener("click", startCheckout);
+  elements.mockPaymentButton?.addEventListener("click", completeMockPayment);
   elements.programmeSearch?.addEventListener("input", () => {
     state.catalogueQuery = elements.programmeSearch.value.trim().toLowerCase();
     renderProgrammeCatalogue();
@@ -913,6 +1196,7 @@ function handleProfileChange() {
   configureFinalCanvas();
   state.manualOverride = false;
   renderProgrammeCatalogue();
+  scheduleProjectSave();
   if (state.originalFile) {
     scheduleServerProcessing();
   } else {
@@ -935,6 +1219,7 @@ function handleCountryChange() {
   configureFinalCanvas();
   state.manualOverride = false;
   renderProgrammeCatalogue();
+  scheduleProjectSave();
   if (state.originalFile) {
     scheduleServerProcessing();
   } else {
@@ -1219,6 +1504,8 @@ function applyTouchupGate() {
 
 function confirmProgramme() {
   state.programmeConfirmed = true;
+  trackProductEvent("programme_selected", { profileId: state.profile.id, country: state.profile.country });
+  scheduleProjectSave();
   updateCountryGate();
   setWizardStep(2, { force: true });
 }
@@ -1247,7 +1534,10 @@ function setWizardStep(step, { force = false, focus = true } = {}) {
   const target = force ? requested : Math.min(requested, maxUnlockedWizardStep());
   state.wizardStep = target;
   renderWorkflowProgress();
-  if (target === 4) updateReviewPreview();
+  if (target === 4) {
+    updateReviewPreview();
+    trackProductEvent("review_opened", { profileId: state.profile.id });
+  }
 
   if (focus) {
     const panel = elements.wizardPanels.find((item) => Number(item.dataset.wizardPanel) === target);
@@ -1337,6 +1627,7 @@ async function loadImageFile(file) {
   state.image = image;
   state.imageName = file.name || "camera-capture.jpg";
   state.originalFile = file;
+  trackProductEvent("photo_added", { type: file.type || "image/jpeg", bytes: file.size || 0 });
   state.downloadAcknowledged = false;
   state.imageMeta = {
     type: file.type || "image/jpeg",
@@ -1484,6 +1775,11 @@ async function processOnServer() {
     runAnalysis();
     scheduleAdjustBake();
     updateActiveJobStatus();
+    trackProductEvent("processing_completed", { profileId: state.profile.id, decision: state.decision?.status || "review" });
+    void persistProject("prepared").then((project) => {
+      if (project) void savePreparedArtifact();
+    });
+    renderCommerce();
   } catch (error) {
     if (seq !== processSeq) return; // superseded; let the newer request own the UI
     console.error(error);
@@ -3321,6 +3617,9 @@ function renderChecks() {
     : downloadIssues.length
       ? "Download with warnings"
       : "Download file";
+  if (preparedAvailable && state.commerce?.enforced && !state.entitlement && !checkerOnly) {
+    elements.downloadPhoto.textContent = "Unlock to download";
+  }
   elements.printSheet.disabled = !preparedAvailable || checkerOnly;
   elements.sheetSize.disabled = !preparedAvailable || checkerOnly;
   elements.sheetDpi.disabled = !preparedAvailable || checkerOnly;
@@ -3430,6 +3729,12 @@ function updateReviewPreview() {
   }
 
   const blob = state.exportBlob;
+  if (elements.documentPreviewApplicant) {
+    elements.documentPreviewApplicant.textContent = elements.applicantName?.value.trim() || "Applicant";
+  }
+  if (elements.documentPreviewProgramme) {
+    elements.documentPreviewProgramme.textContent = state.profile?.label || "Selected application";
+  }
   const targets = [elements.reviewPhotoImage, elements.documentPreviewPhoto, ...elements.printPreviewCopies];
   if (!blob) {
     for (const image of targets) {
@@ -4011,6 +4316,7 @@ function showBackgroundVariantDialog() {
 async function downloadBackgroundVariant() {
   if (!state.originalFile || state.backgroundVariantBusy) return;
   const eligible = backgroundVariantIsSubmissionEligible();
+  if (!(await authorizeDownload("background_variant", "image/jpeg", null))) return;
   state.backgroundVariantBusy = true;
   renderBackgroundVariantControl();
   elements.backgroundVariantConfirm.disabled = true;
@@ -4063,6 +4369,9 @@ async function performPhotoDownload() {
   try {
     await bakeExport();
     if (!state.exportBlob) return;
+    await persistProject("prepared");
+    await savePreparedArtifact();
+    if (!(await authorizeDownload("prepared", state.outputFormat, state.exportBlob.size))) return;
     const spec = {
       format: state.outputFormat,
       scale: state.outputScale,
@@ -4100,9 +4409,10 @@ async function performPhotoDownload() {
   }
 }
 
-function downloadReport() {
+async function downloadReport() {
   if (!state.lastReport) return;
   const blob = new Blob([JSON.stringify(state.lastReport, null, 2)], { type: "application/json" });
+  if (!(await authorizeDownload("audit_report", "application/json", blob.size))) return;
   downloadBlob(blob, `${slugify(state.profile.label)}-report-${Date.now()}.json`);
 }
 
@@ -4236,6 +4546,7 @@ async function generatePrintSheet() {
   if (!state.processedImage) return;
   await bakeExport();
   if (!state.exportBlob) return;
+  if (!(await authorizeDownload("print_sheet", "image/jpeg", state.exportBlob.size))) return;
 
   const button = elements.printSheet;
   const label = button.textContent;
@@ -5108,7 +5419,7 @@ const authEls = {
   accountAvatar: document.querySelector("#account-avatar"),
   accountName: document.querySelector("#account-name"),
   accountEmail: document.querySelector("#account-email"),
-  navItems: document.querySelectorAll(".nav-item"),
+  navItems: document.querySelectorAll(".nav-item[data-nav]"),
 };
 
 const authState = { mode: "login" };
@@ -5148,8 +5459,10 @@ function hideAuthError() {
   authEls.error.textContent = "";
 }
 
-function applyAccount(user) {
+function applyAccount(user, csrfToken = null) {
   state.guestSession = !user;
+  state.account = user || null;
+  state.csrfToken = csrfToken || null;
   document.body.dataset.guest = state.guestSession ? "true" : "false";
   if (user) {
     const label = user.name || user.email;
@@ -5157,16 +5470,21 @@ function applyAccount(user) {
     authEls.accountEmail.textContent = user.email;
     authEls.accountAvatar.textContent = (label[0] || "U").toUpperCase();
     authEls.logout.style.display = "";
+    elements.adminWorkspaceLink.hidden = user.role !== "admin";
   } else {
     authEls.accountName.textContent = "Guest";
     authEls.accountEmail.textContent = "local session";
     authEls.accountAvatar.textContent = "G";
     authEls.logout.style.display = "none";
+    elements.adminWorkspaceLink.hidden = true;
   }
   if (elements.demoLibrary) elements.demoLibrary.hidden = !state.guestSession;
   if (!state.guestSession) state.demoWalkthroughActive = false;
   renderDemoLibrary();
   renderDemoWalkthrough();
+  if (state.commerce) state.commerce.signedIn = Boolean(user);
+  renderCommerce();
+  if (user && state.image) scheduleProjectSave();
 }
 
 async function submitAuth(event) {
@@ -5192,7 +5510,7 @@ async function submitAuth(event) {
     if (!response.ok || !data.ok) {
       throw new Error(data.error || `HTTP ${response.status}`);
     }
-    applyAccount(data.user);
+    applyAccount(data.user, data.csrfToken);
     showAppView();
   } catch (error) {
     showAuthError(error.message);
@@ -5208,14 +5526,14 @@ async function logout() {
   } catch (error) {
     console.warn(error);
   }
-  applyAccount(null);
+  applyAccount(null, null);
   setAuthMode("login");
   authEls.form.reset();
   showAuthView();
 }
 
 function continueAsGuest() {
-  applyAccount(null);
+  applyAccount(null, null);
   showAppView();
 }
 
@@ -5253,14 +5571,15 @@ async function bootAuth() {
     const response = await fetch("/api/auth/me");
     const data = await response.json();
     if (data.ok && data.user) {
-      applyAccount(data.user);
+      applyAccount(data.user, data.csrfToken);
       showAppView();
+      await restoreRequestedProject();
       return;
     }
   } catch (error) {
     console.warn("auth check failed", error);
   }
-  applyAccount(null);
+  applyAccount(null, null);
   showAuthView();
 }
 

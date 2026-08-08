@@ -101,7 +101,7 @@
             </label>
             <label class="auth-field">
               <span>Password</span>
-              <input id="auth-password" type="password" autocomplete="current-password" placeholder="••••••••" required minlength="6" />
+              <input id="auth-password" type="password" autocomplete="current-password" placeholder="••••••••" required minlength="8" />
             </label>
             <div id="auth-error" class="auth-error" hidden></div>
             <button id="auth-submit" class="btn btn-primary btn-block" type="submit">Sign in</button>
@@ -140,6 +140,12 @@
           <button class="nav-item" type="button" data-nav="checks">
             <span class="nav-ico">03</span> Compliance
           </button>
+          <a id="workspace-link" class="nav-item nav-link-item" href="/account">
+            <span class="nav-ico">04</span> My workspace
+          </a>
+          <a id="admin-workspace-link" class="nav-item nav-link-item" href="/admin" hidden>
+            <span class="nav-ico">05</span> Operations
+          </a>
         </nav>
 
         <div class="sidebar-foot">
@@ -309,6 +315,11 @@
                 <span><strong>7</strong> document types</span>
               </div>
             </div>
+
+            <label class="applicant-field" for="applicant-name">
+              <span><strong>Who is this photo for?</strong><small>Used in your workspace and file names, never printed on the photo.</small></span>
+              <input id="applicant-name" type="text" autocomplete="name" maxlength="160" placeholder="Applicant full name" />
+            </label>
 
             <div class="catalogue-tools">
               <label class="catalogue-search" for="programme-search">
@@ -704,6 +715,21 @@
               </article>
             </div>
 
+            <section id="purchase-band" class="purchase-band" data-state="loading" aria-labelledby="purchase-title">
+              <div class="purchase-copy">
+                <span class="section-label">Application pack</span>
+                <h4 id="purchase-title">Finish once. Keep every useful file.</h4>
+                <p id="purchase-detail">Checking purchase availability...</p>
+              </div>
+              <ul id="purchase-includes" class="purchase-includes"></ul>
+              <div class="purchase-action">
+                <strong id="purchase-price">-</strong>
+                <span id="purchase-status">Not purchased</span>
+                <button id="purchase-button" class="btn btn-primary" type="button" disabled>Unlock downloads</button>
+                <button id="mock-payment-button" class="btn" type="button" hidden>Complete test payment</button>
+              </div>
+            </section>
+
             <div class="review-layout">
               <div class="review-preview-column">
                 <div class="review-preview-tabs" role="tablist" aria-label="Output preview">
@@ -727,7 +753,9 @@
                       <div class="document-mock-body">
                         <img id="document-preview-photo" alt="Photo placed in a generic document preview" />
                         <div class="document-mock-lines" aria-hidden="true">
-                          <span></span><span></span><span></span><span></span>
+                          <small>Applicant</small><strong id="document-preview-applicant">Your name</strong>
+                          <small>Programme</small><strong id="document-preview-programme">Selected application</strong>
+                          <span></span><span></span>
                         </div>
                       </div>
                       <div class="document-mock-foot">PREVIEW ONLY / NOT AN OFFICIAL DOCUMENT</div>

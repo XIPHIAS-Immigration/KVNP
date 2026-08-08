@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Operations | KVNP Studio</title>
+    <link rel="stylesheet" href="/src/portal.css?v=kvnp-platform-1" />
+  </head>
+  <body data-portal="admin">
+    <header class="portal-bar">
+      <a class="portal-brand" href="/"><span>KV</span><strong>KVNP Operations</strong></a>
+      <nav><a href="/app">Studio</a><a href="/account">My workspace</a><a class="active" href="/admin">Admin</a></nav>
+    </header>
+
+    <main class="portal-shell admin-shell">
+      <section class="portal-intro">
+        <div><span class="eyebrow">Live operations</span><h1>Studio performance</h1><p>Payments, customer activity, downloads, and support without opening customer photos.</p></div>
+        <button id="refresh-admin" class="primary-button" type="button">Refresh</button>
+      </section>
+
+      <section id="admin-metrics" class="metric-strip metric-grid" aria-label="Business metrics"></section>
+
+      <section class="admin-grid">
+        <div class="portal-section">
+          <div class="section-heading"><div><span class="eyebrow">Conversion</span><h2>Customer funnel</h2></div></div>
+          <div id="funnel-list" class="funnel-list"></div>
+        </div>
+        <div class="portal-section">
+          <div class="section-heading"><div><span class="eyebrow">Gateway</span><h2>Commerce status</h2></div></div>
+          <dl id="commerce-status" class="status-list"></dl>
+        </div>
+      </section>
+
+      <section class="portal-section">
+        <div class="section-heading"><div><span class="eyebrow">Orders</span><h2>Recent payment activity</h2></div></div>
+        <div class="table-scroll"><table><thead><tr><th>Reference</th><th>User</th><th>Amount</th><th>Provider</th><th>Status</th><th>Created</th></tr></thead><tbody id="admin-orders"></tbody></table></div>
+      </section>
+
+      <section class="portal-section">
+        <div class="section-heading"><div><span class="eyebrow">Support</span><h2>Customer enquiries</h2></div><span id="enquiry-count" class="muted"></span></div>
+        <div id="admin-enquiries" class="enquiry-list"></div>
+      </section>
+    </main>
+    <script type="module" src="/src/admin.js?v=kvnp-platform-1"></script>
+  </body>
+</html>

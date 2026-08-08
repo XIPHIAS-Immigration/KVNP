@@ -20,7 +20,15 @@ No `npm install` is required. The script starts `server.py`, which serves the br
 
 ## Current scope
 
-- accounts: sign up / sign in / guest, local SQLite + signed session cookie
+- accounts: sign up / sign in / guest, Argon2 passwords, opaque revocable sessions
+- customer workspace with named applications, purchase history, entitlements,
+  re-download status, and support enquiries
+- role-protected operations portal with revenue, order, download, funnel, and
+  enquiry reporting
+- PostgreSQL-ready transactional product schema with one-time import of legacy
+  SQLite users; local development falls back to `data/platform.db`
+- payment-provider boundary plus a locked mock checkout for entitlement testing;
+  Slice remains disabled until merchant UAT credentials are supplied
 - premium app-shell UI (sidebar nav, top bar, login screen)
 - image upload (multi-file batch queue)
 - camera capture
@@ -59,6 +67,8 @@ python -m py_compile server.py        # backend syntax check
 python tools/test_matting.py          # matting + diagnostics regression tests
 python tools/test_corrections.py      # auto-correction (straighten / tone) tests
 python tools/test_print_sheet.py      # print-sheet layout tests
+python tools/test_platform.py         # accounts, orders, entitlements, admin
+python tools/test_workflow.py         # staged browser workflow regressions
 python tools/pipeline_smoketest.py    # run the full pipeline on sample portraits
 ```
 
@@ -84,6 +94,7 @@ Deployment files are included for a short EC2 demo:
 - `requirements-gpu.txt` / `Dockerfile.gpu` - NVIDIA CUDA deployment
 - `compose.yaml` - app + Caddy HTTPS reverse proxy
 - `compose.gpu.yaml` - GPU override for the app service
+- `compose.postgres.yaml` - PostgreSQL persistence override
 - `Caddyfile` - automatic HTTPS for the configured domain
 - `.env.example` - production environment template
 - `docs/aws-ec2-demo.md` - EC2 + GoDaddy deployment runbook
@@ -107,6 +118,26 @@ docker compose -f compose.yaml -f compose.gpu.yaml exec -T app \
 
 The provider check must include `CUDAExecutionProvider`; `/api/health` reports
 the quality model inventory and the active provider after the first matte job.
+
+For the production database, set `POSTGRES_PASSWORD` and
+`KVNP_COOKIE_SECURE=true` in `.env`, then include the PostgreSQL override:
+
+```bash
+docker compose -f compose.yaml -f compose.gpu.yaml -f compose.postgres.yaml up -d --build
+```
+
+Create the administrator as an ordinary account first, then promote it from the
+server shell. This prevents a public signup from claiming an administrator email:
+
+```bash
+docker compose -f compose.yaml -f compose.gpu.yaml -f compose.postgres.yaml exec -T app \
+  python tools/promote_admin.py admin@example.com
+```
+
+Commerce defaults to `disabled`, so deployment does not expose a fake checkout.
+For local entitlement testing only, set `KVNP_PAYMENT_MODE=mock` and
+`KVNP_ALLOW_MOCK_PAYMENTS=true`. Keep `KVNP_COMMERCE_ENFORCED=false` until a real
+provider webhook can grant entitlements.
 
 ## Current starter programmes
 

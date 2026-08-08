@@ -126,3 +126,41 @@
     revealEverything();
   }
 })();
+
+(function () {
+  "use strict";
+  try {
+    var anonymousId = localStorage.getItem("kvnp-anonymous-id") || crypto.randomUUID();
+    localStorage.setItem("kvnp-anonymous-id", anonymousId);
+    fetch("/api/events", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "landing_view", anonymousId: anonymousId }) }).catch(function () {});
+  } catch (error) {}
+  var form = document.getElementById("contact-form");
+  if (!form) return;
+  var status = document.getElementById("contact-status");
+  form.addEventListener("submit", async function (event) {
+    event.preventDefault();
+    status.textContent = "Sending...";
+    var button = form.querySelector("button[type='submit']");
+    button.disabled = true;
+    try {
+      var response = await fetch("/api/enquiries", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: document.getElementById("contact-name").value,
+          email: document.getElementById("contact-email").value,
+          subject: document.getElementById("contact-subject").value,
+          message: document.getElementById("contact-message").value,
+        }),
+      });
+      var data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || "Could not send the enquiry.");
+      form.reset();
+      status.textContent = "Received / " + data.reference;
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
+})();

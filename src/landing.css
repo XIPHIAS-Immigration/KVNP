@@ -225,6 +225,18 @@ section{position:relative;}
 .cty .tag.full{color:var(--pass); border-color:rgba(65,217,125,.35); background:rgba(65,217,125,.07);}
 
 /* ---------- final CTA ---------- */
+.contact{padding:110px 0;border-top:1px solid var(--line);background:var(--paper-2)}
+.contact-grid{display:grid;grid-template-columns:.85fr 1.15fr;gap:80px;align-items:start}
+.contact-copy h2{font-size:clamp(2rem,4vw,3.7rem);line-height:1.04;margin-top:20px;letter-spacing:-.02em}
+.contact-copy p{color:var(--text-2);font-size:1rem;line-height:1.6;margin-top:20px;max-width:46ch}
+.contact-form{display:grid;gap:14px}
+.contact-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.contact-form label{display:grid;gap:7px}
+.contact-form label span{font-family:var(--font-mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+.contact-form input,.contact-form textarea{width:100%;border:1px solid var(--line-2);border-radius:0;background:var(--ink);color:#fff;padding:13px;outline:none;font:inherit}
+.contact-form input:focus,.contact-form textarea:focus{border-color:var(--stamp-ink)}
+.contact-submit{display:flex;align-items:center;justify-content:space-between;gap:18px}
+.contact-submit>span{color:var(--warn);font-family:var(--font-mono);font-size:11px}
 .final{padding:140px 0; text-align:center; position:relative; overflow:hidden; border-top:1px solid var(--line);}
 .final::before{content:""; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:80vw; height:60vh; background:radial-gradient(ellipse, rgba(232,68,46,.14), rgba(232,68,46,0) 60%); pointer-events:none;}
 .final .wrap{position:relative; z-index:1;}
@@ -243,6 +255,7 @@ section{position:relative;}
 
 /* ---------- responsive ---------- */
 @media (max-width:960px){
+  .contact-grid{grid-template-columns:1fr;gap:38px}
   .hero-grid{grid-template-columns:1fr; gap:44px;}
   .pcard{grid-row:1; justify-self:start;}
   .showcase-inner{grid-template-columns:1fr; gap:36px;}
@@ -258,6 +271,7 @@ section{position:relative;}
   .nav-toggle{display:block;}
 }
 @media (max-width:560px){
+  .contact-fields{grid-template-columns:1fr}
   .wrap{padding:0 18px;}
   .nav{padding:14px 18px;}
   .hero{padding:120px 0 70px;}
