@@ -1,5 +1,6 @@
 """Static regressions for the four-stage browser workflow."""
 
+import json
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -180,6 +181,18 @@ def test_background_variant_respects_programme_policy():
     print("test_background_variant_respects_programme_policy", PASS)
 
 
+def test_general_studio_has_clean_exports():
+    _, app = load_sources()
+    profiles = json.loads((ROOT / "data" / "profiles.json").read_text(encoding="utf-8"))
+    studio = next(profile for profile in profiles if profile["id"] == "general-studio-square-2026-08")
+    assert studio["submissionMode"] == "general_use"
+    assert studio["automation"]["backgroundReplacement"] is True
+    assert all(studio["allowedEdits"][key] is True for key in ("straighten", "tone", "lighting", "background", "enhance"))
+    assert "function isGeneralUseProfile()" in app
+    assert "Preview, print and downloads contain no on-image watermark." in app
+    print("test_general_studio_has_clean_exports", PASS)
+
+
 def main():
     tests = [
         test_four_stage_structure,
@@ -190,6 +203,7 @@ def main():
         test_guest_demo_library_and_walkthrough,
         test_original_download_survives_processing_failure,
         test_background_variant_respects_programme_policy,
+        test_general_studio_has_clean_exports,
     ]
     for test in tests:
         test()

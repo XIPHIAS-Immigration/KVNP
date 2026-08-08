@@ -1,4 +1,4 @@
-import { COUNTRIES, RULE_PROFILES, getDefaultProfile, getProfilesForCountry } from "./rules.js?v=kvnp-studio-43";
+import { COUNTRIES, RULE_PROFILES, getDefaultProfile, getProfilesForCountry } from "./rules.js?v=kvnp-studio-44";
 import { initCoach, analyzeFrame, coachAvailable } from "./capture.js?v=kvnp-studio-43";
 import { DEMO_FILTERS, DEMO_PORTRAITS } from "./demo-library.js?v=kvnp-studio-43";
 
@@ -1077,6 +1077,18 @@ function applyPolicyControlGate() {
 function renderEditIntent() {
   if (!elements.previewMode || !elements.editModeTitle) return;
   const card = elements.previewMode.closest(".preview-mode-card");
+  if (isGeneralUseProfile()) {
+    state.previewMode = false;
+    elements.previewMode.checked = false;
+    elements.previewMode.disabled = true;
+    card?.setAttribute("data-active", "true");
+    elements.editModeTitle.textContent = "General studio file";
+    elements.editModeDescription.textContent =
+      "All identity-preserving crop, colour, lighting, backdrop and export tools are enabled. Preview, print and downloads contain no on-image watermark.";
+    elements.editModeLabel.textContent = "Clean export enabled";
+    return;
+  }
+  elements.previewMode.disabled = false;
   card?.setAttribute("data-active", state.previewMode ? "true" : "false");
   if (state.previewMode) {
     elements.editModeTitle.textContent = "Studio preview active";
@@ -1109,7 +1121,10 @@ function updateBackgroundPolicyNote() {
   const required = describeBackground(state.profile.background?.mode ?? "plain light background");
   const banned = state.profile.allowedEdits?.background === false && !state.previewMode;
   elements.backgroundPolicyNote.className = `control-guidance ${state.previewMode ? "preview" : banned ? "locked" : "allowed"}`;
-  if (state.previewMode) {
+  if (isGeneralUseProfile()) {
+    elements.backgroundPolicyNote.textContent =
+      `General Studio: background removal is enabled and exports remain clean and unwatermarked. Selected appearance: ${required}.`;
+  } else if (state.previewMode) {
     elements.backgroundPolicyNote.textContent =
       `Editing Preview: background removal is available, but the result is permanently watermarked and is not a submission file. Required appearance: ${required}.`;
   } else if (banned) {
@@ -1134,6 +1149,11 @@ function syncOutputControls() {
 
 function updateOutputNote() {
   if (!elements.outputNote) return;
+  if (isGeneralUseProfile()) {
+    elements.outputNote.classList.remove("warning");
+    elements.outputNote.textContent = "Clean general-use export. JPG, PNG, WebP, PDF and print-sheet output are available without an on-image watermark.";
+    return;
+  }
   if (state.previewMode) {
     elements.outputNote.classList.add("warning");
     elements.outputNote.textContent = "Watermarked editing preview. Switch back to Submission mode for the application file.";
@@ -1158,6 +1178,10 @@ function updateOutputNote() {
 function isValidationOnlyProfile() {
   const allowed = state.profile?.allowedEdits ?? {};
   return ["straighten", "tone", "lighting", "background", "enhance"].every((key) => allowed[key] === false);
+}
+
+function isGeneralUseProfile() {
+  return state.profile?.submissionMode === "general_use";
 }
 
 function applyAdjustmentPolicyGate() {
@@ -1280,7 +1304,9 @@ function renderPolicyList() {
     elements.policyList.innerHTML = "";
     return;
   }
-  const mode = state.previewMode
+  const mode = isGeneralUseProfile()
+    ? `<div class="policy-mode assisted"><strong>General studio export</strong><span>Identity-preserving edits and clean downloads are enabled. This preset makes no passport or issuing-authority compliance claim.</span></div>`
+    : state.previewMode
     ? `<div class="policy-mode preview"><strong>Editing preview active</strong><span>Identity-preserving cleanup tools are enabled. The result is watermarked and cannot be mistaken for a submission file.</span></div>`
     : isValidationOnlyProfile()
     ? `<div class="policy-mode validation"><strong>Submission mode: validation only</strong><span>This programme does not permit the listed pixel edits. We crop, size and check the original capture; defects require a retake.</span></div>`
@@ -1898,6 +1924,7 @@ function nextReviewDate(lastReviewed, days) {
 
 function describeSubmissionMode(mode) {
   return {
+    general_use: "General studio export",
     safe_prepare: "Safe preparation",
     format_only: "Format and validate",
     checker_only: "Source checker only",
@@ -1908,8 +1935,11 @@ function describeSubmissionMode(mode) {
 function renderProgrammeNotice(meta) {
   if (!elements.programmeNotice) return;
   const checkerOnly = meta.submissionMode === "checker_only";
+  const generalUse = meta.submissionMode === "general_use";
   elements.programmeNotice.className = `programme-notice ${checkerOnly ? "checker" : "format"}`;
-  elements.programmeNotice.innerHTML = checkerOnly
+  elements.programmeNotice.innerHTML = generalUse
+    ? "<strong>Clean general-use studio file</strong><span>Edit the background, colour, lighting and framing, then preview, print or download without an on-image watermark. This mode does not claim government-document compliance.</span>"
+    : checkerOnly
     ? "<strong>Bring or upload the original source</strong><span>This authority requires professional or secure capture. KVNP will measure it and preserve the original, but will not create an edited submission file.</span>"
     : "<strong>Formatting workflow</strong><span>KVNP can size, encode and validate this programme. Any pixel correction blocked by the authority remains disabled.</span>";
 }
@@ -3456,6 +3486,7 @@ function renderReviewVerdict(issues = getDownloadIssues()) {
   const prepared = Boolean(state.exportBlob && state.processedImage);
   const hasOriginal = Boolean(state.originalFile);
   const checkerOnly = state.profile?.checkerOnly === true;
+  const generalUse = isGeneralUseProfile();
   const ready = prepared && !checkerOnly && failCount === 0 && warningCount === 0 && unresolvedReviews === 0;
   const tone = ready ? "ready" : failCount ? "fail" : issues.length ? "warning" : "pending";
   elements.reviewVerdict.dataset.tone = tone;
@@ -3463,7 +3494,7 @@ function renderReviewVerdict(issues = getDownloadIssues()) {
   elements.verdictRecommendation.textContent = !state.image
     ? "Waiting for photo"
     : ready
-      ? "Recommended to submit"
+      ? generalUse ? "Studio file ready" : "Recommended to submit"
       : failCount
         ? "Retake recommended"
         : unresolvedReviews
@@ -3476,7 +3507,9 @@ function renderReviewVerdict(issues = getDownloadIssues()) {
   elements.verdictRecommendationDetail.textContent = !state.image
     ? "No assessment is available yet."
     : ready
-      ? "Automated checks pass and human items are confirmed."
+      ? generalUse
+        ? "Clean, unwatermarked general-use output is ready."
+        : "Automated checks pass and human items are confirmed."
       : `${failCount} fail, ${warningCount} warning, ${unresolvedReviews} human confirmation${unresolvedReviews === 1 ? "" : "s"}.`;
 
   elements.verdictFile.textContent = prepared && !checkerOnly
@@ -3495,7 +3528,7 @@ function renderReviewVerdict(issues = getDownloadIssues()) {
   elements.verdictAction.textContent = !state.image
     ? "Add a portrait"
     : ready
-      ? "Download the required file"
+      ? generalUse ? "Download or print the studio file" : "Download the required file"
       : failCount
         ? "Return to Photo and retake"
         : unresolvedReviews
@@ -3506,7 +3539,9 @@ function renderReviewVerdict(issues = getDownloadIssues()) {
               ? "Use the authority capture route"
               : "Prepare the photo";
   elements.verdictActionDetail.textContent = ready
-    ? "Use Required size for online submission or Print sheet for physical copies."
+    ? generalUse
+      ? "Choose JPG, PNG, WebP or PDF, or generate a physical print sheet."
+      : "Use Required size for online submission or Print sheet for physical copies."
     : failCount
       ? "Crop or enhancement cannot safely repair failed capture conditions."
       : "Warnings never hide the original or lock an available prepared file.";

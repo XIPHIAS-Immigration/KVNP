@@ -32,8 +32,8 @@ from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parent
-SERVER_VERSION = "python-mediapipe-2026-07-23-posture-audit"
-MODEL_DIR = ROOT / "models"
+SERVER_VERSION = "python-mediapipe-2026-08-08-birefnet-matting"
+MODEL_DIR = Path(os.getenv("KVNP_MODEL_DIR", str(ROOT / "models"))).expanduser()
 TOOLS_DIR = ROOT / "tools"
 FACE_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task"
 SEGMENTER_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite"
@@ -44,8 +44,12 @@ SEGMENTER_MODEL_PATH = MODEL_DIR / "selfie_segmenter.tflite"
 SUPERRES_MODEL_PATH = MODEL_DIR / "FSRCNN_x2.pb"
 POSE_MODEL_PATH = MODEL_DIR / "pose_landmarker_lite.task"
 MODNET_MODEL_PATH = MODEL_DIR / "modnet.onnx"
+BIREFNET_MODEL_PATH = MODEL_DIR / "birefnet-portrait.onnx"
 GFPGAN_MODEL_PATH = MODEL_DIR / "GFPGANv1.4.pth"
 REALESRGAN_MODEL_NAME = "realesrgan-x4plus"
+MATTING_ENGINE_PREFERENCE = os.getenv("KVNP_MATTING_ENGINE", "auto").strip().lower()
+if MATTING_ENGINE_PREFERENCE not in {"auto", "birefnet", "modnet", "mediapipe"}:
+    MATTING_ENGINE_PREFERENCE = "auto"
 # Heavy matte post-processing (guided filter, dilation, connected components)
 # runs at a capped working resolution for speed; the final alpha is upsampled
 # to the source resolution for compositing.
@@ -173,6 +177,9 @@ gfpgan_restorer = None
 gfpgan_unavailable = False
 modnet_session = None
 modnet_unavailable = False
+birefnet_session = None
+birefnet_unavailable = False
+birefnet_provider = None
 HAS_GUIDED_FILTER = hasattr(cv2, "ximgproc") and hasattr(getattr(cv2, "ximgproc", None), "guidedFilter")
 _logged_warnings = set()
 
@@ -494,6 +501,8 @@ def health():
         "faceMesh": True,
         "poseLandmarker": pose_landmarker is not None,
         "selfieSegmentation": True,
+        "birefnet": birefnet_ready(),
+        "mattingPreference": MATTING_ENGINE_PREFERENCE,
         "realEsrgan": real_esrgan_ready(),
         "gfpgan": gfpgan_ready(),
         "modnet": modnet_active(),
@@ -728,7 +737,7 @@ def process_image(image_bytes, profile, options):
 
     if replace_background and matte is not None:
         background_cleanup = str(options.get("backgroundCleanup") or "balanced")
-        composite_matte = apply_background_cleanup(matte, background_cleanup)
+        composite_matte = apply_background_cleanup(matte, background_cleanup, engine=matte_engine)
         mask_stats = describe_mask(composite_matte, face, width, height, matte_engine)
         # Composite at the final canvas resolution. Besides bounding memory on
         # phone photos, this lets edge decontamination operate on the exact
@@ -747,7 +756,7 @@ def process_image(image_bytes, profile, options):
             profile["output"]["widthPx"],
             profile["output"]["heightPx"],
         )
-        final_matte = refine_output_matte(final_matte, final_source)
+        final_matte = refine_output_matte(final_matte, final_source, engine=matte_engine)
         final = composite_background(final_source, final_matte, background_rgb)
         pad_color = background_rgb
     else:
@@ -1469,11 +1478,10 @@ def apply_facial_corrections(image, landmarks, face, width, height):
 def build_person_mask(mp_image, source_bgr, face, enabled, width, height, landmarks=None):
     """Return ``(alpha_mask, engine_label)`` for the person matte.
 
-    Prefers MODNet portrait matting (when ``models/modnet.onnx`` is present)
-    and otherwise falls back to the MediaPipe selfie segmenter. Both paths are
-    cleaned to a single connected subject (no stray background islands) and
-    edge-refined with a guided filter so hair and shoulders follow the real
-    image rather than a blocky cutout.
+    Prefers BiRefNet Portrait for export-grade still-image edges, then MODNet,
+    and finally the MediaPipe selfie segmenter. High-quality alpha mattes keep
+    their learned soft edges; the coarse MediaPipe fallback receives the more
+    aggressive guided-filter and anatomical guard processing.
 
     ``engine`` is ``"disabled"`` when replacement is off, ``"unavailable"`` when
     replacement was requested but no matte engine produced a mask (so the
@@ -1483,19 +1491,27 @@ def build_person_mask(mp_image, source_bgr, face, enabled, width, height, landma
         return None, "disabled"
 
     rgb = cv2.cvtColor(ensure_bgr(source_bgr), cv2.COLOR_BGR2RGB)
-    matte = run_modnet_matte(rgb, width, height)
-    if matte is not None:
-        engine = "MODNet Portrait Matting"
-        mask = matte
-    else:
+    mask = None
+    engine = None
+    if MATTING_ENGINE_PREFERENCE in {"auto", "birefnet"}:
+        mask = run_birefnet_matte(rgb, width, height)
+        if mask is not None:
+            engine = "BiRefNet Portrait Matting"
+    if mask is None and MATTING_ENGINE_PREFERENCE in {"auto", "birefnet", "modnet"}:
+        mask = run_modnet_matte(rgb, width, height)
+        if mask is not None:
+            engine = "MODNet Portrait Matting"
+    if mask is None:
         engine = "MediaPipe Image Segmenter"
         mask = run_selfie_segmenter(mp_image, width, height)
         if mask is None:
             return None, "unavailable"
         mask = clean_coarse_matte(mask)
 
-    mask = finalize_matte(mask, source_bgr, face, width, height)
-    mask = protect_head_and_neck(mask, face, width, height, landmarks=landmarks, source_bgr=source_bgr)
+    quality_alpha = engine == "BiRefNet Portrait Matting"
+    mask = finalize_matte(mask, source_bgr, face, width, height, preserve_detail=quality_alpha)
+    if not quality_alpha:
+        mask = protect_head_and_neck(mask, face, width, height, landmarks=landmarks, source_bgr=source_bgr)
     return np.clip(mask, 0, 1).astype(np.float32), engine
 
 
@@ -1607,7 +1623,7 @@ def protect_head_and_neck(mask, face, width, height, landmarks=None, source_bgr=
     return np.maximum(alpha, protected).astype(np.float32)
 
 
-def finalize_matte(mask, source_bgr, face, width, height):
+def finalize_matte(mask, source_bgr, face, width, height, preserve_detail=False):
     """Single-subject cleanup + edge refinement at a capped working resolution.
 
     MODNet runs at ~512px but the alpha is upsampled to full source resolution;
@@ -1621,12 +1637,13 @@ def finalize_matte(mask, source_bgr, face, width, height):
         work_h = max(1, int(round(height * scale)))
         small = cv2.resize(mask, (work_w, work_h), interpolation=cv2.INTER_LINEAR)
         guide = cv2.resize(ensure_bgr(source_bgr), (work_w, work_h), interpolation=cv2.INTER_AREA)
-        small = keep_main_subject(small, scale_face(face, scale))
-        small = refine_matte_edges(small, guide)
+        small = keep_main_subject(small, scale_face(face, scale), preserve_nearby=preserve_detail)
+        if not preserve_detail:
+            small = refine_matte_edges(small, guide)
         return np.clip(cv2.resize(small, (width, height), interpolation=cv2.INTER_LINEAR), 0, 1).astype(np.float32)
 
-    mask = keep_main_subject(mask, face)
-    return refine_matte_edges(mask, source_bgr)
+    mask = keep_main_subject(mask, face, preserve_nearby=preserve_detail)
+    return mask if preserve_detail else refine_matte_edges(mask, source_bgr)
 
 
 def scale_face(face, scale):
@@ -1662,7 +1679,7 @@ def clean_coarse_matte(mask):
     return np.clip(mask, 0, 1).astype(np.float32)
 
 
-def keep_main_subject(mask, face=None):
+def keep_main_subject(mask, face=None, preserve_nearby=False):
     """Keep the person silhouette and drop disconnected background islands.
 
     A single-person passport photo is one connected silhouette, so stray blobs
@@ -1700,6 +1717,11 @@ def keep_main_subject(mask, face=None):
 
     result = mask * keep_region
     other_solid = (binary == 1) & (labels != chosen)
+    if preserve_nearby:
+        # A high-quality portrait matte can contain detached curls or flyaway
+        # hair. Keep components inside the edge band while dropping distant
+        # people and background objects.
+        other_solid &= keep_region < 0.5
     result[other_solid] = 0.0
     return result.astype(np.float32)
 
@@ -1718,6 +1740,106 @@ def refine_matte_edges(mask, guide_bgr):
         except Exception:
             pass
     return np.clip(cv2.GaussianBlur(mask, (0, 0), 2.4), 0, 1).astype(np.float32)
+
+
+def birefnet_ready():
+    return bool(
+        BIREFNET_MODEL_PATH.exists()
+        and BIREFNET_MODEL_PATH.stat().st_size > 100_000_000
+        and importlib.util.find_spec("onnxruntime") is not None
+    )
+
+
+def birefnet_inventory_status():
+    if birefnet_unavailable:
+        return "error"
+    return "ready" if birefnet_ready() else "optional-not-installed"
+
+
+def disable_birefnet(reason):
+    global birefnet_unavailable
+    birefnet_unavailable = True
+    log_warn_once(f"BiRefNet disabled: {reason}. Falling back to a lighter matte engine.")
+
+
+def preferred_onnx_providers(ort):
+    requested = os.getenv("KVNP_ONNX_PROVIDER", "auto").strip().lower()
+    available = set(ort.get_available_providers())
+    if requested in {"cuda", "gpu"} and "CUDAExecutionProvider" not in available:
+        log_warn_once("CUDA matting was requested but CUDAExecutionProvider is unavailable; using CPU.")
+    if requested in {"auto", "cuda", "gpu"} and "CUDAExecutionProvider" in available:
+        return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    if requested in {"auto", "openvino"} and "OpenVINOExecutionProvider" in available:
+        return ["OpenVINOExecutionProvider", "CPUExecutionProvider"]
+    return ["CPUExecutionProvider"]
+
+
+def get_birefnet_session():
+    global birefnet_session, birefnet_unavailable, birefnet_provider
+    if birefnet_session is not None:
+        return birefnet_session
+    if birefnet_unavailable or not birefnet_ready():
+        return None
+    try:
+        import onnxruntime as ort
+
+        options = ort.SessionOptions()
+        options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        default_threads = min(4, os.cpu_count() or 1)
+        options.intra_op_num_threads = max(1, int(os.getenv("KVNP_ONNX_THREADS", str(default_threads))))
+        providers = preferred_onnx_providers(ort)
+        birefnet_session = ort.InferenceSession(
+            str(BIREFNET_MODEL_PATH),
+            sess_options=options,
+            providers=providers,
+        )
+        active = birefnet_session.get_providers()
+        birefnet_provider = active[0] if active else "unknown"
+        log_warn_once(f"BiRefNet Portrait Matting ready via {birefnet_provider}.")
+    except Exception as error:
+        disable_birefnet(f"failed to load {BIREFNET_MODEL_PATH.name}: {error}")
+        return None
+    return birefnet_session
+
+
+def normalize_birefnet_output(output):
+    logits = np.asarray(output, dtype=np.float32)
+    if logits.ndim >= 4:
+        logits = logits[0, 0]
+    else:
+        logits = np.squeeze(logits)
+    if logits.ndim != 2:
+        return None
+    alpha = 1.0 / (1.0 + np.exp(-np.clip(logits, -30.0, 30.0)))
+    low = float(alpha.min()) if alpha.size else 0.0
+    high = float(alpha.max()) if alpha.size else 0.0
+    if high - low > 1e-5:
+        # Match the established BiRefNet ONNX inference contract used by rembg.
+        alpha = (alpha - low) / (high - low)
+    return np.clip(alpha, 0, 1).astype(np.float32)
+
+
+def run_birefnet_matte(rgb, width, height, input_size=1024):
+    """Run the BiRefNet portrait ONNX model and return a full-resolution alpha."""
+    session = get_birefnet_session()
+    if session is None:
+        return None
+    try:
+        resized = cv2.resize(rgb, (input_size, input_size), interpolation=cv2.INTER_LANCZOS4)
+        tensor = resized.astype(np.float32) / 255.0
+        mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+        std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+        tensor = (tensor - mean[None, None, :]) / std[None, None, :]
+        tensor = np.transpose(tensor, (2, 0, 1))[None, ...].astype(np.float32)
+        output = session.run(None, {session.get_inputs()[0].name: tensor})[0]
+        alpha = normalize_birefnet_output(output)
+        if alpha is None:
+            disable_birefnet(f"unexpected output shape {np.asarray(output).shape}")
+            return None
+        return cv2.resize(alpha, (width, height), interpolation=cv2.INTER_LANCZOS4).astype(np.float32)
+    except Exception as error:
+        disable_birefnet(f"inference error: {error}")
+        return None
 
 
 def modnet_ready():
@@ -1934,7 +2056,7 @@ def describe_mask(mask, face, width, height, engine="MediaPipe Image Segmenter")
     }
 
 
-def apply_background_cleanup(mask, strength):
+def apply_background_cleanup(mask, strength, engine=None):
     """Harden a person matte so faint background haze/spots snap to clean
     background, at the cost of slightly tighter hair edges. "strong" remaps the
     alpha so anything below ~0.5 becomes fully transparent (pure background),
@@ -1943,7 +2065,14 @@ def apply_background_cleanup(mask, strength):
     if mask is None or strength in (None, "soft"):
         return mask
     mask = np.asarray(mask, dtype=np.float32)
-    if strength == "balanced":
+    quality_alpha = engine == "BiRefNet Portrait Matting"
+    if quality_alpha and strength == "balanced":
+        low, high = (0.01, 0.99)
+    elif quality_alpha and strength == "strong":
+        low, high = (0.025, 0.975)
+    elif quality_alpha:
+        low, high = (0.05, 0.95)
+    elif strength == "balanced":
         low, high = (0.06, 0.94)
     elif strength == "strong":
         low, high = (0.18, 0.84)
@@ -1973,7 +2102,7 @@ def composite_background(source_bgr, mask, background_rgb):
     return ensure_bgr(np.clip(composed, 0, 255).astype(np.uint8))
 
 
-def refine_output_matte(mask, source_bgr):
+def refine_output_matte(mask, source_bgr, engine=None):
     """Resolve the uncertain hair band from image colour at final resolution.
 
     MediaPipe provides the semantic person prior. GrabCut receives only that
@@ -1985,6 +2114,14 @@ def refine_output_matte(mask, source_bgr):
     source = ensure_bgr(source_bgr)
     if alpha.shape[:2] != source.shape[:2]:
         alpha = cv2.resize(alpha, (source.shape[1], source.shape[0]), interpolation=cv2.INTER_LINEAR)
+
+    if engine == "BiRefNet Portrait Matting":
+        # BiRefNet already predicts a high-resolution alpha matte. GrabCut is a
+        # semantic classifier, not a matting model; running it here can erase
+        # valid translucent curls and ear edges. Only snap certain pixels.
+        alpha[alpha <= 0.002] = 0.0
+        alpha[alpha >= 0.998] = 1.0
+        return alpha.astype(np.float32)
 
     definite_bg = alpha <= 0.035
     definite_fg = alpha >= 0.94
@@ -3397,6 +3534,14 @@ def model_inventory():
             "stage": "posture",
             "status": "ready" if pose_landmarker is not None else "optional-not-installed",
             "weight": POSE_MODEL_PATH.name,
+        },
+        {
+            "id": "birefnet_portrait",
+            "label": "BiRefNet Portrait Matting",
+            "stage": "matting-quality",
+            "status": birefnet_inventory_status(),
+            "weight": BIREFNET_MODEL_PATH.name,
+            "provider": birefnet_provider or "loads on first background job",
         },
         {
             "id": "modnet",

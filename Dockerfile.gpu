@@ -1,0 +1,41 @@
+FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HOST=0.0.0.0 \
+    PORT=4173 \
+    KVNP_DATA_DIR=/app/data \
+    KVNP_ONNX_PROVIDER=cuda \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        libegl1 \
+        libgl1 \
+        libgles2 \
+        libglib2.0-0 \
+        libgomp1 \
+        python3 \
+        python3-pip \
+        python-is-python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements*.txt ./
+RUN python -m pip install --no-cache-dir --break-system-packages --upgrade pip \
+    && python -m pip install --no-cache-dir --break-system-packages -r requirements-gpu.txt
+
+COPY . ./
+RUN mkdir -p /app/data /app/models /app/screenshots
+
+EXPOSE 4173
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4173/api/health', timeout=4).read()" || exit 1
+
+CMD ["python", "server.py"]

@@ -1,86 +1,76 @@
 # Background matting
 
-The studio replaces the background with a clean colour by estimating a per-pixel
-alpha matte of the person, compositing the source over the target colour, then
-cropping to the programme's output size.
+The studio estimates a per-pixel alpha matte, composites the original portrait
+over the selected backdrop, then crops the result to the programme output size.
+Background replacement is only offered as a submission file where the selected
+programme permits it. Strict programmes may expose a watermarked preview only.
 
-## Engines (in priority order)
+## Engines
 
-1. **MODNet Portrait Matting (optional, best edges).** Used automatically when
-   `models/modnet.onnx` exists and `onnxruntime` is installed. Produces clean
-   hair/shoulder edges from a single forward pass.
-2. **MediaPipe Image Segmenter (default, bundled).** Apache-2.0 selfie
-   segmenter. Always available; produces a coarser confidence mask that the
-   pipeline then cleans and edge-refines.
+1. **BiRefNet Portrait Matting (quality default).** Runs at 1024 x 1024 for
+   final still-image alpha. It loads lazily and selects CUDA when ONNX Runtime
+   exposes it, otherwise CPU.
+2. **MODNet Portrait Matting (optional lighter fallback).** Used when
+   `models/modnet.onnx` exists and BiRefNet is unavailable.
+3. **MediaPipe Image Segmenter (bundled fallback).** A fast 256 x 256 selfie
+   segmentation model used for live guidance and when neither matting model is
+   available. Its mask is not treated as export-grade.
 
-Both engines run through the same post-processing so the output is consistent:
+The quality checkpoint is a 1024 x 1024 portrait model. It materially improves
+curls, ears, jaw edges, and shoulders over the old selfie mask, but an extremely
+thin detached strand can still be missed. The UI must keep matte review visible
+and recommend a retake when the edge audit is uncertain; it must never call a
+model result flawless.
 
-- **`keep_main_subject`** keeps the connected silhouette that the detected face
-  actually sits in (falling back to the largest), and zeroes every other solid
-  blob. Choosing by face — not just by area — means an inverted or weak matte
-  whose largest blob is the *background* cannot silently erase the person. A
-  small bounded edge-band dilation preserves the soft hair/shoulder alpha while
-  still removing nearby coloured bleed.
-- **`refine_matte_edges`** runs a guided filter (`cv2.ximgproc.guidedFilter`)
-  using the source image as guide, aligning the alpha to real edges (hair,
-  shoulders) instead of a blocky cutout. Falls back to a Gaussian feather if
-  `ximgproc` is unavailable.
-- **`refine_output_matte`** resolves uncertain pixels after the final crop and
-  resize. The MediaPipe/MODNet confidence becomes a trimap, OpenCV GrabCut
-  classifies the uncertain curl and clothing boundary from source colours, and
-  a guided filter aligns the retained alpha to the final output pixels.
-- **`decontaminate_foreground`** estimates local foreground and old-background
-  colour around semi-transparent pixels. It removes colour spill left inside
-  fine hair before compositing, without generating or reshaping face pixels.
+Set `KVNP_MATTING_ENGINE=birefnet|modnet|mediapipe|auto` to choose the preferred
+engine. Every result and audit report records the engine that actually ran.
 
-The cleanup, refinement, and diagnostics run at a capped working resolution
-(`MATTE_WORK_MAX_SIDE`, 1280 px long side); only the final alpha is upsampled to
-the source resolution for compositing, so a 12 MP phone photo stays fast.
+## Model-aware processing
 
-## Honest matte diagnostics
+- `keep_main_subject` selects the component containing the detected face and
+  removes distant foreground islands. The BiRefNet path retains nearby detached
+  curls and flyaway hair inside a bounded edge band.
+- `refine_matte_edges` uses a guided filter only for coarse fallback masks.
+- `refine_output_matte` may use a GrabCut trimap for coarse masks. BiRefNet's
+  learned alpha bypasses this classification so translucent curls, ears and
+  shoulder edges are not deleted after inference.
+- `protect_head_and_neck` is a fallback guard for coarse masks. It is not drawn
+  over a BiRefNet matte.
+- `decontaminate_foreground` reduces the old backdrop colour carried by
+  semi-transparent hair pixels before compositing.
 
-`describe_mask` reports, and the "Background cleanup" check surfaces:
+## Diagnostics
 
-| field | meaning | warns when |
-| --- | --- | --- |
-| `coverage` | fraction of frame classified as person | < 0.12 or > 0.78 |
-| `faceCoverage` | person coverage inside the face box | < 0.92 (fail < 0.82) |
-| `softEdgePercent` | fraction of partially-transparent pixels | > 24 |
-| `strayIslands` | disconnected person blobs after cleanup | > 0 |
-| `holePercent` | background holes enclosed by the silhouette | > 0.8% |
-| `shoulderCoverage` | person coverage in the lower-centre band (`null` if unmeasurable) | < 0.35 (clipped) |
+`describe_mask` reports coverage, face coverage, soft-edge percentage, stray
+islands, enclosed holes and shoulder coverage. An unavailable or unreliable
+matte is surfaced as a warning or failure; it is never reported as a successful
+background replacement.
 
-These exist so the app does **not** mark a visibly broken matte (bleed, holes,
-clipped shoulders) as `pass`. A very high `coverage` (> 0.97 of the whole frame)
-is treated as an inverted/saturated matte and fails; a merely close-framed
-subject is not penalised. When the matte engine is requested but produces
-nothing, the cleanup check reports `mask unavailable` / the photo was **not**
-background-replaced — never a benign "disabled".
+## Installing BiRefNet
 
-## Enabling MODNet
+Docker Compose runs the verified model installer before the app:
 
-MODNet pretrained weights are commonly released under a **non-commercial**
-license (e.g. CC BY-NC-SA 4.0). They are intentionally **not** bundled or
-auto-downloaded. To enable it, supply a MODNet ONNX export you are licensed to
-use:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/fetch-modnet.ps1 -Url "<your-modnet-onnx-url>"
+```bash
+docker compose run --rm model-init
+docker compose up -d
 ```
 
-The expected ONNX contract: single image input `1x3xHxW`, RGB, normalized to
-`[-1, 1]` (`(x/255 - 0.5) / 0.5`), single-channel alpha output in `[0, 1]`. The
-backend resizes the input so the longer side is ~512 px (rounded to a multiple
-of 32) for fast CPU inference, then upsamples the alpha to full resolution.
+The approximately 973 MB ONNX file lives in the persistent `kvnp_models`
+volume and is verified against the checksum published by rembg. It is not
+committed to Git and is not downloaded again after ordinary rebuilds. Set
+`KVNP_QUALITY_MODEL=none` to skip it.
 
-The loader also tolerates common export variations: channel-first or
-channel-last outputs, and alpha emitted as raw logits or on a `[0, 255]` scale
-(auto-normalized to `[0, 1]`).
+`KVNP_ONNX_PROVIDER=auto` prefers CUDA, then OpenVINO, then CPU.
+`KVNP_ONNX_THREADS` bounds CPU inference threads. `/api/health` reports whether
+the model is installed without eagerly loading the graph; the first background
+job creates the session and logs the active execution provider.
 
-After installing, restart the server. `/api/health` reports `"modnet": true`
-only once the ONNX session has actually loaded and run — a present-but-broken
-model reports `"modnet": false` (and `"error"` in the model inventory), with a
-one-line reason logged to stderr, rather than falsely claiming MODNet is active
-while every photo silently uses the MediaPipe fallback. When MODNet is genuinely
-running, the pipeline panel shows **MODNet Portrait Matting** as the matting
-engine, and each processed photo's matte stats name the engine that produced it.
+Use `compose.gpu.yaml` on NVIDIA hosts. It swaps only the app image to the CUDA
+runtime and requests one GPU; the model downloader and Caddy remain lightweight
+CPU services. CPU is still a supported fallback, but measured inference on the
+development machine is about 20-22 seconds per portrait.
+
+BiRefNet's official repository is MIT licensed and the rembg converter is MIT
+licensed. Retain their notices and review the exact model provenance before a
+commercial release. MODNet's official repository publishes its code and models
+under Apache 2.0.

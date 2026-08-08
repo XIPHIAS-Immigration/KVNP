@@ -49,8 +49,8 @@ def _no_duplicate_keys(pairs):
 def test_loads_verified_catalogue():
     data = _load()
     assert isinstance(data, list), "profiles.json must be a JSON array"
-    assert len(data) == 35, f"expected 35 profiles, got {len(data)}"
-    assert len({p["country"] for p in data}) == 26, "expected 26 countries"
+    assert len(data) == 36, f"expected 36 profiles, got {len(data)}"
+    assert len({p["country"] for p in data}) == 27, "expected 27 destinations"
     print("test_loads_verified_catalogue", PASS)
 
 
@@ -297,9 +297,13 @@ def test_catalogue_trust_metadata():
             "submissionMode",
             "checker_only" if profile.get("checkerOnly") else "format_only",
         )
-        assert status in allowed_statuses, f"{profile['id']}: bad verification status"
-        assert source_class in allowed_sources, f"{profile['id']}: bad source class"
-        assert submission_mode in allowed_modes, f"{profile['id']}: bad submission mode"
+        if submission_mode == "general_use":
+            assert status == "general_use", f"{profile['id']}: general-use status missing"
+            assert source_class == "studio", f"{profile['id']}: general-use source must be studio"
+        else:
+            assert status in allowed_statuses, f"{profile['id']}: bad verification status"
+            assert source_class in allowed_sources, f"{profile['id']}: bad source class"
+            assert submission_mode in allowed_modes, f"{profile['id']}: bad submission mode"
         if profile.get("checkerOnly"):
             assert submission_mode == "checker_only", \
                 f"{profile['id']}: checker-only profile has wrong submission mode"

@@ -1,0 +1,16 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    image: kvnp-app-gpu
+    environment:
+      KVNP_ONNX_PROVIDER: cuda
+      KVNP_ONNX_THREADS: 1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

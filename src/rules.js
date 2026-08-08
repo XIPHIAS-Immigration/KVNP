@@ -2,6 +2,85 @@
 // Edit the JSON registry, then run the sync command. Do not edit this array by hand.
 export const RULE_PROFILES = [
   {
+    "id": "general-studio-square-2026-08",
+    "verificationStatus": "general_use",
+    "sourceClass": "studio",
+    "submissionMode": "general_use",
+    "nextReview": null,
+    "allowedEdits": {
+      "straighten": true,
+      "tone": true,
+      "lighting": true,
+      "background": true,
+      "enhance": true,
+      "rescue": false,
+      "note": "General-use studio export. Identity-preserving crop, colour, lighting, background and detail tools are available; this preset does not claim compliance with an issuing authority."
+    },
+    "label": "General studio - square portrait",
+    "country": "STUDIO",
+    "countryName": "General Studio",
+    "programme": "Square portrait (2 x 2 in)",
+    "category": "Studio",
+    "document": "General portrait",
+    "delivery": "Digital and print",
+    "lastReviewed": "2026-08-08",
+    "sources": [],
+    "requirements": [
+      "General-use square portrait",
+      "Clean white or off-white background",
+      "Face centred with head and upper shoulders visible",
+      "Clean downloadable file with no on-image watermark"
+    ],
+    "output": {
+      "widthPx": 600,
+      "heightPx": 600,
+      "printWidthMm": 51,
+      "printHeightMm": 51,
+      "mime": "image/jpeg",
+      "quality": 0.94
+    },
+    "head": {
+      "measure": "chin_to_top_of_head",
+      "minMm": 25,
+      "maxMm": 35,
+      "minPercent": 50,
+      "maxPercent": 69,
+      "targetPercent": 62,
+      "topMarginPercent": 13
+    },
+    "background": {
+      "mode": "white_or_off_white",
+      "minEdgeLuma": 190,
+      "maxEdgeSaturation": 52,
+      "maxEdgeSpread": 42
+    },
+    "file": {
+      "formats": [
+        "jpg",
+        "jpeg",
+        "png",
+        "webp",
+        "pdf"
+      ],
+      "minBytes": null,
+      "maxBytes": null
+    },
+    "automation": {
+      "backgroundReplacement": true,
+      "backgroundColor": "#ffffff",
+      "backgroundCleanup": "balanced",
+      "enhanceOutput": true,
+      "enhancementMode": "natural",
+      "compressionTarget": null
+    },
+    "reviewChecks": [
+      "current likeness",
+      "natural expression",
+      "eyes open",
+      "background edge quality"
+    ]
+  },
+  {
     "id": "us-passport-print-2026-06",
     "allowedEdits": {
       "straighten": false,

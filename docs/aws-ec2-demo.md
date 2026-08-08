@@ -1,6 +1,6 @@
 # AWS EC2 Demo Deployment
 
-This is the cheap, practical deployment path for a short KVNP Passport Photo Studio demo.
+This runbook covers both the inexpensive CPU demo and the quality GPU deployment.
 
 ## Recommended demo shape
 
@@ -14,6 +14,24 @@ Use one small x86_64 EC2 instance with Docker Compose:
 - Domain: GoDaddy `A` record pointing to the EC2 Elastic IP
 - HTTPS: Caddy container, automatic Let's Encrypt certificate
 
+The CPU path is suitable for layout, rules, accounts, and light testing. The
+BiRefNet quality matte measured about 20-22 seconds per portrait on the current
+development CPU. For a public demo where background removal must feel immediate,
+use the GPU path below.
+
+## Recommended quality deployment
+
+Use `g4dn.xlarge` with an AWS Deep Learning Base GPU AMI (Ubuntu), x86_64:
+
+- 1 NVIDIA T4 GPU with 16 GiB VRAM
+- 4 vCPU and 16 GiB system RAM
+- 30-40 GB gp3 root disk
+- the same ports, Elastic IP, DNS, and Caddy setup as the CPU instance
+
+The app uses ONNX Runtime CUDA only for the quality matte. MediaPipe, OpenCV,
+validation, accounts, and Caddy remain on CPU. Stop the instance whenever the
+demo is not being used.
+
 Do not use Lambda for this app. The MediaPipe/OpenCV/model stack is too large and cold-start prone.
 
 ## Why not ARM / Graviton first?
@@ -26,7 +44,7 @@ In AWS Console:
 
 1. Launch instance.
 2. AMI: Ubuntu Server LTS, x86_64.
-3. Instance type: `t3.medium`.
+3. Instance type: `t3.medium` for CPU, or `g4dn.xlarge` for quality matting.
 4. Storage: 25-30 GB gp3.
 5. Security group:
    - SSH `22` from your IP only.
@@ -82,6 +100,23 @@ docker --version
 docker compose version
 ```
 
+For `g4dn.xlarge`, first confirm the AMI driver is active:
+
+```bash
+nvidia-smi
+```
+
+Then install and configure the NVIDIA Container Toolkit using NVIDIA's current
+Ubuntu instructions. After installation, configure Docker and verify access:
+
+```bash
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+docker run --rm --gpus all nvidia/cuda:12.8.1-base-ubuntu24.04 nvidia-smi
+```
+
+Do not continue with the GPU Compose file until that container-level check works.
+
 ## 4. Clone the repo
 
 ```bash
@@ -109,8 +144,16 @@ Keep `HOST=0.0.0.0`, `PORT=4173`, and `KVNP_DATA_DIR=/app/data`.
 
 ## 6. Build and run
 
+CPU deployment:
+
 ```bash
 docker compose up -d --build
+```
+
+NVIDIA GPU deployment:
+
+```bash
+docker compose -f compose.yaml -f compose.gpu.yaml up -d --build
 ```
 
 Watch logs:
@@ -132,6 +175,16 @@ Public check after DNS resolves:
 curl -fsS https://passport.kvnp.ca/api/health
 ```
 
+On a GPU deployment, verify CUDA inside the app container:
+
+```bash
+docker compose -f compose.yaml -f compose.gpu.yaml exec -T app \
+  python -c "import onnxruntime as ort; print(ort.get_available_providers())"
+```
+
+The output must contain `CUDAExecutionProvider`. Upload one portrait, then check
+`/api/health`; the active BiRefNet provider should be CUDA rather than CPU.
+
 Open:
 
 ```text
@@ -147,6 +200,14 @@ docker compose up -d --build --remove-orphans
 docker compose ps
 docker compose exec -T app curl -fsS http://127.0.0.1:4173/api/health
 curl -fsS https://passport.kvnp.ca/api/health
+```
+
+For the GPU deployment, use the two-file form for the rebuild and app exec:
+
+```bash
+docker compose -f compose.yaml -f compose.gpu.yaml up -d --build --remove-orphans
+docker compose -f compose.yaml -f compose.gpu.yaml exec -T app \
+  curl -fsS http://127.0.0.1:4173/api/health
 ```
 
 The ignored `.env` file and the `kvnp_data` Docker volume remain in place during
@@ -169,11 +230,12 @@ To stop billing for compute, stop the EC2 instance from AWS Console. Do not leav
 
 ## 9. Current production defaults
 
-For the low-cost demo:
+For the low-cost CPU demo:
 
 - CPU-only processing.
 - MediaPipe + OpenCV enabled.
-- MODNet only if `models/modnet.onnx` is added and license reviewed.
+- BiRefNet Portrait is downloaded into the persistent model volume and falls
+  back to MODNet or MediaPipe if it cannot load.
 - GFPGAN / heavy face restoration not included in Docker requirements.
 - Process user images in memory where possible.
 - Local SQLite volume for short demo accounts/session state.
@@ -192,8 +254,16 @@ docker compose logs -f caddy
 
 If the app is slow on first start:
 
-- First boot may download MediaPipe model files into `/app/models`.
+- First boot downloads and verifies the roughly 1 GB BiRefNet weight plus the
+  smaller MediaPipe models into `/app/models`.
 - After that, Docker volume/container state should be faster.
+
+If a GPU deployment reports only `CPUExecutionProvider`:
+
+1. Run `nvidia-smi` on the host.
+2. Run the NVIDIA CUDA test container from section 3.
+3. Confirm the deployment used both `compose.yaml` and `compose.gpu.yaml`.
+4. Check `docker compose -f compose.yaml -f compose.gpu.yaml logs --tail=150 app`.
 
 If Docker build fails from memory pressure:
 

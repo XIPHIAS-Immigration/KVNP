@@ -29,9 +29,9 @@ No `npm install` is required. The script starts `server.py`, which serves the br
 - Identity-preserving auto-correction: auto-straighten a tilted head and
   normalize exposure / white balance, with every applied correction disclosed
   in the result and report (geometry + tone only; the face is never altered)
-- Layered background matting: optional MODNet portrait matting (ONNX) with an
-  always-available MediaPipe segmenter fallback, single-subject cleanup, and
-  guided-filter edge refinement for cleaner hair/shoulders (see `docs/matting.md`)
+- Layered background matting: BiRefNet Portrait for quality still-image alpha,
+  optional MODNet for lighter CPU inference, and MediaPipe only as the fast
+  fallback/live-guidance engine (see `docs/matting.md`)
 - Honest matte diagnostics (stray islands, enclosed holes, shoulder coverage)
 - Before/after comparison slider, draggable, on every generated photo
 - Batch queue: upload several photos, step through them, per-job status dots
@@ -65,21 +65,25 @@ python tools/pipeline_smoketest.py    # run the full pipeline on sample portrait
 `tools/pipeline_smoketest.py` writes generated photos and overlays to
 `screenshots/smoketest/` so matte edges can be inspected by eye.
 
-## Optional: MODNet matting
+## Quality portrait matting
 
-Higher-quality hair/shoulder edges are available by installing a MODNet ONNX
-model. It is not bundled because MODNet pretrained weights are typically
-non-commercial; review the license before using one in production. See
-`docs/matting.md` and `scripts/fetch-modnet.ps1`.
+Docker Compose downloads and checksum-verifies the BiRefNet Portrait ONNX model
+into the persistent `kvnp_models` volume before the app starts. The weight is
+not committed to Git and is not re-downloaded after ordinary rebuilds. Set
+`KVNP_QUALITY_MODEL=none` to keep a lightweight MediaPipe/MODNet-only install.
+BiRefNet's official repository is MIT licensed; retain third-party notices and
+review the exact weight provenance before a commercial release.
 
 
 ## Docker / AWS demo
 
 Deployment files are included for a short EC2 demo:
 
-- `requirements.txt` - Python runtime dependencies
-- `Dockerfile` - CPU-only app container
+- `requirements-base.txt` - shared Python runtime dependencies
+- `requirements.txt` / `Dockerfile` - CPU ONNX Runtime deployment
+- `requirements-gpu.txt` / `Dockerfile.gpu` - NVIDIA CUDA deployment
 - `compose.yaml` - app + Caddy HTTPS reverse proxy
+- `compose.gpu.yaml` - GPU override for the app service
 - `Caddyfile` - automatic HTTPS for the configured domain
 - `.env.example` - production environment template
 - `docs/aws-ec2-demo.md` - EC2 + GoDaddy deployment runbook
@@ -92,6 +96,17 @@ docker run --rm -p 4173:4173 -e HOST=0.0.0.0 -e KVNP_SESSION_SECRET=dev-secret k
 ```
 
 For the AWS demo, follow `docs/aws-ec2-demo.md`.
+
+On an NVIDIA host with the driver and NVIDIA Container Toolkit installed, run:
+
+```bash
+docker compose -f compose.yaml -f compose.gpu.yaml up -d --build
+docker compose -f compose.yaml -f compose.gpu.yaml exec -T app \
+  python -c "import onnxruntime as ort; print(ort.get_available_providers())"
+```
+
+The provider check must include `CUDAExecutionProvider`; `/api/health` reports
+the quality model inventory and the active provider after the first matte job.
 
 ## Current starter programmes
 

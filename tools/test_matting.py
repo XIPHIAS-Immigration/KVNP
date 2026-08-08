@@ -245,8 +245,10 @@ def test_modnet_path_with_synthetic_model():
     onnx.save(model, str(tmp))
 
     saved_path = server.MODNET_MODEL_PATH
+    saved_preference = server.MATTING_ENGINE_PREFERENCE
     try:
         server.MODNET_MODEL_PATH = tmp
+        server.MATTING_ENGINE_PREFERENCE = "modnet"
         server.modnet_session = None
         server.modnet_unavailable = False
         assert server.modnet_ready() is True
@@ -264,11 +266,69 @@ def test_modnet_path_with_synthetic_model():
         assert mask.shape == (h, w)
     finally:
         server.MODNET_MODEL_PATH = saved_path
+        server.MATTING_ENGINE_PREFERENCE = saved_preference
         server.modnet_session = None
         server.modnet_unavailable = False
         if tmp.exists():
             tmp.unlink()
     print("test_modnet_path_with_synthetic_model", PASS)
+
+
+def test_birefnet_path_with_synthetic_model():
+    """Validate quality-engine selection without downloading the 973 MB weight."""
+    import onnx
+    from onnx import TensorProto, helper
+
+    inp = helper.make_tensor_value_info("input", TensorProto.FLOAT, [1, 3, 1024, 1024])
+    out = helper.make_tensor_value_info("alpha", TensorProto.FLOAT, [1, 1, 1024, 1024])
+    nodes = [helper.make_node("ReduceMean", ["input"], ["alpha"], axes=[1], keepdims=1)]
+    model = helper.make_model(
+        helper.make_graph(nodes, "tiny_birefnet", [inp], [out]),
+        opset_imports=[helper.make_opsetid("", 11)],
+    )
+    model.ir_version = 8
+    tmp = Path(tempfile.gettempdir()) / "kvnp_tiny_birefnet.onnx"
+    onnx.save(model, str(tmp))
+
+    saved_path = server.BIREFNET_MODEL_PATH
+    saved_preference = server.MATTING_ENGINE_PREFERENCE
+    original_ready = server.birefnet_ready
+    try:
+        server.BIREFNET_MODEL_PATH = tmp
+        server.MATTING_ENGINE_PREFERENCE = "birefnet"
+        server.birefnet_session = None
+        server.birefnet_unavailable = False
+        server.birefnet_ready = lambda: True
+
+        bgr = cv2.imread(str(ROOT / "screenshots" / "test-inputs" / "portrait.jpg"))
+        h, w = bgr.shape[:2]
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        alpha = server.run_birefnet_matte(rgb, w, h)
+        assert alpha is not None and alpha.shape == (h, w)
+
+        face = {"headHeight": h * 0.5, "centerX": w * 0.5, "centerY": h * 0.45}
+        mask, engine = server.build_person_mask(None, bgr, face, True, w, h)
+        assert engine == "BiRefNet Portrait Matting"
+        assert mask.shape == (h, w)
+    finally:
+        server.BIREFNET_MODEL_PATH = saved_path
+        server.MATTING_ENGINE_PREFERENCE = saved_preference
+        server.birefnet_session = None
+        server.birefnet_unavailable = False
+        server.birefnet_ready = original_ready
+        if tmp.exists():
+            tmp.unlink()
+    print("test_birefnet_path_with_synthetic_model", PASS)
+
+
+def test_quality_alpha_skips_grabcut_contraction():
+    alpha = np.zeros((40, 40), np.float32)
+    alpha[8:32, 8:32] = 1.0
+    alpha[6:8, 16:24] = 0.32
+    source = np.full((40, 40, 3), 90, np.uint8)
+    refined = server.refine_output_matte(alpha, source, engine="BiRefNet Portrait Matting")
+    assert np.allclose(refined, alpha), "quality alpha should not be reclassified by GrabCut"
+    print("test_quality_alpha_skips_grabcut_contraction", PASS)
 
 
 def test_real_portrait_clean_matte():
@@ -309,6 +369,8 @@ def main():
         test_head_outline_includes_hair_and_ears,
         test_crown_measure_preserves_skull_size_and_hair_headroom,
         test_modnet_path_with_synthetic_model,
+        test_birefnet_path_with_synthetic_model,
+        test_quality_alpha_skips_grabcut_contraction,
         test_real_portrait_clean_matte,
     ]
     for test in tests:
