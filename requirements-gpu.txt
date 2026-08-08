@@ -1,2 +1,3 @@
 -r requirements-base.txt
-onnxruntime-gpu==1.22.1
+# This release provides Python 3.12 wheels for the Ubuntu 24.04 CUDA image.
+onnxruntime-gpu==1.23.2
