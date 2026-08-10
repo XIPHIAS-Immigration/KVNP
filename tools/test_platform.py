@@ -133,6 +133,19 @@ def test_enquiry_and_admin_dashboard():
             },
         )
         assert enquiry.status_code == 200, enquiry.text
+        for name, metadata in [
+            ("landing_view", {}),
+            ("studio_opened", {}),
+            ("programme_selected", {"country": "US", "profileId": "us-passport-print-2026-01"}),
+            ("photo_added", {"bytes": 42000}),
+            ("processing_completed", {"decision": "review"}),
+            ("review_opened", {}),
+        ]:
+            event = client.post(
+                "/api/events",
+                json={"name": name, "anonymousId": "test-visitor-1", "metadata": metadata},
+            )
+            assert event.status_code == 200, event.text
 
         dashboard = client.get("/api/admin/dashboard")
         assert dashboard.status_code == 200, dashboard.text
@@ -141,6 +154,14 @@ def test_enquiry_and_admin_dashboard():
         assert data["metrics"]["paidOrders"] == 1
         assert data["metrics"]["downloads"] == 2
         assert data["metrics"]["openEnquiries"] == 1
+        assert data["traffic"]["uniqueVisitors"] == 1
+        assert data["traffic"]["active7d"] == 1
+        assert data["traffic"]["landingViews"] == 1
+        assert data["traffic"]["studioSessions"] == 1
+        assert len(data["traffic"]["daily"]) == 14
+        assert data["destinations"][0] == {"country": "US", "selections": 1}
+        assert data["conversion30d"][0]["name"] == "studio_opened"
+        assert data["recentActivity"]
 
         enquiry_id = data["enquiries"][0]["id"]
         update = client.patch(

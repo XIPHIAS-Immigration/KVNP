@@ -10,7 +10,9 @@ import secrets
 import sqlite3
 import time
 import uuid
+from collections import Counter
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import BigInteger, Boolean, ForeignKey, Index, Integer, String, Text, create_engine, func, select
@@ -729,12 +731,97 @@ def create_enquiry(user_id: int | None, name: str, email: str, subject: str, mes
 
 
 def admin_dashboard() -> dict:
+    timestamp = now_ts()
+    day = 24 * 60 * 60
+    cutoff_30d = timestamp - (30 * day)
+    cutoff_14d = timestamp - (14 * day)
+    cutoff_7d = timestamp - (7 * day)
+    cutoff_today = timestamp - day
+
+    def visitor_key(row) -> str | None:
+        if row.anonymous_id:
+            return f"anonymous:{row.anonymous_id}"
+        return None
+
+    def event_detail(name: str, metadata: dict) -> str:
+        if name == "programme_selected":
+            return str(metadata.get("country") or metadata.get("profileId") or "Programme selected")[:80]
+        if name == "processing_completed":
+            return str(metadata.get("decision") or "Photo processed")[:80]
+        if name == "download_completed":
+            return str(metadata.get("fileKind") or "Prepared file")[:80]
+        return ""
+
     with session_scope() as session:
         order_status = dict(session.execute(select(Order.status, func.count(Order.id)).group_by(Order.status)).all())
         funnel = dict(session.execute(select(Event.name, func.count(Event.id)).group_by(Event.name)).all())
         revenue = session.scalar(select(func.coalesce(func.sum(Order.amount_minor), 0)).where(Order.status == "paid")) or 0
         recent_orders = session.scalars(select(Order).order_by(Order.created_at.desc()).limit(12)).all()
         recent_enquiries = session.scalars(select(Enquiry).order_by(Enquiry.created_at.desc()).limit(12)).all()
+        traffic_rows = session.execute(
+            select(Event.name, Event.user_id, Event.anonymous_id, Event.metadata_json, Event.created_at)
+            .where(Event.created_at >= cutoff_30d)
+            .order_by(Event.created_at.desc())
+        ).all()
+        all_unique_visitors = session.scalar(
+            select(func.count(func.distinct(Event.anonymous_id))).where(Event.anonymous_id.is_not(None))
+        ) or 0
+        landing_views = session.scalar(select(func.count(Event.id)).where(Event.name == "landing_view")) or 0
+        studio_sessions = session.scalar(select(func.count(Event.id)).where(Event.name == "studio_opened")) or 0
+        registrations_7d = session.scalar(select(func.count(User.id)).where(User.created_at >= cutoff_7d)) or 0
+
+        active_today = set()
+        active_7d = set()
+        active_30d = set()
+        event_counts_30d = Counter()
+        destinations = Counter()
+        recent_activity = []
+        daily = {}
+        for offset in range(13, -1, -1):
+            date_key = datetime.fromtimestamp(timestamp - (offset * day), tz=timezone.utc).strftime("%Y-%m-%d")
+            daily[date_key] = {"visitors": set(), "landingViews": 0, "studioSessions": 0, "processed": 0}
+
+        for row in traffic_rows:
+            key = visitor_key(row)
+            if key:
+                active_30d.add(key)
+                if row.created_at >= cutoff_7d:
+                    active_7d.add(key)
+                if row.created_at >= cutoff_today:
+                    active_today.add(key)
+            event_counts_30d[row.name] += 1
+            metadata = _json_load(row.metadata_json)
+            if row.name == "programme_selected" and metadata.get("country"):
+                destinations[str(metadata["country"])[:12].upper()] += 1
+            date_key = datetime.fromtimestamp(row.created_at, tz=timezone.utc).strftime("%Y-%m-%d")
+            if row.created_at >= cutoff_14d and date_key in daily:
+                if key:
+                    daily[date_key]["visitors"].add(key)
+                if row.name == "landing_view":
+                    daily[date_key]["landingViews"] += 1
+                elif row.name == "studio_opened":
+                    daily[date_key]["studioSessions"] += 1
+                elif row.name == "processing_completed":
+                    daily[date_key]["processed"] += 1
+            if len(recent_activity) < 20:
+                recent_activity.append(
+                    {
+                        "name": row.name,
+                        "actor": "Customer" if row.user_id else "Guest",
+                        "detail": event_detail(row.name, metadata),
+                        "createdAt": row.created_at,
+                    }
+                )
+
+        stage_order = ["studio_opened", "photo_added", "processing_completed", "review_opened", "download_completed"]
+        conversion_30d = []
+        previous_count = None
+        for name in stage_order:
+            count = event_counts_30d.get(name, 0)
+            rate = 100.0 if previous_count is None and count else (count / previous_count * 100.0 if previous_count else 0.0)
+            conversion_30d.append({"name": name, "count": count, "fromPreviousPercent": round(rate, 1)})
+            previous_count = count
+
         return {
             "metrics": {
                 "users": session.scalar(select(func.count(User.id))) or 0,
@@ -745,6 +832,29 @@ def admin_dashboard() -> dict:
                 "downloads": session.scalar(select(func.count(Download.id))) or 0,
                 "openEnquiries": session.scalar(select(func.count(Enquiry.id)).where(Enquiry.status != "resolved")) or 0,
             },
+            "traffic": {
+                "uniqueVisitors": int(all_unique_visitors),
+                "activeToday": len(active_today),
+                "active7d": len(active_7d),
+                "active30d": len(active_30d),
+                "landingViews": int(landing_views),
+                "studioSessions": int(studio_sessions),
+                "registrations7d": int(registrations_7d),
+                "events30d": sum(event_counts_30d.values()),
+                "daily": [
+                    {
+                        "date": date_key,
+                        "visitors": len(values["visitors"]),
+                        "landingViews": values["landingViews"],
+                        "studioSessions": values["studioSessions"],
+                        "processed": values["processed"],
+                    }
+                    for date_key, values in daily.items()
+                ],
+            },
+            "conversion30d": conversion_30d,
+            "destinations": [{"country": country, "selections": count} for country, count in destinations.most_common(8)],
+            "recentActivity": recent_activity,
             "funnel": funnel,
             "orders": [order_dict(item) | {"userId": item.user_id} for item in recent_orders],
             "enquiries": [enquiry_dict(item) for item in recent_enquiries],

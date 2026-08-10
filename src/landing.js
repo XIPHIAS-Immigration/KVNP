@@ -132,7 +132,21 @@
   try {
     var anonymousId = localStorage.getItem("kvnp-anonymous-id") || crypto.randomUUID();
     localStorage.setItem("kvnp-anonymous-id", anonymousId);
-    fetch("/api/events", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "landing_view", anonymousId: anonymousId }) }).catch(function () {});
+    var referrerHost = "direct";
+    try { referrerHost = document.referrer ? new URL(document.referrer).hostname : "direct"; } catch (error) {}
+    fetch("/api/events", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "landing_view",
+        anonymousId: anonymousId,
+        metadata: {
+          path: location.pathname,
+          referrerHost: referrerHost,
+          device: matchMedia("(max-width: 680px)").matches ? "mobile" : "desktop",
+        },
+      }),
+    }).catch(function () {});
   } catch (error) {}
   var form = document.getElementById("contact-form");
   if (!form) return;

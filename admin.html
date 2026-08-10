@@ -4,7 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Operations | KVNP Studio</title>
-    <link rel="stylesheet" href="/src/portal.css?v=kvnp-platform-1" />
+    <link rel="stylesheet" href="/src/portal.css?v=kvnp-platform-2" />
+    <link rel="stylesheet" href="/src/admin.css?v=kvnp-platform-2" />
   </head>
   <body data-portal="admin">
     <header class="portal-bar">
@@ -20,14 +21,30 @@
 
       <section id="admin-metrics" class="metric-strip metric-grid" aria-label="Business metrics"></section>
 
+      <section class="portal-section footprint-section">
+        <div class="section-heading"><div><span class="eyebrow">Footprints / last 14 days</span><h2>Visitor activity</h2></div><div class="chart-legend"><span><i class="visitor-key"></i>Visitors</span><span><i class="studio-key"></i>Studio sessions</span><span><i class="processed-key"></i>Photos processed</span></div></div>
+        <div id="traffic-trend" class="traffic-trend" aria-label="Fourteen day visitor activity"></div>
+      </section>
+
       <section class="admin-grid">
         <div class="portal-section">
-          <div class="section-heading"><div><span class="eyebrow">Conversion</span><h2>Customer funnel</h2></div></div>
-          <div id="funnel-list" class="funnel-list"></div>
+          <div class="section-heading"><div><span class="eyebrow">Conversion / last 30 days</span><h2>Customer funnel</h2></div></div>
+          <div id="conversion-list" class="funnel-list"></div>
         </div>
         <div class="portal-section">
           <div class="section-heading"><div><span class="eyebrow">Gateway</span><h2>Commerce status</h2></div></div>
           <dl id="commerce-status" class="status-list"></dl>
+        </div>
+      </section>
+
+      <section class="admin-grid activity-grid">
+        <div class="portal-section">
+          <div class="section-heading"><div><span class="eyebrow">Demand</span><h2>Top destinations</h2></div></div>
+          <div id="destination-list" class="destination-list"></div>
+        </div>
+        <div class="portal-section">
+          <div class="section-heading"><div><span class="eyebrow">Live trail</span><h2>Recent activity</h2></div><span class="muted">No IP addresses stored</span></div>
+          <div id="recent-activity" class="activity-list"></div>
         </div>
       </section>
 
@@ -41,6 +58,6 @@
         <div id="admin-enquiries" class="enquiry-list"></div>
       </section>
     </main>
-    <script type="module" src="/src/admin.js?v=kvnp-platform-1"></script>
+    <script type="module" src="/src/admin.js?v=kvnp-platform-2"></script>
   </body>
 </html>
