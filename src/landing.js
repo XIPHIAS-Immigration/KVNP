@@ -148,33 +148,56 @@
       }),
     }).catch(function () {});
   } catch (error) {}
-  var form = document.getElementById("contact-form");
-  if (!form) return;
-  var status = document.getElementById("contact-status");
-  form.addEventListener("submit", async function (event) {
-    event.preventDefault();
-    status.textContent = "Sending...";
-    var button = form.querySelector("button[type='submit']");
-    button.disabled = true;
-    try {
-      var response = await fetch("/api/enquiries", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          name: document.getElementById("contact-name").value,
-          email: document.getElementById("contact-email").value,
-          subject: document.getElementById("contact-subject").value,
-          message: document.getElementById("contact-message").value,
-        }),
-      });
-      var data = await response.json();
-      if (!response.ok || !data.ok) throw new Error(data.error || "Could not send the enquiry.");
-      form.reset();
-      status.textContent = "Received / " + data.reference;
-    } catch (error) {
-      status.textContent = error.message;
-    } finally {
-      button.disabled = false;
-    }
+  var promptKey = "kvnp-contact-prompt-v1";
+  var dialog = document.getElementById("contact-dialog");
+
+  document.querySelectorAll("[data-enquiry-form]").forEach(function (form) {
+    var status = form.querySelector("[data-enquiry-status]");
+    form.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      status.textContent = "Sending...";
+      var button = form.querySelector("button[type='submit']");
+      button.disabled = true;
+      var values = new FormData(form);
+      try {
+        var response = await fetch("/api/enquiries", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: values.get("name"),
+            email: values.get("email"),
+            subject: values.get("subject"),
+            message: values.get("message"),
+          }),
+        });
+        var data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || "Could not send the enquiry.");
+        form.reset();
+        status.textContent = "Received / " + data.reference;
+        try { sessionStorage.setItem(promptKey, "submitted"); } catch (error) {}
+        if (form.closest("dialog")) setTimeout(function () { dialog.close(); }, 1200);
+      } catch (error) {
+        status.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
   });
+
+  if (dialog) {
+    function dismissDialog() {
+      if (dialog.open) dialog.close();
+      try { sessionStorage.setItem(promptKey, "dismissed"); } catch (error) {}
+    }
+    dialog.querySelector("[data-dialog-close]").addEventListener("click", dismissDialog);
+    dialog.addEventListener("cancel", function (event) { event.preventDefault(); dismissDialog(); });
+    dialog.addEventListener("click", function (event) {
+      if (event.target === dialog) dismissDialog();
+    });
+    setTimeout(function () {
+      var seen = false;
+      try { seen = !!sessionStorage.getItem(promptKey); } catch (error) {}
+      if (!seen && location.hash !== "#contact" && !dialog.open) dialog.showModal();
+    }, 2000);
+  }
 })();

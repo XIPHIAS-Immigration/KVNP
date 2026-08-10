@@ -23,7 +23,7 @@ async function loadAdmin() {
 }
 
 function render() {
-  const { metrics, traffic = {}, conversion30d = [], destinations = [], recentActivity = [], orders, enquiries, commerce } = state.data;
+  const { metrics, traffic = {}, conversion30d = [], destinations = [], recentActivity = [], customers = [], orders, enquiries, commerce } = state.data;
   const cards = [
     ["Unique visitors", traffic.uniqueVisitors ?? 0], ["Active / 7 days", traffic.active7d ?? 0],
     ["Landing visits", traffic.landingViews ?? 0], ["Studio sessions", traffic.studioSessions ?? 0],
@@ -39,6 +39,8 @@ function render() {
   document.querySelector("#admin-orders").innerHTML = orders.map((order) => `<tr><td>${escapeHtml(order.reference)}</td><td>#${order.userId}</td><td>${money(order.amountMinor, order.currency)}</td><td>${escapeHtml(order.provider)}</td><td><span class="status-pill ${order.status}">${escapeHtml(order.status)}</span></td><td>${date(order.createdAt)}</td></tr>`).join("") || '<tr><td colspan="6">No orders yet.</td></tr>';
   document.querySelector("#enquiry-count").textContent = `${enquiries.length} recent`;
   document.querySelector("#admin-enquiries").innerHTML = enquiries.map(enquiryTemplate).join("") || '<p class="empty-state">No enquiries yet.</p>';
+  document.querySelector("#customer-count").textContent = `${customers.length} account${customers.length === 1 ? "" : "s"}`;
+  document.querySelector("#admin-customers").innerHTML = customers.map((item) => `<tr><td><strong>${escapeHtml(item.name || "Not provided")}</strong><small class="customer-state">${escapeHtml(item.status)}</small></td><td><a class="customer-email" href="mailto:${escapeHtml(item.email)}">${escapeHtml(item.email)}</a></td><td><span class="account-role ${item.role === "admin" ? "admin" : ""}">${escapeHtml(item.role)}</span></td><td>${item.projects}</td><td>${item.downloads}</td><td>${date(item.createdAt)}</td><td>${item.lastLoginAt ? date(item.lastLoginAt) : "Never"}</td></tr>`).join("") || '<tr><td colspan="7" class="empty-state">No customer accounts yet.</td></tr>';
 }
 
 function renderTraffic(days) {

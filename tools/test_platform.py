@@ -162,6 +162,11 @@ def test_enquiry_and_admin_dashboard():
         assert data["destinations"][0] == {"country": "US", "selections": 1}
         assert data["conversion30d"][0]["name"] == "studio_opened"
         assert data["recentActivity"]
+        assert data["customers"][0]["name"] == "Admin User"
+        assert data["customers"][0]["email"] == "admin@kvnp.test"
+        assert data["customers"][0]["role"] == "admin"
+        assert data["customers"][0]["projects"] == 1
+        assert data["customers"][0]["downloads"] == 2
 
         enquiry_id = data["enquiries"][0]["id"]
         update = client.patch(

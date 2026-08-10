@@ -158,6 +158,37 @@
 .activity-list p { margin: 3px 0 0; color: #858891; font-family: Plex, monospace; font-size: 9px; }
 .activity-list time { color: #777b83; font-family: Plex, monospace; font-size: 9px; white-space: nowrap; }
 
+.customer-email {
+  color: #d7d9de;
+  text-decoration: none;
+}
+
+.customer-email:hover { color: #f04a32; }
+
+.customer-state {
+  display: block;
+  margin-top: 4px;
+  color: #777b83;
+  font-family: Plex, monospace;
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.account-role {
+  display: inline-block;
+  border: 1px solid #34373d;
+  padding: 4px 7px;
+  color: #a9acb3;
+  font-family: Plex, monospace;
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.account-role.admin {
+  border-color: rgba(240, 74, 50, .55);
+  color: #ff725d;
+}
+
 @media (max-width: 1100px) {
   .metric-grid { grid-template-columns: repeat(3, 1fr); }
   .traffic-trend { overflow-x: auto; grid-template-columns: repeat(14, 52px); }

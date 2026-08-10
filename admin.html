@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Operations | KVNP Studio</title>
     <link rel="stylesheet" href="/src/portal.css?v=kvnp-platform-2" />
-    <link rel="stylesheet" href="/src/admin.css?v=kvnp-platform-2" />
+    <link rel="stylesheet" href="/src/admin.css?v=kvnp-platform-3" />
   </head>
   <body data-portal="admin">
     <header class="portal-bar">
@@ -49,6 +49,11 @@
       </section>
 
       <section class="portal-section">
+        <div class="section-heading"><div><span class="eyebrow">Accounts</span><h2>Registered accounts</h2></div><span id="customer-count" class="muted"></span></div>
+        <div class="table-scroll"><table><thead><tr><th>Customer</th><th>Email</th><th>Role</th><th>Projects</th><th>Downloads</th><th>Joined</th><th>Last login</th></tr></thead><tbody id="admin-customers"></tbody></table></div>
+      </section>
+
+      <section class="portal-section">
         <div class="section-heading"><div><span class="eyebrow">Orders</span><h2>Recent payment activity</h2></div></div>
         <div class="table-scroll"><table><thead><tr><th>Reference</th><th>User</th><th>Amount</th><th>Provider</th><th>Status</th><th>Created</th></tr></thead><tbody id="admin-orders"></tbody></table></div>
       </section>
@@ -58,6 +63,6 @@
         <div id="admin-enquiries" class="enquiry-list"></div>
       </section>
     </main>
-    <script type="module" src="/src/admin.js?v=kvnp-platform-2"></script>
+    <script type="module" src="/src/admin.js?v=kvnp-platform-3"></script>
   </body>
 </html>

@@ -758,6 +758,9 @@ def admin_dashboard() -> dict:
         revenue = session.scalar(select(func.coalesce(func.sum(Order.amount_minor), 0)).where(Order.status == "paid")) or 0
         recent_orders = session.scalars(select(Order).order_by(Order.created_at.desc()).limit(12)).all()
         recent_enquiries = session.scalars(select(Enquiry).order_by(Enquiry.created_at.desc()).limit(12)).all()
+        recent_users = session.scalars(select(User).order_by(User.created_at.desc()).limit(100)).all()
+        project_counts = dict(session.execute(select(Project.user_id, func.count(Project.id)).group_by(Project.user_id)).all())
+        download_counts = dict(session.execute(select(Download.user_id, func.count(Download.id)).group_by(Download.user_id)).all())
         traffic_rows = session.execute(
             select(Event.name, Event.user_id, Event.anonymous_id, Event.metadata_json, Event.created_at)
             .where(Event.created_at >= cutoff_30d)
@@ -855,6 +858,21 @@ def admin_dashboard() -> dict:
             "conversion30d": conversion_30d,
             "destinations": [{"country": country, "selections": count} for country, count in destinations.most_common(8)],
             "recentActivity": recent_activity,
+            "customers": [
+                {
+                    "id": item.id,
+                    "name": item.name or "",
+                    "email": item.email,
+                    "role": item.role,
+                    "status": item.status,
+                    "emailVerified": bool(item.email_verified),
+                    "projects": int(project_counts.get(item.id, 0)),
+                    "downloads": int(download_counts.get(item.id, 0)),
+                    "createdAt": item.created_at,
+                    "lastLoginAt": item.last_login_at,
+                }
+                for item in recent_users
+            ],
             "funnel": funnel,
             "orders": [order_dict(item) | {"userId": item.user_id} for item in recent_orders],
             "enquiries": [enquiry_dict(item) for item in recent_enquiries],

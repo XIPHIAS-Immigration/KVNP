@@ -237,6 +237,18 @@ section{position:relative;}
 .contact-form input:focus,.contact-form textarea:focus{border-color:var(--stamp-ink)}
 .contact-submit{display:flex;align-items:center;justify-content:space-between;gap:18px}
 .contact-submit>span{color:var(--warn);font-family:var(--font-mono);font-size:11px}
+.lead-dialog{width:min(680px,calc(100vw - 32px));max-height:calc(100vh - 32px);padding:0;border:1px solid var(--line-2);border-radius:3px;background:var(--paper-2);color:#fff;box-shadow:0 32px 110px rgba(0,0,0,.78);overflow:auto}
+.lead-dialog::backdrop{background:rgba(4,4,5,.78);backdrop-filter:blur(4px)}
+.lead-dialog-shell{position:relative;padding:34px}
+.lead-dialog-close{position:absolute;top:14px;right:14px;width:36px;height:36px;border:1px solid var(--line-2);border-radius:0;background:transparent;color:var(--text-2);font-size:24px;line-height:1;cursor:pointer}
+.lead-dialog-close:hover,.lead-dialog-close:focus-visible{border-color:var(--stamp-ink);color:#fff}
+.lead-dialog-copy{padding-right:44px;margin-bottom:26px}
+.lead-dialog-copy h2{margin-top:16px;font-size:clamp(1.7rem,4vw,2.55rem);line-height:1.06}
+.lead-dialog-copy p{max-width:52ch;margin-top:12px;color:var(--text-2);line-height:1.55}
+.lead-dialog-form{padding-top:22px;border-top:1px solid var(--line)}
+.lead-dialog-privacy{margin-top:18px;color:var(--mut);font-family:var(--font-mono);font-size:9px;letter-spacing:.06em}
+.lead-dialog[open]{animation:dialog-in .24s ease-out}
+@keyframes dialog-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 .final{padding:140px 0; text-align:center; position:relative; overflow:hidden; border-top:1px solid var(--line);}
 .final::before{content:""; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:80vw; height:60vh; background:radial-gradient(ellipse, rgba(232,68,46,.14), rgba(232,68,46,0) 60%); pointer-events:none;}
 .final .wrap{position:relative; z-index:1;}
@@ -272,6 +284,9 @@ section{position:relative;}
 }
 @media (max-width:560px){
   .contact-fields{grid-template-columns:1fr}
+  .lead-dialog{width:calc(100vw - 20px);max-height:calc(100vh - 20px)}
+  .lead-dialog-shell{padding:26px 18px 22px}
+  .lead-dialog-copy{padding-right:34px}
   .wrap{padding:0 18px;}
   .nav{padding:14px 18px;}
   .hero{padding:120px 0 70px;}
