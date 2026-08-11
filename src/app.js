@@ -374,7 +374,7 @@ async function loadCommerceConfig() {
 
 function formatCommerceMoney(minor, currency) {
   try {
-    return new Intl.NumberFormat("en-IN", { style: "currency", currency }).format((minor || 0) / 100);
+    return new Intl.NumberFormat(currency === "CAD" ? "en-CA" : "en-IN", { style: "currency", currency }).format((minor || 0) / 100);
   } catch (_error) {
     return `${currency} ${((minor || 0) / 100).toFixed(2)}`;
   }
@@ -384,13 +384,17 @@ function renderCommerce(message = "") {
   if (!elements.purchaseBand || !state.commerce) return;
   const product = state.commerce.product ?? {};
   elements.purchaseIncludes.innerHTML = (product.includes ?? []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
-  elements.purchasePrice.textContent = formatCommerceMoney(product.amountMinor, product.currency || "INR");
+  elements.purchasePrice.textContent = product.recurring
+    ? (product.priceLabel || "Price shown at checkout")
+    : formatCommerceMoney(product.amountMinor, product.currency || "CAD");
   elements.mockPaymentButton.hidden = true;
 
-  if (state.entitlement) {
+  if (state.entitlement || state.commerce.subscription?.active) {
     elements.purchaseBand.dataset.state = "paid";
-    elements.purchaseStatus.textContent = "Purchased / downloads unlocked";
-    elements.purchaseDetail.textContent = message || "This application pack belongs to your account. Prepared exports and print files are unlocked.";
+    elements.purchaseStatus.textContent = product.recurring ? "Membership active" : "Purchased / downloads unlocked";
+    elements.purchaseDetail.textContent = message || (product.recurring
+      ? "Prepared exports are unlocked across the projects in your account."
+      : "This application pack belongs to your account. Prepared exports and print files are unlocked.");
     elements.purchaseButton.textContent = "Open my workspace";
     elements.purchaseButton.disabled = false;
     return;
@@ -398,18 +402,18 @@ function renderCommerce(message = "") {
   if (!state.commerce.enabled) {
     elements.purchaseBand.dataset.state = "disabled";
     elements.purchaseStatus.textContent = "Gateway connection pending";
-    elements.purchaseDetail.textContent = "The complete customer, order, and download system is ready. Online charging opens after Slice merchant onboarding.";
+    elements.purchaseDetail.textContent = "Secure checkout is not configured on this server yet.";
     elements.purchaseButton.textContent = "Payments opening soon";
     elements.purchaseButton.disabled = true;
     return;
   }
   elements.purchaseBand.dataset.state = "ready";
-  elements.purchaseStatus.textContent = state.account ? "One-time purchase" : "Account required at checkout";
+  elements.purchaseStatus.textContent = product.recurring ? "KVNP Studio membership" : (state.account ? "One-time purchase" : "Account required at checkout");
   elements.purchaseDetail.textContent = message || (state.account
-    ? "Purchase this prepared application once, then return to every included file from your workspace."
-    : "You can prepare the photo as a guest. Sign in before checkout so the purchase and downloads have a secure owner.");
-  elements.purchaseButton.textContent = state.account ? "Unlock application pack" : "Sign in to purchase";
-  elements.purchaseButton.disabled = !state.processedImage && Boolean(state.account);
+    ? (product.recurring ? "See the membership plan and continue to secure Stripe Checkout." : "Purchase this prepared application once, then return to every included file from your workspace.")
+    : "You can prepare a photo as a guest. Create an account before subscribing so access has a secure owner.");
+  elements.purchaseButton.textContent = product.recurring ? "View membership" : (state.account ? "Unlock application pack" : "Sign in to purchase");
+  elements.purchaseButton.disabled = product.recurring ? false : (!state.processedImage && Boolean(state.account));
   if (state.order?.status === "pending" && state.commerce.mockCompletionAvailable) {
     elements.mockPaymentButton.hidden = false;
   }
@@ -503,8 +507,12 @@ async function restoreRequestedProject() {
 }
 
 async function startCheckout() {
-  if (state.entitlement) {
+  if (state.entitlement || state.commerce?.subscription?.active) {
     location.href = "/account";
+    return;
+  }
+  if (state.commerce?.product?.recurring) {
+    location.href = "/pricing";
     return;
   }
   if (!state.account) {
@@ -578,7 +586,7 @@ async function authorizeDownload(fileKind, fileFormat, size = null) {
     return true;
   }
   if (!state.account) {
-    renderCommerce("Sign in and purchase this application pack to download prepared files.");
+    renderCommerce("Sign in and activate a membership to download prepared files.");
     elements.purchaseBand?.scrollIntoView({ behavior: "smooth", block: "center" });
     return false;
   }
@@ -3617,7 +3625,7 @@ function renderChecks() {
     : downloadIssues.length
       ? "Download with warnings"
       : "Download file";
-  if (preparedAvailable && state.commerce?.enforced && !state.entitlement && !checkerOnly) {
+  if (preparedAvailable && state.commerce?.enforced && !state.entitlement && !state.commerce?.subscription?.active && !checkerOnly) {
     elements.downloadPhoto.textContent = "Unlock to download";
   }
   elements.printSheet.disabled = !preparedAvailable || checkerOnly;
@@ -5424,6 +5432,11 @@ const authEls = {
 
 const authState = { mode: "login" };
 
+function requestedAuthDestination() {
+  const target = new URLSearchParams(location.search).get("next");
+  return ["/pricing", "/account"].includes(target) ? target : null;
+}
+
 function showAuthView() {
   authEls.appView.hidden = true;
   authEls.authView.hidden = false;
@@ -5511,6 +5524,12 @@ async function submitAuth(event) {
       throw new Error(data.error || `HTTP ${response.status}`);
     }
     applyAccount(data.user, data.csrfToken);
+    await loadCommerceConfig();
+    const destination = requestedAuthDestination();
+    if (destination) {
+      location.href = destination;
+      return;
+    }
     showAppView();
   } catch (error) {
     showAuthError(error.message);
@@ -5527,7 +5546,8 @@ async function logout() {
     console.warn(error);
   }
   applyAccount(null, null);
-  setAuthMode("login");
+  const requestedMode = new URLSearchParams(location.search).get("auth");
+  setAuthMode(requestedMode === "signup" ? "signup" : "login");
   authEls.form.reset();
   showAuthView();
 }
@@ -5572,6 +5592,12 @@ async function bootAuth() {
     const data = await response.json();
     if (data.ok && data.user) {
       applyAccount(data.user, data.csrfToken);
+      await loadCommerceConfig();
+      const destination = requestedAuthDestination();
+      if (destination) {
+        location.href = destination;
+        return;
+      }
       showAppView();
       await restoreRequestedProject();
       return;

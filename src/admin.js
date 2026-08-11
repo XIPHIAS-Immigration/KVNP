@@ -1,5 +1,5 @@
 const state = { csrf: null, data: null };
-const money = (minor, currency = "INR") => new Intl.NumberFormat("en-IN", { style: "currency", currency }).format((minor || 0) / 100);
+const money = (minor, currency = "CAD") => new Intl.NumberFormat("en-CA", { style: "currency", currency }).format((minor || 0) / 100);
 const date = (value) => value ? new Date(value * 1000).toLocaleString() : "-";
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 const eventLabels = {
@@ -23,24 +23,28 @@ async function loadAdmin() {
 }
 
 function render() {
-  const { metrics, traffic = {}, conversion30d = [], destinations = [], recentActivity = [], customers = [], orders, enquiries, commerce } = state.data;
+  const { metrics, traffic = {}, conversion30d = [], destinations = [], recentActivity = [], customers = [], subscriptions = [], billingPayments = [], orders, enquiries, commerce } = state.data;
   const cards = [
     ["Unique visitors", traffic.uniqueVisitors ?? 0], ["Active / 7 days", traffic.active7d ?? 0],
     ["Landing visits", traffic.landingViews ?? 0], ["Studio sessions", traffic.studioSessions ?? 0],
-    ["Customers", metrics.users], ["Applications", metrics.projects], ["Downloads", metrics.downloads],
-    ["Revenue", money(metrics.revenueMinor)], ["Open support", metrics.openEnquiries],
+    ["Customers", metrics.users], ["Active members", metrics.activeSubscriptions ?? 0], ["Past due", metrics.pastDueSubscriptions ?? 0],
+    ["Applications", metrics.projects], ["Downloads", metrics.downloads],
+    ["Stripe payments", metrics.stripePayments ?? 0], ["Stripe revenue", money(metrics.stripeRevenueMinor ?? 0, "CAD")],
+    ["Legacy order value", money(metrics.revenueMinor, commerce.legacyCurrency || "INR")], ["Open support", metrics.openEnquiries],
   ];
   document.querySelector("#admin-metrics").innerHTML = cards.map(([label, value]) => `<article><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`).join("");
   renderTraffic(traffic.daily || []);
   renderConversion(conversion30d);
   renderDestinations(destinations);
   renderRecentActivity(recentActivity);
-  document.querySelector("#commerce-status").innerHTML = `<dt>Provider mode</dt><dd>${escapeHtml(commerce.mode)}</dd><dt>Checkout</dt><dd>${commerce.enabled ? "Enabled" : "Pending credentials"}</dd><dt>Download gate</dt><dd>${commerce.enforced ? "Active" : "Preview mode"}</dd><dt>Application pack</dt><dd>${money(commerce.product.amountMinor, commerce.product.currency)}</dd>`;
+  document.querySelector("#commerce-status").innerHTML = `<dt>Provider mode</dt><dd>${escapeHtml(commerce.mode)}</dd><dt>Checkout</dt><dd>${commerce.enabled ? "Enabled" : "Pending credentials"}</dd><dt>Download gate</dt><dd>${commerce.enforced ? "Active" : "Preview mode"}</dd><dt>Plan</dt><dd>${escapeHtml(commerce.product.priceLabel || money(commerce.product.amountMinor, commerce.product.currency))}</dd>`;
   document.querySelector("#admin-orders").innerHTML = orders.map((order) => `<tr><td>${escapeHtml(order.reference)}</td><td>#${order.userId}</td><td>${money(order.amountMinor, order.currency)}</td><td>${escapeHtml(order.provider)}</td><td><span class="status-pill ${order.status}">${escapeHtml(order.status)}</span></td><td>${date(order.createdAt)}</td></tr>`).join("") || '<tr><td colspan="6">No orders yet.</td></tr>';
   document.querySelector("#enquiry-count").textContent = `${enquiries.length} recent`;
   document.querySelector("#admin-enquiries").innerHTML = enquiries.map(enquiryTemplate).join("") || '<p class="empty-state">No enquiries yet.</p>';
   document.querySelector("#customer-count").textContent = `${customers.length} account${customers.length === 1 ? "" : "s"}`;
-  document.querySelector("#admin-customers").innerHTML = customers.map((item) => `<tr><td><strong>${escapeHtml(item.name || "Not provided")}</strong><small class="customer-state">${escapeHtml(item.status)}</small></td><td><a class="customer-email" href="mailto:${escapeHtml(item.email)}">${escapeHtml(item.email)}</a></td><td><span class="account-role ${item.role === "admin" ? "admin" : ""}">${escapeHtml(item.role)}</span></td><td>${item.projects}</td><td>${item.downloads}</td><td>${date(item.createdAt)}</td><td>${item.lastLoginAt ? date(item.lastLoginAt) : "Never"}</td></tr>`).join("") || '<tr><td colspan="7" class="empty-state">No customer accounts yet.</td></tr>';
+  document.querySelector("#admin-customers").innerHTML = customers.map((item) => `<tr><td><strong>${escapeHtml(item.name || "Not provided")}</strong><small class="customer-state">${escapeHtml(item.status)}</small></td><td><a class="customer-email" href="mailto:${escapeHtml(item.email)}">${escapeHtml(item.email)}</a></td><td><span class="account-role ${item.role === "admin" ? "admin" : ""}">${escapeHtml(item.role)}</span></td><td><span class="status-pill ${item.subscription?.active ? "paid" : ""}">${escapeHtml(item.subscription?.status || "none")}</span></td><td>${item.projects}</td><td>${item.downloads}</td><td>${date(item.createdAt)}</td><td>${item.lastLoginAt ? date(item.lastLoginAt) : "Never"}</td></tr>`).join("") || '<tr><td colspan="8" class="empty-state">No customer accounts yet.</td></tr>';
+  document.querySelector("#admin-subscriptions").innerHTML = subscriptions.map((item) => `<tr><td>#${item.userId}</td><td><span class="status-pill ${item.active ? "paid" : ""}">${escapeHtml(item.status)}</span></td><td>${escapeHtml(item.currency || "CAD")}</td><td>${date(item.currentPeriodEnd)}</td><td>${item.cancelAtPeriodEnd ? "Ends this period" : "Renews"}</td></tr>`).join("") || '<tr><td colspan="5">No Stripe subscriptions yet.</td></tr>';
+  document.querySelector("#admin-billing-payments").innerHTML = billingPayments.map((item) => `<tr><td>${escapeHtml(item.invoiceId)}</td><td>#${item.userId}</td><td>${money(item.amountMinor, item.currency)}</td><td><span class="status-pill ${item.status === "paid" ? "paid" : ""}">${escapeHtml(item.status)}</span></td><td>${date(item.createdAt)}</td></tr>`).join("") || '<tr><td colspan="5">No Stripe invoice events yet.</td></tr>';
 }
 
 function renderTraffic(days) {

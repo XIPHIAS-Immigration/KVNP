@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>My workspace | KVNP Studio</title>
     <link rel="stylesheet" href="/src/portal.css?v=kvnp-platform-1" />
+    <link rel="stylesheet" href="/src/account.css?v=kvnp-stripe-1" />
   </head>
   <body>
     <header class="portal-bar">
@@ -29,8 +30,16 @@
 
       <section class="metric-strip" aria-label="Account summary">
         <article><span>Applications</span><strong id="metric-projects">0</strong></article>
-        <article><span>Purchased packs</span><strong id="metric-paid">0</strong></article>
+        <article><span>Membership</span><strong id="metric-membership">-</strong></article>
         <article><span>Ready to download</span><strong id="metric-ready">0</strong></article>
+      </section>
+
+      <section class="membership-band" id="membership-band">
+        <div><span class="eyebrow">Billing</span><h2 id="membership-title">Checking membership...</h2><p id="membership-detail">Your subscription status will appear here.</p></div>
+        <div class="membership-actions">
+          <a id="membership-join" class="primary-button" href="/pricing">View membership</a>
+          <button id="membership-manage" class="quiet-button bordered-button" type="button" hidden>Manage billing</button>
+        </div>
       </section>
 
       <section class="portal-section">
@@ -67,6 +76,6 @@
         </form>
       </section>
     </main>
-    <script type="module" src="/src/account.js?v=kvnp-platform-1"></script>
+    <script type="module" src="/src/account.js?v=kvnp-stripe-1"></script>
   </body>
 </html>

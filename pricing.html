@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KVNP Studio membership</title>
+    <meta name="description" content="Join KVNP Studio for country-specific photo preparation, validation and professional exports." />
+    <link rel="stylesheet" href="/src/portal.css?v=kvnp-stripe-1" />
+    <link rel="stylesheet" href="/src/pricing.css?v=kvnp-stripe-1" />
+  </head>
+  <body>
+    <header class="portal-bar">
+      <a class="portal-brand" href="/"><span>KV</span><strong>KVNP Studio</strong></a>
+      <nav>
+        <a href="/app">Studio</a>
+        <a class="active" href="/pricing">Membership</a>
+        <a id="account-link" href="/account">My workspace</a>
+      </nav>
+    </header>
+
+    <main class="pricing-shell">
+      <section class="pricing-intro">
+        <div>
+          <span class="eyebrow">KVNP Studio membership</span>
+          <h1>One membership. Every photo workflow.</h1>
+          <p>Prepare country-sized photos, compare compliant formats and export the files you need from one private workspace.</p>
+          <div class="trust-line"><span>CAD billing</span><span>Secure Stripe Checkout</span><span>Cancel from your account</span></div>
+        </div>
+        <aside class="price-panel" aria-labelledby="plan-name">
+          <span class="plan-kicker">Individual plan</span>
+          <h2 id="plan-name">Studio membership</h2>
+          <div id="plan-price" class="plan-price">Loading price...</div>
+          <p class="plan-note">The final amount and renewal interval are shown before payment.</p>
+          <ul id="plan-includes"></ul>
+          <button id="subscribe-button" class="primary-button pricing-button" type="button" disabled>Loading...</button>
+          <button id="portal-button" class="quiet-button portal-button" type="button" hidden>Manage billing</button>
+          <div id="billing-status" class="form-status" aria-live="polite"></div>
+          <small>Payment details are entered on Stripe. KVNP never receives your full card number.</small>
+        </aside>
+      </section>
+
+      <section class="value-grid" aria-label="Membership features">
+        <article><span>01</span><h2>Prepare</h2><p>Automatic crop, size, canvas and file-format controls for the selected programme.</p></article>
+        <article><span>02</span><h2>Review</h2><p>Face, posture, background and image-quality findings with human checks clearly separated.</p></article>
+        <article><span>03</span><h2>Export</h2><p>JPEG, PNG, PDF, print sheets and audit reports from your saved applications.</p></article>
+      </section>
+
+      <section class="billing-faq">
+        <div><span class="eyebrow">Straightforward billing</span><h2>No payment surprises.</h2></div>
+        <dl>
+          <div><dt>When does access begin?</dt><dd>After Stripe confirms the first successful payment. A browser redirect alone cannot unlock an account.</dd></div>
+          <div><dt>How do I cancel?</dt><dd>Open My workspace and choose Manage billing to use Stripe's secure customer portal.</dd></div>
+          <div><dt>Is acceptance guaranteed?</dt><dd>No software can make that promise. KVNP prepares and checks photos; the issuing authority makes the final decision.</dd></div>
+        </dl>
+      </section>
+    </main>
+    <script type="module" src="/src/pricing.js?v=kvnp-stripe-1"></script>
+  </body>
+</html>

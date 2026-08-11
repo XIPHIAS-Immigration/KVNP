@@ -120,6 +120,62 @@ class Entitlement(Base):
     expires_at: Mapped[int | None] = mapped_column(BigInteger)
 
 
+class BillingCustomer(Base):
+    __tablename__ = "billing_customers"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_customer_id: Mapped[str] = mapped_column(String(160), unique=True, nullable=False)
+    created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_subscription_id: Mapped[str] = mapped_column(String(160), unique=True, nullable=False)
+    provider_customer_id: Mapped[str] = mapped_column(String(160), index=True, nullable=False)
+    price_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    currency: Mapped[str] = mapped_column(String(3), default="CAD", nullable=False)
+    current_period_end: Mapped[int | None] = mapped_column(BigInteger)
+    cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+
+class BillingPayment(Base):
+    __tablename__ = "billing_payments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_invoice_id: Mapped[str] = mapped_column(String(160), unique=True, nullable=False, index=True)
+    provider_subscription_id: Mapped[str | None] = mapped_column(String(160), index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    amount_minor: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), default="CAD", nullable=False)
+    created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+
+class ProviderEvent(Base):
+    __tablename__ = "provider_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_event_id: Mapped[str] = mapped_column(String(160), unique=True, nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(96), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    error: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    processed_at: Mapped[int | None] = mapped_column(BigInteger)
+
+
 class Download(Base):
     __tablename__ = "downloads"
 
@@ -191,6 +247,8 @@ class AdminAudit(Base):
 Index("ix_orders_user_created", Order.user_id, Order.created_at)
 Index("ix_projects_user_updated", Project.user_id, Project.updated_at)
 Index("ix_downloads_project_created", Download.project_id, Download.created_at)
+Index("ix_subscriptions_user_updated", Subscription.user_id, Subscription.updated_at)
+Index("ix_billing_payments_user_updated", BillingPayment.user_id, BillingPayment.updated_at)
 
 
 ENGINE = None
@@ -395,6 +453,234 @@ def revoke_auth_session(token: str | None) -> None:
             auth_session.revoked_at = now_ts()
 
 
+def subscription_dict(subscription: Subscription | None) -> dict:
+    if not subscription:
+        return {
+            "status": "none",
+            "active": False,
+            "cancelAtPeriodEnd": False,
+            "currentPeriodEnd": None,
+            "provider": None,
+        }
+    return {
+        "id": subscription.id,
+        "status": subscription.status,
+        "active": subscription.status in {"active", "trialing"},
+        "cancelAtPeriodEnd": bool(subscription.cancel_at_period_end),
+        "currentPeriodEnd": subscription.current_period_end,
+        "provider": subscription.provider,
+        "priceId": subscription.price_id,
+        "currency": subscription.currency,
+    }
+
+
+def subscription_for_user(user_id: int) -> Subscription | None:
+    with session_scope() as session:
+        return session.scalar(
+            select(Subscription)
+            .where(Subscription.user_id == user_id)
+            .order_by(Subscription.updated_at.desc())
+        )
+
+
+def active_subscription(user_id: int) -> Subscription | None:
+    with session_scope() as session:
+        return session.scalar(
+            select(Subscription)
+            .where(
+                Subscription.user_id == user_id,
+                Subscription.status.in_(["active", "trialing"]),
+            )
+            .order_by(Subscription.updated_at.desc())
+        )
+
+
+def billing_customer_for_user(user_id: int) -> BillingCustomer | None:
+    with session_scope() as session:
+        return session.scalar(select(BillingCustomer).where(BillingCustomer.user_id == user_id))
+
+
+def resolve_billing_user(customer_id: str | None = None, supplied_user_id=None) -> int | None:
+    with session_scope() as session:
+        if supplied_user_id not in {None, ""}:
+            try:
+                user_id = int(supplied_user_id)
+            except (TypeError, ValueError):
+                user_id = 0
+            if user_id and session.get(User, user_id):
+                return user_id
+        if customer_id:
+            customer = session.scalar(
+                select(BillingCustomer).where(BillingCustomer.provider_customer_id == str(customer_id))
+            )
+            if customer:
+                return customer.user_id
+    return None
+
+
+def _stripe_price_data(payload: dict) -> tuple[str, str, int | None]:
+    items = ((payload.get("items") or {}).get("data") or [])
+    first_item = items[0] if items else {}
+    price = first_item.get("price") or {}
+    if isinstance(price, str):
+        price = {"id": price}
+    period_end = payload.get("current_period_end") or first_item.get("current_period_end")
+    return (
+        str(price.get("id") or "unknown")[:160],
+        str(price.get("currency") or "CAD").upper()[:3],
+        int(period_end) if period_end else None,
+    )
+
+
+def upsert_stripe_subscription(user_id: int, payload: dict) -> Subscription:
+    provider_subscription_id = str(payload.get("id") or "")
+    provider_customer_id = str(payload.get("customer") or "")
+    if not provider_subscription_id.startswith("sub_") or not provider_customer_id.startswith("cus_"):
+        raise ValueError("stripe_subscription_identifiers")
+    price_id, currency, period_end = _stripe_price_data(payload)
+    timestamp = now_ts()
+    with session_scope() as session:
+        if not session.get(User, user_id):
+            raise ValueError("stripe_user")
+        customer = session.scalar(select(BillingCustomer).where(BillingCustomer.user_id == user_id))
+        if not customer:
+            customer = BillingCustomer(
+                id=str(uuid.uuid4()),
+                user_id=user_id,
+                provider="stripe",
+                provider_customer_id=provider_customer_id,
+                created_at=timestamp,
+                updated_at=timestamp,
+            )
+            session.add(customer)
+        else:
+            customer.provider_customer_id = provider_customer_id
+            customer.updated_at = timestamp
+
+        subscription = session.scalar(
+            select(Subscription).where(
+                Subscription.provider_subscription_id == provider_subscription_id
+            )
+        )
+        if not subscription:
+            subscription = Subscription(
+                id=str(uuid.uuid4()),
+                user_id=user_id,
+                provider="stripe",
+                provider_subscription_id=provider_subscription_id,
+                provider_customer_id=provider_customer_id,
+                price_id=price_id,
+                status="incomplete",
+                currency=currency,
+                created_at=timestamp,
+                updated_at=timestamp,
+            )
+            session.add(subscription)
+        subscription.user_id = user_id
+        subscription.provider_customer_id = provider_customer_id
+        subscription.price_id = price_id
+        subscription.status = str(payload.get("status") or subscription.status)[:32]
+        subscription.currency = currency
+        subscription.current_period_end = period_end
+        subscription.cancel_at_period_end = bool(payload.get("cancel_at_period_end"))
+        subscription.updated_at = timestamp
+        session.flush()
+        return subscription
+
+
+def billing_payment_dict(item: BillingPayment) -> dict:
+    return {
+        "id": item.id,
+        "userId": item.user_id,
+        "invoiceId": item.provider_invoice_id,
+        "subscriptionId": item.provider_subscription_id,
+        "status": item.status,
+        "amountMinor": item.amount_minor,
+        "currency": item.currency,
+        "createdAt": item.created_at,
+        "updatedAt": item.updated_at,
+    }
+
+
+def upsert_stripe_invoice(user_id: int, payload: dict, status: str) -> BillingPayment:
+    invoice_id = str(payload.get("id") or "")
+    if not invoice_id.startswith("in_"):
+        raise ValueError("stripe_invoice_identifier")
+    subscription_id = payload.get("subscription")
+    if not isinstance(subscription_id, str):
+        parent = payload.get("parent") or {}
+        details = parent.get("subscription_details") or {}
+        subscription_id = details.get("subscription")
+        if isinstance(subscription_id, dict):
+            subscription_id = subscription_id.get("id")
+    amount = payload.get("amount_paid") if status == "paid" else payload.get("amount_due")
+    timestamp = now_ts()
+    with session_scope() as session:
+        item = session.scalar(
+            select(BillingPayment).where(BillingPayment.provider_invoice_id == invoice_id)
+        )
+        if not item:
+            item = BillingPayment(
+                id=str(uuid.uuid4()),
+                user_id=user_id,
+                provider="stripe",
+                provider_invoice_id=invoice_id,
+                provider_subscription_id=str(subscription_id)[:160] if subscription_id else None,
+                status=status[:32],
+                amount_minor=max(0, int(amount or 0)),
+                currency=str(payload.get("currency") or "CAD").upper()[:3],
+                created_at=int(payload.get("created") or timestamp),
+                updated_at=timestamp,
+            )
+            session.add(item)
+        else:
+            item.status = status[:32]
+            item.amount_minor = max(0, int(amount or item.amount_minor or 0))
+            item.currency = str(payload.get("currency") or item.currency or "CAD").upper()[:3]
+            item.provider_subscription_id = str(subscription_id)[:160] if subscription_id else item.provider_subscription_id
+            item.updated_at = timestamp
+        session.flush()
+        return item
+
+
+def reserve_provider_event(provider: str, event_id: str, event_type: str) -> bool:
+    timestamp = now_ts()
+    with session_scope() as session:
+        existing = session.scalar(
+            select(ProviderEvent).where(ProviderEvent.provider_event_id == event_id)
+        )
+        if existing and existing.status in {"processing", "processed", "ignored"}:
+            return False
+        if existing:
+            existing.status = "processing"
+            existing.error = ""
+            existing.processed_at = None
+        else:
+            session.add(
+                ProviderEvent(
+                    id=str(uuid.uuid4()),
+                    provider=provider[:32],
+                    provider_event_id=event_id[:160],
+                    event_type=event_type[:96],
+                    status="processing",
+                    error="",
+                    created_at=timestamp,
+                )
+            )
+    return True
+
+
+def finish_provider_event(event_id: str, status: str, error: str = "") -> None:
+    if status not in {"processed", "ignored", "failed"}:
+        raise ValueError("provider_event_status")
+    with session_scope() as session:
+        item = session.scalar(select(ProviderEvent).where(ProviderEvent.provider_event_id == event_id))
+        if item:
+            item.status = status
+            item.error = error[:2000]
+            item.processed_at = now_ts()
+
+
 def project_dict(project: Project, entitlement: bool = False, artifact: bool = False) -> dict:
     return {
         "id": project.id,
@@ -470,7 +756,16 @@ def list_projects(user_id: int, limit: int = 50) -> list[dict]:
                 )
             ).all()
         )
-        return [project_dict(project, project.id in entitled_ids, project.id in artifact_ids) for project in projects]
+        membership = session.scalar(
+            select(Subscription.id).where(
+                Subscription.user_id == user_id,
+                Subscription.status.in_(["active", "trialing"]),
+            ).limit(1)
+        )
+        return [
+            project_dict(project, bool(membership) or project.id in entitled_ids, project.id in artifact_ids)
+            for project in projects
+        ]
 
 
 def get_owned_project(user_id: int, project_id: str) -> Project | None:
@@ -600,6 +895,10 @@ def active_entitlement(user_id: int, project_id: str) -> Entitlement | None:
         if entitlement and entitlement.expires_at and entitlement.expires_at < now_ts():
             return None
         return entitlement
+
+
+def has_download_access(user_id: int, project_id: str) -> bool:
+    return bool(active_subscription(user_id) or active_entitlement(user_id, project_id))
 
 
 def register_artifact(user_id: int, project_id: str, storage_path: str, file_format: str, size: int) -> Artifact:
@@ -759,6 +1058,15 @@ def admin_dashboard() -> dict:
         recent_orders = session.scalars(select(Order).order_by(Order.created_at.desc()).limit(12)).all()
         recent_enquiries = session.scalars(select(Enquiry).order_by(Enquiry.created_at.desc()).limit(12)).all()
         recent_users = session.scalars(select(User).order_by(User.created_at.desc()).limit(100)).all()
+        recent_subscriptions = session.scalars(
+            select(Subscription).order_by(Subscription.updated_at.desc()).limit(50)
+        ).all()
+        recent_billing_payments = session.scalars(
+            select(BillingPayment).order_by(BillingPayment.updated_at.desc()).limit(50)
+        ).all()
+        subscription_by_user = {}
+        for subscription in recent_subscriptions:
+            subscription_by_user.setdefault(subscription.user_id, subscription)
         project_counts = dict(session.execute(select(Project.user_id, func.count(Project.id)).group_by(Project.user_id)).all())
         download_counts = dict(session.execute(select(Download.user_id, func.count(Download.id)).group_by(Download.user_id)).all())
         traffic_rows = session.execute(
@@ -834,6 +1142,29 @@ def admin_dashboard() -> dict:
                 "revenueMinor": int(revenue),
                 "downloads": session.scalar(select(func.count(Download.id))) or 0,
                 "openEnquiries": session.scalar(select(func.count(Enquiry.id)).where(Enquiry.status != "resolved")) or 0,
+                "activeSubscriptions": session.scalar(
+                    select(func.count(Subscription.id)).where(
+                        Subscription.status.in_(["active", "trialing"])
+                    )
+                )
+                or 0,
+                "pastDueSubscriptions": session.scalar(
+                    select(func.count(Subscription.id)).where(Subscription.status == "past_due")
+                )
+                or 0,
+                "stripePayments": session.scalar(
+                    select(func.count(BillingPayment.id)).where(BillingPayment.status == "paid")
+                )
+                or 0,
+                "stripeRevenueMinor": int(
+                    session.scalar(
+                        select(func.coalesce(func.sum(BillingPayment.amount_minor), 0)).where(
+                            BillingPayment.status == "paid",
+                            BillingPayment.currency == "CAD",
+                        )
+                    )
+                    or 0
+                ),
             },
             "traffic": {
                 "uniqueVisitors": int(all_unique_visitors),
@@ -868,6 +1199,7 @@ def admin_dashboard() -> dict:
                     "emailVerified": bool(item.email_verified),
                     "projects": int(project_counts.get(item.id, 0)),
                     "downloads": int(download_counts.get(item.id, 0)),
+                    "subscription": subscription_dict(subscription_by_user.get(item.id)),
                     "createdAt": item.created_at,
                     "lastLoginAt": item.last_login_at,
                 }
@@ -875,6 +1207,8 @@ def admin_dashboard() -> dict:
             ],
             "funnel": funnel,
             "orders": [order_dict(item) | {"userId": item.user_id} for item in recent_orders],
+            "subscriptions": [subscription_dict(item) | {"userId": item.user_id} for item in recent_subscriptions],
+            "billingPayments": [billing_payment_dict(item) for item in recent_billing_payments],
             "enquiries": [enquiry_dict(item) for item in recent_enquiries],
         }
 

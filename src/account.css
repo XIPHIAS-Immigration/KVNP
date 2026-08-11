@@ -1,0 +1,17 @@
+.membership-band {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 30px;
+  padding: 28px 22px;
+  border-bottom: 1px solid #292b30;
+  background: #111216;
+}
+.membership-band h2 { margin: 6px 0 4px; font-size: 22px; }
+.membership-band p { margin: 0; color: #92959d; }
+.membership-actions { display: flex; align-items: center; gap: 10px; }
+.bordered-button { border: 1px solid #44474e; }
+@media (max-width: 680px) {
+  .membership-band { align-items: flex-start; flex-direction: column; }
+  .membership-actions { width: 100%; flex-wrap: wrap; }
+}

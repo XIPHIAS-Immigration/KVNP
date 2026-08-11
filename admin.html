@@ -50,7 +50,17 @@
 
       <section class="portal-section">
         <div class="section-heading"><div><span class="eyebrow">Accounts</span><h2>Registered accounts</h2></div><span id="customer-count" class="muted"></span></div>
-        <div class="table-scroll"><table><thead><tr><th>Customer</th><th>Email</th><th>Role</th><th>Projects</th><th>Downloads</th><th>Joined</th><th>Last login</th></tr></thead><tbody id="admin-customers"></tbody></table></div>
+        <div class="table-scroll"><table><thead><tr><th>Customer</th><th>Email</th><th>Role</th><th>Membership</th><th>Projects</th><th>Downloads</th><th>Joined</th><th>Last login</th></tr></thead><tbody id="admin-customers"></tbody></table></div>
+      </section>
+
+      <section class="portal-section">
+        <div class="section-heading"><div><span class="eyebrow">Stripe Billing</span><h2>Recent subscriptions</h2></div></div>
+        <div class="table-scroll"><table><thead><tr><th>User</th><th>Status</th><th>Currency</th><th>Period end</th><th>Cancellation</th></tr></thead><tbody id="admin-subscriptions"></tbody></table></div>
+      </section>
+
+      <section class="portal-section">
+        <div class="section-heading"><div><span class="eyebrow">Stripe payments</span><h2>Subscription invoices</h2></div></div>
+        <div class="table-scroll"><table><thead><tr><th>Invoice</th><th>User</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody id="admin-billing-payments"></tbody></table></div>
       </section>
 
       <section class="portal-section">
@@ -63,6 +73,6 @@
         <div id="admin-enquiries" class="enquiry-list"></div>
       </section>
     </main>
-    <script type="module" src="/src/admin.js?v=kvnp-platform-3"></script>
+    <script type="module" src="/src/admin.js?v=kvnp-stripe-1"></script>
   </body>
 </html>

@@ -316,6 +316,8 @@ ALLOW_MOCK_PAYMENTS = os.getenv("KVNP_ALLOW_MOCK_PAYMENTS", "false").strip().low
 COMMERCE_ENFORCED = os.getenv("KVNP_COMMERCE_ENFORCED", "false").strip().lower() in {"1", "true", "yes"}
 APPLICATION_PRICE_MINOR = max(100, int(os.getenv("KVNP_APPLICATION_PRICE_MINOR", "19900")))
 APPLICATION_CURRENCY = os.getenv("KVNP_APPLICATION_CURRENCY", "INR").strip().upper()[:3] or "INR"
+PUBLIC_BASE_URL = os.getenv("KVNP_PUBLIC_URL", "").strip().rstrip("/")
+SUBSCRIPTION_PRICE_LABEL = os.getenv("KVNP_SUBSCRIPTION_PRICE_LABEL", "Price shown at checkout").strip()
 AUTH_FAILURES = {}
 
 
@@ -487,25 +489,33 @@ def auth_me(request: Request):
 
 
 def commerce_config(user=None):
+    user_id = (user.get("id") if isinstance(user, dict) else user.id) if user else None
+    subscription = platform.subscription_dict(platform.subscription_for_user(user_id)) if user_id else platform.subscription_dict(None)
+    stripe_enabled = PAYMENT_MODE == "stripe" and PAYMENT_GATEWAY.configured
     return {
         "mode": PAYMENT_MODE,
-        "enabled": PAYMENT_MODE in {"mock", "slice"},
+        "enabled": PAYMENT_MODE in {"mock", "slice"} or stripe_enabled,
+        "configured": PAYMENT_GATEWAY.configured,
         "enforced": COMMERCE_ENFORCED,
+        "legacyCurrency": APPLICATION_CURRENCY,
         "mockCompletionAvailable": PAYMENT_MODE == "mock" and ALLOW_MOCK_PAYMENTS,
         "product": {
-            "code": "application-pack",
-            "label": "Application photo pack",
+            "code": "studio-membership" if PAYMENT_MODE == "stripe" else "application-pack",
+            "label": "KVNP Studio membership" if PAYMENT_MODE == "stripe" else "Application photo pack",
             "amountMinor": APPLICATION_PRICE_MINOR,
-            "currency": APPLICATION_CURRENCY,
+            "currency": "CAD" if PAYMENT_MODE == "stripe" else APPLICATION_CURRENCY,
+            "priceLabel": SUBSCRIPTION_PRICE_LABEL if PAYMENT_MODE == "stripe" else None,
+            "recurring": PAYMENT_MODE == "stripe",
             "includes": [
-                "Programme-sized JPEG",
-                "PNG or PDF copy",
-                "Print sheet",
-                "Photo audit report",
-                "30-day re-download access",
+                "Country and programme presets",
+                "JPEG, PNG, PDF and print sheets",
+                "Background and tone studio tools",
+                "Photo audit reports",
+                "Unlimited prepared projects while active",
             ],
         },
         "signedIn": bool(user),
+        "subscription": subscription,
     }
 
 
@@ -522,6 +532,7 @@ def account_summary(request: Request):
         "user": platform.user_dict(identity[0]),
         "projects": platform.list_projects(identity[0].id),
         "orders": platform.list_orders(identity[0].id),
+        "subscription": platform.subscription_dict(platform.subscription_for_user(identity[0].id)),
         "commerce": commerce_config(identity[0]),
     }
 
@@ -543,7 +554,7 @@ async def projects_save(request: Request):
         raise HTTPException(status_code=403, detail="This project belongs to another account.")
     except Exception as error:
         return JSONResponse({"ok": False, "error": str(error)}, status_code=422)
-    return {"ok": True, "project": platform.project_dict(project, bool(platform.active_entitlement(identity[0].id, project.id)))}
+    return {"ok": True, "project": platform.project_dict(project, platform.has_download_access(identity[0].id, project.id))}
 
 
 def validated_project_uuid(project_id):
@@ -605,9 +616,9 @@ def project_artifact_download(project_id: str, request: Request):
     project = platform.get_owned_project(identity[0].id, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found.")
-    entitlement = platform.active_entitlement(identity[0].id, project_id)
-    if COMMERCE_ENFORCED and not entitlement:
-        raise HTTPException(status_code=402, detail="Purchase required before downloading this prepared file.")
+    access = platform.has_download_access(identity[0].id, project_id)
+    if COMMERCE_ENFORCED and not access:
+        raise HTTPException(status_code=402, detail="An active KVNP membership is required for prepared downloads.")
     artifact = platform.get_artifact(identity[0].id, project_id)
     if not artifact:
         raise HTTPException(status_code=404, detail="No saved prepared file is available for this application.")
@@ -619,6 +630,165 @@ def project_artifact_download(project_id: str, request: Request):
     return FileResponse(artifact_path, media_type=artifact.format, filename=filename)
 
 
+def public_url(request: Request) -> str:
+    return PUBLIC_BASE_URL or str(request.base_url).rstrip("/")
+
+
+def start_stripe_subscription(identity, request: Request, project_id: str | None = None):
+    if PAYMENT_MODE != "stripe" or not PAYMENT_GATEWAY.configured:
+        return JSONResponse({"ok": False, "error": "Stripe checkout is not configured."}, status_code=503)
+    if platform.active_subscription(identity[0].id):
+        return JSONResponse(
+            {"ok": False, "error": "Your KVNP membership is already active. Manage it from your account."},
+            status_code=409,
+        )
+    base_url = public_url(request)
+    try:
+        checkout = PAYMENT_GATEWAY.create_subscription_checkout(
+            platform.user_dict(identity[0]),
+            f"{base_url}/account?checkout=success&session_id={{CHECKOUT_SESSION_ID}}",
+            f"{base_url}/pricing?checkout=cancelled",
+        )
+    except Exception as error:
+        print(f"[kvnp] Stripe Checkout could not start: {type(error).__name__}", file=sys.stderr, flush=True)
+        return JSONResponse(
+            {"ok": False, "error": "Checkout is temporarily unavailable. Please try again."}, status_code=503
+        )
+    platform.record_event(
+        "checkout_started",
+        identity[0].id,
+        project_id,
+        metadata={"provider": "stripe", "sessionId": checkout.provider_order_id},
+    )
+    return {
+        "ok": True,
+        "checkout": {
+            "provider": checkout.provider,
+            "status": checkout.status,
+            "url": checkout.checkout_url,
+            "development": checkout.development,
+        },
+    }
+
+
+@app.post("/api/billing/checkout")
+async def billing_checkout(request: Request):
+    identity = require_identity(request)
+    require_csrf(request, identity)
+    return start_stripe_subscription(identity, request)
+
+
+@app.post("/api/billing/portal")
+async def billing_portal(request: Request):
+    identity = require_identity(request)
+    require_csrf(request, identity)
+    if PAYMENT_MODE != "stripe" or not PAYMENT_GATEWAY.configured:
+        return JSONResponse({"ok": False, "error": "Stripe billing is not configured."}, status_code=503)
+    customer = platform.billing_customer_for_user(identity[0].id)
+    if not customer:
+        return JSONResponse({"ok": False, "error": "No Stripe billing profile exists yet."}, status_code=404)
+    try:
+        url = PAYMENT_GATEWAY.create_portal_session(customer.provider_customer_id, f"{public_url(request)}/account")
+    except Exception as error:
+        print(f"[kvnp] Stripe portal could not start: {type(error).__name__}", file=sys.stderr, flush=True)
+        return JSONResponse(
+            {"ok": False, "error": "Billing management is temporarily unavailable."}, status_code=503
+        )
+    return {"ok": True, "url": url}
+
+
+def stripe_subscription_id(source: dict) -> str | None:
+    direct = source.get("subscription")
+    if isinstance(direct, str):
+        return direct
+    parent = source.get("parent") or {}
+    details = parent.get("subscription_details") or {}
+    nested = details.get("subscription")
+    if isinstance(nested, str):
+        return nested
+    if isinstance(nested, dict):
+        return nested.get("id")
+    return None
+
+
+def process_stripe_event(event: dict) -> bool:
+    event_type = str(event.get("type") or "")
+    source = event["data"]["object"]
+    if not isinstance(source, dict):
+        source = dict(source)
+
+    subscription = None
+    supplied_user_id = (source.get("metadata") or {}).get("kvnp_user_id")
+    if event_type == "checkout.session.completed":
+        if source.get("mode") != "subscription" or source.get("payment_status") not in {"paid", "no_payment_required"}:
+            return False
+        supplied_user_id = source.get("client_reference_id") or supplied_user_id
+        subscription_id = stripe_subscription_id(source)
+        if subscription_id:
+            subscription = PAYMENT_GATEWAY.retrieve_subscription(subscription_id)
+    elif event_type in {
+        "customer.subscription.created",
+        "customer.subscription.updated",
+        "customer.subscription.deleted",
+    }:
+        subscription = source
+    elif event_type in {"invoice.paid", "invoice.payment_failed"}:
+        subscription_id = stripe_subscription_id(source)
+        if subscription_id:
+            subscription = PAYMENT_GATEWAY.retrieve_subscription(subscription_id)
+    else:
+        return False
+
+    if not subscription:
+        return False
+    metadata = subscription.get("metadata") or {}
+    customer_id = subscription.get("customer") or source.get("customer")
+    user_id = platform.resolve_billing_user(
+        str(customer_id) if customer_id else None,
+        metadata.get("kvnp_user_id") or supplied_user_id,
+    )
+    if not user_id:
+        raise ValueError("Stripe event could not be matched to a KVNP account.")
+    saved = platform.upsert_stripe_subscription(user_id, subscription)
+    if event_type == "invoice.paid":
+        platform.upsert_stripe_invoice(user_id, source, "paid")
+    elif event_type == "invoice.payment_failed":
+        platform.upsert_stripe_invoice(user_id, source, "failed")
+    if event_type == "checkout.session.completed" and saved.status in {"active", "trialing"}:
+        platform.record_event(
+            "payment_completed",
+            user_id,
+            metadata={"provider": "stripe", "subscriptionId": saved.provider_subscription_id},
+        )
+    return True
+
+
+@app.post("/api/stripe/webhook")
+async def stripe_webhook(request: Request):
+    if PAYMENT_MODE != "stripe" or not PAYMENT_GATEWAY.configured:
+        raise HTTPException(status_code=404, detail="Stripe webhooks are disabled.")
+    payload = await request.body()
+    signature = request.headers.get("stripe-signature", "")
+    try:
+        event = PAYMENT_GATEWAY.construct_event(payload, signature)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid Stripe webhook signature.")
+    event_id = str(event.get("id") or "")
+    event_type = str(event.get("type") or "")
+    if not event_id or not event_type:
+        raise HTTPException(status_code=400, detail="Malformed Stripe event.")
+    if not platform.reserve_provider_event("stripe", event_id, event_type):
+        return {"ok": True, "duplicate": True}
+    try:
+        handled = process_stripe_event(event)
+        platform.finish_provider_event(event_id, "processed" if handled else "ignored")
+    except Exception as error:
+        platform.finish_provider_event(event_id, "failed", str(error))
+        print(f"[kvnp] Stripe webhook failed: {event_type}: {type(error).__name__}", file=sys.stderr, flush=True)
+        return JSONResponse({"ok": False, "error": "Webhook processing failed."}, status_code=500)
+    return {"ok": True, "handled": handled}
+
+
 @app.post("/api/checkout/start")
 async def checkout_start(request: Request):
     identity = require_identity(request)
@@ -628,6 +798,9 @@ async def checkout_start(request: Request):
     try:
         body = await request.json()
         project_id = str(body.get("projectId") or "")
+        if PAYMENT_MODE == "stripe":
+            project = platform.get_owned_project(identity[0].id, project_id) if project_id else None
+            return start_stripe_subscription(identity, request, project.id if project else None)
         order = platform.create_order(
             identity[0].id,
             project_id,
@@ -681,10 +854,10 @@ async def authorize_download(request: Request):
     project = platform.get_owned_project(identity[0].id, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found.")
-    entitled = bool(platform.active_entitlement(identity[0].id, project_id))
+    entitled = platform.has_download_access(identity[0].id, project_id)
     if COMMERCE_ENFORCED and file_kind != "original" and not entitled:
         return JSONResponse(
-            {"ok": False, "error": "Purchase this application pack to unlock prepared files."},
+            {"ok": False, "error": "An active KVNP membership is required for prepared downloads."},
             status_code=402,
         )
     platform.record_download(
@@ -789,6 +962,11 @@ def account_page():
     return FileResponse(ROOT / "account.html")
 
 
+@app.get("/pricing")
+def pricing_page():
+    return FileResponse(ROOT / "pricing.html")
+
+
 @app.get("/admin")
 def admin_page():
     return FileResponse(ROOT / "admin.html")
@@ -816,6 +994,7 @@ def health():
         "guidedFilter": HAS_GUIDED_FILTER,
         "database": DATABASE_BACKEND,
         "commerceMode": PAYMENT_MODE,
+        "commerceConfigured": PAYMENT_GATEWAY.configured,
         "models": model_inventory(),
     }
 
