@@ -11,6 +11,20 @@ from dataclasses import dataclass
 STRIPE_API_VERSION = "2026-06-24.dahlia"
 
 
+def stripe_dict(value) -> dict:
+    if isinstance(value, dict):
+        return value
+    converter = getattr(value, "to_dict_recursive", None)
+    if callable(converter):
+        converted = converter()
+        if isinstance(converted, dict):
+            return converted
+    keys = getattr(value, "keys", None)
+    if callable(keys):
+        return {key: value[key] for key in keys()}
+    raise TypeError(f"Unsupported Stripe response type: {type(value).__name__}")
+
+
 @dataclass(frozen=True)
 class CheckoutSession:
     provider: str
@@ -92,7 +106,7 @@ class StripeGateway(PaymentGateway):
         if self._validated_price is not None:
             return self._validated_price
         price = self._sdk().Price.retrieve(self.price_id, **self._request_options())
-        price_data = dict(price)
+        price_data = stripe_dict(price)
         if not price_data.get("active"):
             raise RuntimeError("The configured Stripe Price is inactive.")
         if str(price_data.get("currency") or "").lower() != self.currency:
@@ -129,12 +143,13 @@ class StripeGateway(PaymentGateway):
             idempotency_key=f"kvnp-checkout-{checkout_id}",
             **self._request_options(),
         )
+        session_data = stripe_dict(session)
         return CheckoutSession(
             provider=self.name,
-            status=str(session.get("status") or "open"),
-            checkout_url=session.get("url"),
-            provider_order_id=session.get("id"),
-            development=not bool(session.get("livemode")),
+            status=str(session_data.get("status") or "open"),
+            checkout_url=session_data.get("url"),
+            provider_order_id=session_data.get("id"),
+            development=not bool(session_data.get("livemode")),
         )
 
     def create_portal_session(self, customer_id: str, return_url: str) -> str:
@@ -151,16 +166,16 @@ class StripeGateway(PaymentGateway):
             expand=["latest_invoice"],
             **self._request_options(),
         )
-        return dict(item)
+        return stripe_dict(item)
 
     def retrieve_checkout(self, session_id: str) -> dict:
         item = self._sdk().checkout.Session.retrieve(session_id, **self._request_options())
-        return dict(item)
+        return stripe_dict(item)
 
     def construct_event(self, payload: bytes, signature: str) -> dict:
         if not self.webhook_secret:
             raise RuntimeError("STRIPE_WEBHOOK_SECRET is not configured.")
-        return self._sdk().Webhook.construct_event(payload, signature, self.webhook_secret)
+        return stripe_dict(self._sdk().Webhook.construct_event(payload, signature, self.webhook_secret))
 
 
 class SliceGateway(PaymentGateway):

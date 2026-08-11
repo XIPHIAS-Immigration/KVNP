@@ -24,11 +24,29 @@ import server  # noqa: E402
 from kvnp_payments import StripeGateway  # noqa: E402
 
 
+class FakeStripeObject:
+    def __init__(self, data):
+        self.data = data
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            raise KeyError(key)
+        return self.data[key]
+
+    def keys(self):
+        return self.data.keys()
+
+    def to_dict_recursive(self):
+        return self.data
+
+
 class FakePrice:
     @staticmethod
     def retrieve(price_id, **_options):
         assert price_id == "price_cad_monthly"
-        return {"id": price_id, "active": True, "currency": "cad", "recurring": {"interval": "month"}}
+        return FakeStripeObject(
+            {"id": price_id, "active": True, "currency": "cad", "recurring": {"interval": "month"}}
+        )
 
 
 class FakeCheckoutSession:
@@ -51,11 +69,11 @@ class FakeCheckoutSession:
             "livemode": False,
         }
         cls.sessions[session_id] = session
-        return session
+        return FakeStripeObject(session)
 
     @classmethod
     def retrieve(cls, session_id, **_options):
-        return cls.sessions[session_id]
+        return FakeStripeObject(cls.sessions[session_id])
 
 
 class FakePortalSession:
@@ -68,7 +86,7 @@ class FakePortalSession:
 class FakeWebhook:
     @staticmethod
     def construct_event(payload, _signature, _secret):
-        return json.loads(payload)
+        return FakeStripeObject(json.loads(payload))
 
 
 class FakeSubscription:
@@ -76,7 +94,7 @@ class FakeSubscription:
 
     @classmethod
     def retrieve(cls, subscription_id, **_options):
-        return cls.items[subscription_id]
+        return FakeStripeObject(cls.items[subscription_id])
 
 
 class FakeStripe:
