@@ -14,11 +14,12 @@ STRIPE_API_VERSION = "2026-06-24.dahlia"
 def stripe_dict(value) -> dict:
     if isinstance(value, dict):
         return value
-    converter = getattr(value, "to_dict_recursive", None)
-    if callable(converter):
-        converted = converter()
-        if isinstance(converted, dict):
-            return converted
+    for method_name in ("to_dict_recursive", "to_dict"):
+        converter = getattr(value, method_name, None)
+        if callable(converter):
+            converted = converter()
+            if isinstance(converted, dict):
+                return converted
     keys = getattr(value, "keys", None)
     if callable(keys):
         return {key: value[key] for key in keys()}

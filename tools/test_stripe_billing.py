@@ -40,11 +40,23 @@ class FakeStripeObject:
         return self.data
 
 
+class FakeModernStripeObject(FakeStripeObject):
+    """Matches Stripe SDK releases that expose to_dict() only."""
+
+    to_dict_recursive = None
+
+    def keys(self):
+        raise AssertionError("Stripe object must be converted with to_dict()")
+
+    def to_dict(self):
+        return self.data
+
+
 class FakePrice:
     @staticmethod
     def retrieve(price_id, **_options):
         assert price_id == "price_cad_monthly"
-        return FakeStripeObject(
+        return FakeModernStripeObject(
             {"id": price_id, "active": True, "currency": "cad", "recurring": {"interval": "month"}}
         )
 
