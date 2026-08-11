@@ -431,6 +431,15 @@ def record_login_failure(key):
 
 @app.post("/api/auth/signup")
 async def auth_signup(request: Request):
+    if PAYMENT_MODE == "stripe":
+        return JSONResponse(
+            {
+                "ok": False,
+                "error": "Complete membership payment before creating your KVNP account.",
+                "action": "/pricing",
+            },
+            status_code=403,
+        )
     try:
         body = await request.json()
     except Exception:

@@ -213,6 +213,19 @@ def test_product_lifecycle_ui_is_present():
     print("test_product_lifecycle_ui_is_present", PASS)
 
 
+def test_payment_precedes_account_creation():
+    _, app = load_sources()
+    landing = (ROOT / "landing.html").read_text(encoding="utf-8")
+    server = (ROOT / "server.py").read_text(encoding="utf-8")
+    assert landing.count('href="/pricing" data-member-entry') == 5
+    assert 'href="/app">Create my photo' not in landing
+    assert 'authEls.switchBtn.addEventListener("click", () => { location.href = "/pricing"; });' in app
+    assert 'const endpoint = "/api/auth/login";' in app
+    assert 'if PAYMENT_MODE == "stripe":' in server
+    assert '"action": "/pricing"' in server
+    print("test_payment_precedes_account_creation", PASS)
+
+
 def main():
     tests = [
         test_four_stage_structure,
@@ -225,6 +238,7 @@ def main():
         test_background_variant_respects_programme_policy,
         test_general_studio_has_clean_exports,
         test_product_lifecycle_ui_is_present,
+        test_payment_precedes_account_creation,
     ]
     for test in tests:
         test()

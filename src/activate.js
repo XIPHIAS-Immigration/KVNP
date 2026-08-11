@@ -65,7 +65,7 @@ async function verifyPayment() {
       return;
     }
     if (data.claimed) {
-      location.replace("/account");
+      location.replace("/app?activated=1");
       return;
     }
     if (data.paid) {
@@ -103,7 +103,7 @@ elements.form.addEventListener("submit", async (event) => {
     return;
   }
   elements.status.textContent = "Account ready. Opening your workspace...";
-  location.replace("/account?activated=1");
+  location.replace("/app?activated=1");
 });
 
 verifyPayment().catch(() => showError("Payment verification is temporarily unavailable. Refresh this page to retry."));

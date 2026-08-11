@@ -129,6 +129,22 @@
 
 (function () {
   "use strict";
+  var memberEntries = document.querySelectorAll("[data-member-entry]");
+  fetch("/api/commerce/config", { credentials: "same-origin" })
+    .then(function (response) { return response.json(); })
+    .then(function (data) {
+      if (!data.signedIn || !data.subscription || !data.subscription.active) return;
+      memberEntries.forEach(function (entry) {
+        entry.href = "/app";
+        if (entry.classList.contains("btn")) {
+          entry.firstChild.textContent = "Open Studio ";
+        } else {
+          entry.textContent = "Studio";
+        }
+      });
+    })
+    .catch(function () {});
+
   try {
     var anonymousId = localStorage.getItem("kvnp-anonymous-id") || crypto.randomUUID();
     localStorage.setItem("kvnp-anonymous-id", anonymousId);

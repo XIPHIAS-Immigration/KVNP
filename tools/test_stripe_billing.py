@@ -131,6 +131,12 @@ def main():
     with TestClient(server.app) as client:
         assert client.get("/pricing").status_code == 200
         assert client.get("/activate").status_code == 200
+        prepayment_signup = client.post(
+            "/api/auth/signup",
+            json={"email": "too.early@example.test", "name": "Too Early", "password": "correct-horse-42"},
+        )
+        assert prepayment_signup.status_code == 403
+        assert prepayment_signup.json()["action"] == "/pricing"
 
         # Payment comes first: an anonymous visitor can open hosted Checkout.
         checkout = client.post("/api/billing/checkout", headers={"origin": "http://testserver"})
@@ -285,9 +291,14 @@ def main():
 
         # Existing account-first entry remains compatible for signed-in users.
         with TestClient(server.app) as signed_client:
+            signed_user = server.platform.create_user(
+                "signed.checkout@example.test",
+                "Signed Checkout",
+                server.PASSWORD_HASHER.hash("signed-password"),
+            )
             signed_up = signed_client.post(
-                "/api/auth/signup",
-                json={"email": "signed.checkout@example.test", "name": "Signed Checkout", "password": "signed-password"},
+                "/api/auth/login",
+                json={"email": "signed.checkout@example.test", "password": "signed-password"},
             )
             signed_checkout = signed_client.post(
                 "/api/billing/checkout",
@@ -296,7 +307,7 @@ def main():
             assert signed_checkout.status_code == 200, signed_checkout.text
             signed_params = FakeCheckoutSession.last_params
             assert signed_params["customer_email"] == "signed.checkout@example.test"
-            assert signed_params["client_reference_id"] == str(signed_up.json()["user"]["id"])
+            assert signed_params["client_reference_id"] == str(signed_user.id)
             assert signed_client.cookies.get(server.CHECKOUT_CLAIM_COOKIE) is None
 
         server.platform.promote_admin("paid.customer@example.test")

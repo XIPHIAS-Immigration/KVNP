@@ -411,7 +411,7 @@ function renderCommerce(message = "") {
   elements.purchaseStatus.textContent = product.recurring ? "KVNP Studio membership" : (state.account ? "One-time purchase" : "Account required at checkout");
   elements.purchaseDetail.textContent = message || (state.account
     ? (product.recurring ? "See the membership plan and continue to secure Stripe Checkout." : "Purchase this prepared application once, then return to every included file from your workspace.")
-    : "You can prepare a photo as a guest. Create an account before subscribing so access has a secure owner.");
+    : "Explore with the guest demo, or pay securely first and create your account after Stripe confirms payment.");
   elements.purchaseButton.textContent = product.recurring ? "View membership" : (state.account ? "Unlock application pack" : "Sign in to purchase");
   elements.purchaseButton.disabled = product.recurring ? false : (!state.processedImage && Boolean(state.account));
   if (state.order?.status === "pending" && state.commerce.mockCompletionAvailable) {
@@ -5448,17 +5448,14 @@ function showAppView() {
 }
 
 function setAuthMode(mode) {
-  authState.mode = mode;
-  const signup = mode === "signup";
-  authEls.title.textContent = signup ? "Create your account" : "Welcome back";
-  authEls.subtitle.textContent = signup
-    ? "Start preparing compliant passport photos."
-    : "Sign in to your studio workspace.";
-  authEls.submit.textContent = signup ? "Create account" : "Sign in";
-  authEls.nameField.hidden = !signup;
-  authEls.switchText.textContent = signup ? "Already have an account?" : "New to KVNP Studio?";
-  authEls.switchBtn.textContent = signup ? "Sign in" : "Create an account";
-  authEls.password.autocomplete = signup ? "new-password" : "current-password";
+  authState.mode = "login";
+  authEls.title.textContent = "Welcome back";
+  authEls.subtitle.textContent = "Sign in after completing your membership payment.";
+  authEls.submit.textContent = "Sign in";
+  authEls.nameField.hidden = true;
+  authEls.switchText.textContent = "New to KVNP Studio?";
+  authEls.switchBtn.textContent = "Purchase membership";
+  authEls.password.autocomplete = "current-password";
   hideAuthError();
 }
 
@@ -5503,12 +5500,11 @@ function applyAccount(user, csrfToken = null) {
 async function submitAuth(event) {
   event.preventDefault();
   hideAuthError();
-  const endpoint = authState.mode === "signup" ? "/api/auth/signup" : "/api/auth/login";
+  const endpoint = "/api/auth/login";
   const payload = {
     email: authEls.email.value.trim(),
     password: authEls.password.value,
   };
-  if (authState.mode === "signup") payload.name = authEls.name.value.trim();
 
   authEls.submit.disabled = true;
   const labelText = authEls.submit.textContent;
@@ -5546,8 +5542,7 @@ async function logout() {
     console.warn(error);
   }
   applyAccount(null, null);
-  const requestedMode = new URLSearchParams(location.search).get("auth");
-  setAuthMode(requestedMode === "signup" ? "signup" : "login");
+  setAuthMode("login");
   authEls.form.reset();
   showAuthView();
 }
@@ -5575,11 +5570,16 @@ function bindNav() {
 
 async function bootAuth() {
   authEls.form.addEventListener("submit", submitAuth);
-  authEls.switchBtn.addEventListener("click", () => setAuthMode(authState.mode === "login" ? "signup" : "login"));
+  authEls.switchBtn.addEventListener("click", () => { location.href = "/pricing"; });
   authEls.guest.addEventListener("click", continueAsGuest);
   authEls.logout.addEventListener("click", logout);
   setAuthMode("login");
   bindNav();
+
+  if (new URLSearchParams(location.search).get("auth") === "signup") {
+    location.replace("/pricing");
+    return;
+  }
 
   // Quick local entry without an account (e.g. http://127.0.0.1:4173/?guest)
   if (new URLSearchParams(location.search).has("guest")) {
