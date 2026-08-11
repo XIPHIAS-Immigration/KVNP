@@ -131,6 +131,24 @@ class BillingCustomer(Base):
     updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
 
+class CheckoutClaim(Base):
+    __tablename__ = "checkout_claims"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_session_id: Mapped[str | None] = mapped_column(String(160), unique=True, index=True)
+    provider_customer_id: Mapped[str | None] = mapped_column(String(160), index=True)
+    provider_subscription_id: Mapped[str | None] = mapped_column(String(160), index=True)
+    email: Mapped[str | None] = mapped_column(String(320), index=True)
+    status: Mapped[str] = mapped_column(String(32), default="created", nullable=False, index=True)
+    created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    expires_at: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    claimed_at: Mapped[int | None] = mapped_column(BigInteger)
+
+
 class Subscription(Base):
     __tablename__ = "subscriptions"
 
@@ -249,6 +267,7 @@ Index("ix_projects_user_updated", Project.user_id, Project.updated_at)
 Index("ix_downloads_project_created", Download.project_id, Download.created_at)
 Index("ix_subscriptions_user_updated", Subscription.user_id, Subscription.updated_at)
 Index("ix_billing_payments_user_updated", BillingPayment.user_id, BillingPayment.updated_at)
+Index("ix_checkout_claims_status_expires", CheckoutClaim.status, CheckoutClaim.expires_at)
 
 
 ENGINE = None
@@ -498,6 +517,105 @@ def active_subscription(user_id: int) -> Subscription | None:
 def billing_customer_for_user(user_id: int) -> BillingCustomer | None:
     with session_scope() as session:
         return session.scalar(select(BillingCustomer).where(BillingCustomer.user_id == user_id))
+
+
+def _checkout_token_digest(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def create_checkout_claim(user_id: int | None = None, ttl_seconds: int = 48 * 60 * 60) -> tuple[CheckoutClaim, str]:
+    timestamp = now_ts()
+    token = secrets.token_urlsafe(32)
+    claim = CheckoutClaim(
+        id=str(uuid.uuid4()),
+        token_hash=_checkout_token_digest(token),
+        user_id=user_id,
+        provider="stripe",
+        status="created",
+        created_at=timestamp,
+        updated_at=timestamp,
+        expires_at=timestamp + ttl_seconds,
+    )
+    with session_scope() as session:
+        session.add(claim)
+        session.flush()
+    return claim, token
+
+
+def attach_checkout_session(claim_id: str, session_id: str) -> CheckoutClaim:
+    with session_scope() as session:
+        claim = session.get(CheckoutClaim, claim_id)
+        if not claim or claim.expires_at <= now_ts() or claim.status == "claimed":
+            raise ValueError("checkout_claim")
+        claim.provider_session_id = session_id[:160]
+        claim.status = "checkout_open"
+        claim.updated_at = now_ts()
+        session.flush()
+        return claim
+
+
+def mark_checkout_paid(
+    claim_id: str,
+    session_id: str,
+    customer_id: str | None,
+    subscription_id: str | None,
+    email: str | None,
+) -> CheckoutClaim:
+    with session_scope() as session:
+        claim = session.get(CheckoutClaim, claim_id)
+        if not claim or claim.expires_at <= now_ts():
+            raise ValueError("checkout_claim")
+        if claim.provider_session_id and claim.provider_session_id != session_id:
+            raise ValueError("checkout_session")
+        claim.provider_session_id = session_id[:160]
+        claim.provider_customer_id = str(customer_id)[:160] if customer_id else claim.provider_customer_id
+        claim.provider_subscription_id = (
+            str(subscription_id)[:160] if subscription_id else claim.provider_subscription_id
+        )
+        claim.email = normalise_checkout_email(email) or claim.email
+        if claim.status != "claimed":
+            claim.status = "paid"
+        claim.updated_at = now_ts()
+        session.flush()
+        return claim
+
+
+def normalise_checkout_email(email: str | None) -> str | None:
+    value = str(email or "").strip().lower()
+    return value[:320] if value and "@" in value else None
+
+
+def checkout_claim(token: str | None, session_id: str | None) -> CheckoutClaim | None:
+    if not token or not session_id:
+        return None
+    with session_scope() as session:
+        claim = session.scalar(
+            select(CheckoutClaim).where(
+                CheckoutClaim.token_hash == _checkout_token_digest(token),
+                CheckoutClaim.provider_session_id == str(session_id),
+            )
+        )
+        if not claim or claim.expires_at <= now_ts():
+            return None
+        return claim
+
+
+def complete_checkout_claim(token: str, session_id: str, user_id: int) -> CheckoutClaim:
+    with session_scope() as session:
+        claim = session.scalar(
+            select(CheckoutClaim).where(
+                CheckoutClaim.token_hash == _checkout_token_digest(token),
+                CheckoutClaim.provider_session_id == str(session_id),
+            )
+        )
+        if not claim or claim.expires_at <= now_ts() or claim.status != "paid":
+            raise ValueError("checkout_claim_not_paid")
+        claim.user_id = user_id
+        claim.status = "claimed"
+        claim.claimed_at = now_ts()
+        claim.updated_at = claim.claimed_at
+        session.flush()
+        return claim
 
 
 def resolve_billing_user(customer_id: str | None = None, supplied_user_id=None) -> int | None:
@@ -991,6 +1109,7 @@ def record_event(name: str, user_id: int | None = None, project_id: str | None =
         "review_opened",
         "checkout_started",
         "payment_completed",
+        "paid_account_activated",
         "download_completed",
         "enquiry_created",
     }

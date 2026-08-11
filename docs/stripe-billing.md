@@ -1,6 +1,17 @@
 # Stripe Billing setup
 
-KVNP uses a flat-rate recurring Stripe Price in Canadian dollars. Checkout is hosted by Stripe, and access is granted only after a signed webhook reports an active subscription.
+KVNP uses a flat-rate recurring Stripe Price in Canadian dollars. Checkout is hosted by Stripe. Customers pay first, choose their KVNP account credentials after Stripe confirms payment, and are then signed in automatically.
+
+## Customer flow
+
+1. The visitor chooses **Pay securely with Stripe** without creating an account first.
+2. Stripe collects the payment method and billing email on hosted Checkout.
+3. Stripe returns the browser to `/activate` while also sending a signed webhook.
+4. KVNP verifies the Checkout Session server-side and requires the matching one-use HttpOnly browser claim.
+5. A new customer chooses a name and password. If the payment email already has an account, that account's existing password is required.
+6. KVNP links the active subscription, creates a login session and opens the customer's workspace.
+
+The Checkout Session ID by itself cannot activate a purchase, and account details are never accepted before payment is verified.
 
 ## 1. Create the sandbox plan
 
@@ -41,6 +52,8 @@ Set these values in `~/KVNP/.env` on the server:
 KVNP_PAYMENT_MODE=stripe
 KVNP_COMMERCE_ENFORCED=true
 KVNP_PUBLIC_URL=https://passport.kvnp.ca
+KVNP_COOKIE_SECURE=true
+KVNP_SUBSCRIPTION_PRICE_MINOR=500
 KVNP_SUBSCRIPTION_PRICE_LABEL=CAD XX.XX / month
 STRIPE_PRICE_ID=price_replace_me
 STRIPE_CURRENCY=CAD
@@ -64,12 +77,19 @@ docker compose -f compose.yaml -f compose.gpu.yaml -f compose.postgres.yaml ps
 curl -fsS https://passport.kvnp.ca/api/health
 ```
 
-Open `/pricing`, sign in, and complete a sandbox checkout. Then confirm `/account` shows an active membership and `/admin` reports the subscription.
+Open `/pricing` in a private browser window, complete a sandbox checkout, create the account on `/activate`, and confirm `/account` shows an active membership. Then verify `/admin` reports the user, subscription and payment.
+
+If Checkout displays `temporarily unavailable`, inspect the sanitized provider error:
+
+```bash
+docker compose -f compose.yaml -f compose.gpu.yaml -f compose.postgres.yaml logs --tail=120 app | grep "Stripe Checkout"
+```
 
 ## Safety notes
 
-- The success URL never grants access. Only a verified webhook can do that.
+- The success URL never grants access. KVNP verifies payment from the signed webhook or directly from Stripe's server API.
 - Webhook event IDs are stored so retries do not provision twice.
+- Anonymous purchases use a 48-hour, one-use, hashed checkout claim stored in an HttpOnly `SameSite=Lax` cookie.
 - Stripe Tax is intentionally not enabled until KVNP confirms its Canadian tax registrations and collection obligations.
-- Do not email passwords. Customers create their own account before Checkout and keep using that account after payment.
+- Do not email passwords. Customers choose their own password only after payment confirmation; KVNP stores its Argon2 hash.
 - Before switching to live mode, create a separate live Price, webhook secret and restricted key.

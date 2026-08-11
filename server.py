@@ -306,6 +306,8 @@ ARTIFACT_DIR = (DATA_DIR / "artifacts").resolve()
 ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
 SESSION_COOKIE = "kvnp_session"
 SESSION_TTL = 60 * 60 * 24 * 30  # 30 days
+CHECKOUT_CLAIM_COOKIE = "kvnp_checkout_claim"
+CHECKOUT_CLAIM_TTL = 60 * 60 * 48
 PBKDF2_ROUNDS = 200_000
 PASSWORD_HASHER = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=2)
 COOKIE_SECURE = os.getenv("KVNP_COOKIE_SECURE", "false").strip().lower() in {"1", "true", "yes"}
@@ -316,6 +318,7 @@ ALLOW_MOCK_PAYMENTS = os.getenv("KVNP_ALLOW_MOCK_PAYMENTS", "false").strip().low
 COMMERCE_ENFORCED = os.getenv("KVNP_COMMERCE_ENFORCED", "false").strip().lower() in {"1", "true", "yes"}
 APPLICATION_PRICE_MINOR = max(100, int(os.getenv("KVNP_APPLICATION_PRICE_MINOR", "19900")))
 APPLICATION_CURRENCY = os.getenv("KVNP_APPLICATION_CURRENCY", "INR").strip().upper()[:3] or "INR"
+SUBSCRIPTION_PRICE_MINOR = max(100, int(os.getenv("KVNP_SUBSCRIPTION_PRICE_MINOR", "500")))
 PUBLIC_BASE_URL = os.getenv("KVNP_PUBLIC_URL", "").strip().rstrip("/")
 SUBSCRIPTION_PRICE_LABEL = os.getenv("KVNP_SUBSCRIPTION_PRICE_LABEL", "Price shown at checkout").strip()
 AUTH_FAILURES = {}
@@ -502,7 +505,7 @@ def commerce_config(user=None):
         "product": {
             "code": "studio-membership" if PAYMENT_MODE == "stripe" else "application-pack",
             "label": "KVNP Studio membership" if PAYMENT_MODE == "stripe" else "Application photo pack",
-            "amountMinor": APPLICATION_PRICE_MINOR,
+            "amountMinor": SUBSCRIPTION_PRICE_MINOR if PAYMENT_MODE == "stripe" else APPLICATION_PRICE_MINOR,
             "currency": "CAD" if PAYMENT_MODE == "stripe" else APPLICATION_CURRENCY,
             "priceLabel": SUBSCRIPTION_PRICE_LABEL if PAYMENT_MODE == "stripe" else None,
             "recurring": PAYMENT_MODE == "stripe",
@@ -634,33 +637,55 @@ def public_url(request: Request) -> str:
     return PUBLIC_BASE_URL or str(request.base_url).rstrip("/")
 
 
+def checkout_email(source: dict) -> str | None:
+    details = source.get("customer_details") or {}
+    return platform.normalise_checkout_email(details.get("email") or source.get("customer_email"))
+
+
+def safe_provider_error(error: Exception) -> str:
+    value = str(error).replace("\r", " ").replace("\n", " ")
+    return value[:500]
+
+
 def start_stripe_subscription(identity, request: Request, project_id: str | None = None):
     if PAYMENT_MODE != "stripe" or not PAYMENT_GATEWAY.configured:
         return JSONResponse({"ok": False, "error": "Stripe checkout is not configured."}, status_code=503)
-    if platform.active_subscription(identity[0].id):
+    user = identity[0] if identity else None
+    if user and platform.active_subscription(user.id):
         return JSONResponse(
             {"ok": False, "error": "Your KVNP membership is already active. Manage it from your account."},
             status_code=409,
         )
     base_url = public_url(request)
+    claim, claim_token = platform.create_checkout_claim(user.id if user else None, CHECKOUT_CLAIM_TTL)
     try:
         checkout = PAYMENT_GATEWAY.create_subscription_checkout(
-            platform.user_dict(identity[0]),
-            f"{base_url}/account?checkout=success&session_id={{CHECKOUT_SESSION_ID}}",
+            platform.user_dict(user) if user else None,
+            (
+                f"{base_url}/account?checkout=success&session_id={{CHECKOUT_SESSION_ID}}"
+                if user
+                else f"{base_url}/activate?session_id={{CHECKOUT_SESSION_ID}}"
+            ),
             f"{base_url}/pricing?checkout=cancelled",
+            claim.id,
         )
+        platform.attach_checkout_session(claim.id, checkout.provider_order_id)
     except Exception as error:
-        print(f"[kvnp] Stripe Checkout could not start: {type(error).__name__}", file=sys.stderr, flush=True)
+        print(
+            f"[kvnp] Stripe Checkout could not start: {type(error).__name__}: {safe_provider_error(error)}",
+            file=sys.stderr,
+            flush=True,
+        )
         return JSONResponse(
             {"ok": False, "error": "Checkout is temporarily unavailable. Please try again."}, status_code=503
         )
     platform.record_event(
         "checkout_started",
-        identity[0].id,
+        user.id if user else None,
         project_id,
-        metadata={"provider": "stripe", "sessionId": checkout.provider_order_id},
+        metadata={"provider": "stripe", "sessionId": checkout.provider_order_id, "claimId": claim.id},
     )
-    return {
+    response = JSONResponse({
         "ok": True,
         "checkout": {
             "provider": checkout.provider,
@@ -668,14 +693,184 @@ def start_stripe_subscription(identity, request: Request, project_id: str | None
             "url": checkout.checkout_url,
             "development": checkout.development,
         },
-    }
+    })
+    if not user:
+        response.set_cookie(
+            CHECKOUT_CLAIM_COOKIE,
+            claim_token,
+            max_age=CHECKOUT_CLAIM_TTL,
+            httponly=True,
+            secure=COOKIE_SECURE,
+            samesite="lax",
+            path="/",
+        )
+    return response
 
 
 @app.post("/api/billing/checkout")
 async def billing_checkout(request: Request):
-    identity = require_identity(request)
-    require_csrf(request, identity)
+    identity = current_identity(request)
+    if identity:
+        require_csrf(request, identity)
+    else:
+        origin = request.headers.get("origin")
+        if origin and origin.rstrip("/") != public_url(request):
+            raise HTTPException(status_code=403, detail="Checkout must be started from the KVNP website.")
     return start_stripe_subscription(identity, request)
+
+
+def stripe_id(value) -> str | None:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        identifier = value.get("id")
+        return str(identifier) if identifier else None
+    return None
+
+
+def refresh_checkout_claim(token: str | None, session_id: str):
+    claim = platform.checkout_claim(token, session_id)
+    if not claim:
+        return None
+    if claim.status in {"paid", "claimed"}:
+        return claim
+    source = PAYMENT_GATEWAY.retrieve_checkout(session_id)
+    metadata = source.get("metadata") or {}
+    if metadata.get("kvnp_checkout_id") != claim.id:
+        raise ValueError("checkout_claim_mismatch")
+    if source.get("mode") != "subscription":
+        raise ValueError("checkout_mode")
+    if source.get("payment_status") not in {"paid", "no_payment_required"}:
+        return claim
+    return platform.mark_checkout_paid(
+        claim.id,
+        session_id,
+        stripe_id(source.get("customer")),
+        stripe_subscription_id(source),
+        checkout_email(source),
+    )
+
+
+def masked_email(email: str | None) -> str:
+    value = str(email or "")
+    if "@" not in value:
+        return "your payment email"
+    local, domain = value.split("@", 1)
+    visible = local[:2] if len(local) > 2 else local[:1]
+    return f"{visible}{'*' * max(2, min(8, len(local) - len(visible)))}@{domain}"
+
+
+@app.get("/api/billing/activation")
+def billing_activation_status(request: Request):
+    session_id = str(request.query_params.get("session_id") or "")
+    if not session_id.startswith("cs_") or len(session_id) > 160:
+        return JSONResponse({"ok": False, "error": "Invalid checkout reference."}, status_code=422)
+    try:
+        claim = refresh_checkout_claim(request.cookies.get(CHECKOUT_CLAIM_COOKIE), session_id)
+    except Exception as error:
+        print(
+            f"[kvnp] Checkout activation lookup failed: {type(error).__name__}: {safe_provider_error(error)}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return JSONResponse({"ok": False, "error": "Payment verification is temporarily unavailable."}, status_code=503)
+    if not claim:
+        return JSONResponse(
+            {"ok": False, "error": "This checkout link is invalid, expired, or belongs to another browser."},
+            status_code=404,
+        )
+    return {
+        "ok": True,
+        "status": claim.status,
+        "paid": claim.status == "paid",
+        "claimed": claim.status == "claimed",
+        "email": masked_email(claim.email),
+        "existingAccount": bool(claim.email and platform.get_user_by_email(claim.email)),
+    }
+
+
+@app.post("/api/billing/activate")
+async def billing_activate(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        return read_json_body_error()
+    session_id = str(body.get("sessionId") or "")
+    name = str(body.get("name") or "").strip()
+    password = str(body.get("password") or "")
+    if not session_id.startswith("cs_") or len(session_id) > 160:
+        return JSONResponse({"ok": False, "error": "Invalid checkout reference."}, status_code=422)
+    if len(password) < 8 or len(password) > 256:
+        return JSONResponse({"ok": False, "error": "Password must be 8 to 256 characters."}, status_code=422)
+    token = request.cookies.get(CHECKOUT_CLAIM_COOKIE)
+    try:
+        claim = refresh_checkout_claim(token, session_id)
+    except Exception as error:
+        print(
+            f"[kvnp] Checkout activation verification failed: {type(error).__name__}: {safe_provider_error(error)}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return JSONResponse({"ok": False, "error": "Payment verification is temporarily unavailable."}, status_code=503)
+    if not claim or claim.status != "paid" or not claim.email or not claim.provider_subscription_id:
+        return JSONResponse(
+            {"ok": False, "error": "Stripe has not confirmed this subscription yet. Try again in a few seconds."},
+            status_code=409,
+        )
+
+    user = platform.get_user_by_email(claim.email)
+    if user:
+        attempt_key = enforce_login_throttle(request, claim.email)
+        if not verify_user_password(user, password):
+            record_login_failure(attempt_key)
+            return JSONResponse(
+                {"ok": False, "error": "That email already has a KVNP account. Enter its existing password."},
+                status_code=401,
+            )
+        AUTH_FAILURES.pop(attempt_key, None)
+    else:
+        if len(name) < 2 or len(name) > 120:
+            return JSONResponse({"ok": False, "error": "Enter your full name."}, status_code=422)
+        try:
+            user = platform.create_user(claim.email, name, PASSWORD_HASHER.hash(password))
+        except ValueError:
+            return JSONResponse(
+                {"ok": False, "error": "An account with this payment email already exists. Refresh and sign in."},
+                status_code=409,
+            )
+
+    try:
+        subscription = PAYMENT_GATEWAY.retrieve_subscription(claim.provider_subscription_id)
+        saved = platform.upsert_stripe_subscription(user.id, subscription)
+        if saved.status not in {"active", "trialing"}:
+            return JSONResponse(
+                {"ok": False, "error": "Your Stripe subscription is not active yet. Try again shortly."},
+                status_code=409,
+            )
+        latest_invoice = subscription.get("latest_invoice")
+        if isinstance(latest_invoice, dict) and str(latest_invoice.get("id") or "").startswith("in_"):
+            invoice_status = "paid" if latest_invoice.get("paid") or latest_invoice.get("status") == "paid" else str(
+                latest_invoice.get("status") or "open"
+            )
+            platform.upsert_stripe_invoice(user.id, latest_invoice, invoice_status)
+        platform.complete_checkout_claim(token, session_id, user.id)
+    except Exception as error:
+        print(
+            f"[kvnp] Paid account activation failed: {type(error).__name__}: {safe_provider_error(error)}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return JSONResponse({"ok": False, "error": "Your payment is safe, but account setup needs another attempt."}, status_code=503)
+
+    platform.touch_login(user.id)
+    platform.record_event(
+        "paid_account_activated",
+        user.id,
+        metadata={"provider": "stripe", "subscriptionId": saved.provider_subscription_id},
+    )
+    response = authenticated_response(user)
+    response.delete_cookie(CHECKOUT_CLAIM_COOKIE, path="/")
+    return response
 
 
 @app.post("/api/billing/portal")
@@ -718,12 +913,22 @@ def process_stripe_event(event: dict) -> bool:
         source = dict(source)
 
     subscription = None
-    supplied_user_id = (source.get("metadata") or {}).get("kvnp_user_id")
+    source_metadata = source.get("metadata") or {}
+    supplied_user_id = source_metadata.get("kvnp_user_id")
+    checkout_claim_id = source_metadata.get("kvnp_checkout_id")
     if event_type == "checkout.session.completed":
         if source.get("mode") != "subscription" or source.get("payment_status") not in {"paid", "no_payment_required"}:
             return False
         supplied_user_id = source.get("client_reference_id") or supplied_user_id
         subscription_id = stripe_subscription_id(source)
+        if checkout_claim_id:
+            platform.mark_checkout_paid(
+                str(checkout_claim_id),
+                str(source.get("id") or ""),
+                stripe_id(source.get("customer")),
+                subscription_id,
+                checkout_email(source),
+            )
         if subscription_id:
             subscription = PAYMENT_GATEWAY.retrieve_subscription(subscription_id)
     elif event_type in {
@@ -742,13 +947,16 @@ def process_stripe_event(event: dict) -> bool:
     if not subscription:
         return False
     metadata = subscription.get("metadata") or {}
+    checkout_claim_id = metadata.get("kvnp_checkout_id") or checkout_claim_id
     customer_id = subscription.get("customer") or source.get("customer")
     user_id = platform.resolve_billing_user(
         str(customer_id) if customer_id else None,
         metadata.get("kvnp_user_id") or supplied_user_id,
     )
     if not user_id:
-        raise ValueError("Stripe event could not be matched to a KVNP account.")
+        # Guest subscriptions are deliberately unassigned until the payer proves
+        # possession of the browser claim and chooses account credentials.
+        return bool(checkout_claim_id)
     saved = platform.upsert_stripe_subscription(user_id, subscription)
     if event_type == "invoice.paid":
         platform.upsert_stripe_invoice(user_id, source, "paid")
@@ -965,6 +1173,11 @@ def account_page():
 @app.get("/pricing")
 def pricing_page():
     return FileResponse(ROOT / "pricing.html")
+
+
+@app.get("/activate")
+def activate_page():
+    return FileResponse(ROOT / "activate.html")
 
 
 @app.get("/admin")

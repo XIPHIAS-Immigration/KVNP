@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Activate your KVNP Studio account</title>
+    <meta name="description" content="Confirm your KVNP Studio payment and activate your private workspace." />
+    <link rel="stylesheet" href="/src/portal.css?v=kvnp-stripe-2" />
+    <link rel="stylesheet" href="/src/activate.css?v=kvnp-stripe-2" />
+  </head>
+  <body>
+    <header class="portal-bar">
+      <a class="portal-brand" href="/"><span>KV</span><strong>KVNP Studio</strong></a>
+      <nav><a href="/pricing">Membership</a><a href="/app?auth=login">Sign in</a></nav>
+    </header>
+
+    <main class="activation-shell">
+      <section class="activation-heading">
+        <span class="eyebrow">Secure activation</span>
+        <h1>Payment complete.<br />Make the workspace yours.</h1>
+        <p>We verify the Stripe payment before creating any account. Your card details never pass through KVNP.</p>
+      </section>
+
+      <ol class="activation-progress" aria-label="Membership activation steps">
+        <li class="complete"><span>01</span><strong>Payment</strong><small>Confirmed by Stripe</small></li>
+        <li class="active"><span>02</span><strong>Account details</strong><small>Choose your secure login</small></li>
+        <li><span>03</span><strong>Workspace</strong><small>Sign in automatically</small></li>
+      </ol>
+
+      <section class="activation-content">
+        <div class="activation-summary">
+          <span class="summary-mark" aria-hidden="true">✓</span>
+          <div>
+            <span class="eyebrow">Stripe payment</span>
+            <h2 id="payment-title">Verifying payment...</h2>
+            <p id="payment-copy">This normally takes only a few seconds.</p>
+          </div>
+        </div>
+
+        <form id="activation-form" class="activation-form" hidden>
+          <div class="form-heading">
+            <span class="eyebrow">Your private workspace</span>
+            <h2 id="form-title">Create your account</h2>
+            <p id="account-email"></p>
+          </div>
+          <label id="name-field"><span>Full name</span><input id="name" name="name" autocomplete="name" minlength="2" maxlength="120" required /></label>
+          <label><span>Password</span><input id="password" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="256" required /></label>
+          <label id="confirm-field"><span>Confirm password</span><input id="password-confirm" name="passwordConfirm" type="password" autocomplete="new-password" minlength="8" maxlength="256" required /></label>
+          <button id="activate-button" class="primary-button" type="submit">Activate and enter Studio</button>
+          <div id="activation-status" class="form-status" aria-live="polite"></div>
+          <small id="password-note">Use at least 8 characters. KVNP stores a one-way password hash, never your readable password.</small>
+        </form>
+
+        <div id="activation-error" class="activation-error" hidden>
+          <span class="eyebrow">Activation interrupted</span>
+          <h2>We could not verify this checkout.</h2>
+          <p id="activation-error-copy"></p>
+          <a class="quiet-link" href="/pricing">Return to membership</a>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/activate.js?v=kvnp-stripe-2"></script>
+  </body>
+</html>

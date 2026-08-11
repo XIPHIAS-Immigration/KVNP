@@ -39,7 +39,7 @@ function render() {
   elements.subscribe.hidden = false;
   elements.portal.hidden = true;
   elements.subscribe.disabled = false;
-  elements.subscribe.textContent = state.user ? "Continue to secure checkout" : "Create account to subscribe";
+  elements.subscribe.textContent = "Pay securely with Stripe";
   if (!state.commerce?.enabled) {
     elements.subscribe.disabled = true;
     elements.subscribe.textContent = "Checkout opening soon";
@@ -51,22 +51,19 @@ function render() {
 }
 
 async function startCheckout() {
-  if (!state.user) {
-    location.href = "/app?auth=signup&next=/pricing";
-    return;
-  }
   elements.subscribe.disabled = true;
   elements.subscribe.textContent = "Opening Stripe...";
   elements.status.textContent = "";
+  const headers = state.csrf ? { "x-kvnp-csrf": state.csrf } : {};
   const response = await fetch("/api/billing/checkout", {
     method: "POST",
     credentials: "same-origin",
-    headers: { "x-kvnp-csrf": state.csrf },
+    headers,
   });
   const data = await response.json();
   if (!response.ok || !data.checkout?.url) {
     elements.subscribe.disabled = false;
-    elements.subscribe.textContent = "Continue to secure checkout";
+    elements.subscribe.textContent = "Pay securely with Stripe";
     elements.status.textContent = data.error || data.detail || "Checkout could not start.";
     return;
   }

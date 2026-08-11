@@ -102,19 +102,31 @@ class StripeGateway(PaymentGateway):
         self._validated_price = price_data
         return price_data
 
-    def create_subscription_checkout(self, user: dict, success_url: str, cancel_url: str) -> CheckoutSession:
+    def create_subscription_checkout(
+        self,
+        user: dict | None,
+        success_url: str,
+        cancel_url: str,
+        checkout_id: str,
+    ) -> CheckoutSession:
         self.validate_price()
-        metadata = {"kvnp_user_id": str(user["id"]), "kvnp_product": "studio-membership"}
+        metadata = {"kvnp_checkout_id": checkout_id, "kvnp_product": "studio-membership"}
+        params = {
+            "mode": "subscription",
+            "line_items": [{"price": self.price_id, "quantity": 1}],
+            "metadata": metadata,
+            "subscription_data": {"metadata": metadata},
+            "success_url": success_url,
+            "cancel_url": cancel_url,
+            "integration_identifier": self.integration_identifier,
+        }
+        if user:
+            metadata["kvnp_user_id"] = str(user["id"])
+            params["customer_email"] = user["email"]
+            params["client_reference_id"] = str(user["id"])
         session = self._sdk().checkout.Session.create(
-            mode="subscription",
-            customer_email=user["email"],
-            client_reference_id=str(user["id"]),
-            line_items=[{"price": self.price_id, "quantity": 1}],
-            metadata=metadata,
-            subscription_data={"metadata": metadata},
-            success_url=success_url,
-            cancel_url=cancel_url,
-            integration_identifier=self.integration_identifier,
+            **params,
+            idempotency_key=f"kvnp-checkout-{checkout_id}",
             **self._request_options(),
         )
         return CheckoutSession(
@@ -134,7 +146,15 @@ class StripeGateway(PaymentGateway):
         return str(session["url"])
 
     def retrieve_subscription(self, subscription_id: str) -> dict:
-        item = self._sdk().Subscription.retrieve(subscription_id, **self._request_options())
+        item = self._sdk().Subscription.retrieve(
+            subscription_id,
+            expand=["latest_invoice"],
+            **self._request_options(),
+        )
+        return dict(item)
+
+    def retrieve_checkout(self, session_id: str) -> dict:
+        item = self._sdk().checkout.Session.retrieve(session_id, **self._request_options())
         return dict(item)
 
     def construct_event(self, payload: bytes, signature: str) -> dict:
