@@ -45,7 +45,6 @@
       var pct = (p * 100).toFixed(1);
       after.style.clipPath = "inset(0 0 0 " + pct + "%)";
       handle.style.left = pct + "%";
-      handle.setAttribute("aria-valuenow", Math.round(p * 100));
     }
     handle.addEventListener("pointerdown", function (e) {
       dragging = true;
@@ -56,16 +55,6 @@
     window.addEventListener("pointerup", function () { dragging = false; });
     ba.addEventListener("pointerdown", function (e) {
       if (e.target !== handle && !handle.contains(e.target)) setPos(e.clientX);
-    });
-    handle.addEventListener("keydown", function (e) {
-      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-      var value = Number(handle.getAttribute("aria-valuenow") || 50);
-      value += e.key === "ArrowRight" ? 5 : -5;
-      value = Math.max(0, Math.min(100, value));
-      after.style.clipPath = "inset(0 0 0 " + value + "%)";
-      handle.style.left = value + "%";
-      handle.setAttribute("aria-valuenow", value);
-      e.preventDefault();
     });
   })();
 
@@ -92,13 +81,12 @@
        clip-reveal actually tweens (CSS translateY(110%) reads as y-px, not yPercent). */
     gsap.set(".hero h1 .lw", { y: 46, opacity: 0 });
     var tl = gsap.timeline({ defaults: { ease: "power3.out" } });
-    tl.to(".hero .eyebrow", { opacity: 1, y: 0, duration: 0.5 })
+    tl.to(".hero .kicker", { opacity: 1, y: 0, duration: 0.5 })
       .to(".hero h1 .lw", { y: 0, opacity: 1, duration: 0.8, stagger: 0.1 }, "-=0.15")
       .to(".hero-sub", { opacity: 1, y: 0, duration: 0.6 }, "-=0.45")
       .to(".hero-cta", { opacity: 1, y: 0, duration: 0.5 }, "-=0.35")
-      .to(".hero-proof", { opacity: 1, y: 0, duration: 0.5 }, "-=0.35")
-      .fromTo(".hero-photo", { scale: 1.025 }, { scale: 1, duration: 1.1, ease: "power2.out" }, "-=0.8")
-      .fromTo(".hero-status", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.5 }, "-=0.45");
+      .to(".hero-trust", { opacity: 1, y: 0, duration: 0.5 }, "-=0.35")
+      .to(".pcard", { opacity: 1, scale: 1, duration: 0.9, ease: "power2.out" }, "-=0.7");
 
     /* scroll reveals (everything with data-reveal outside the hero) */
     gsap.utils.toArray("[data-reveal]").forEach(function (el) {
