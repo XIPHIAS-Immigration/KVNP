@@ -3,264 +3,233 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>KVNP Studio | Passport Photos Without the Guesswork</title>
-  <meta name="description" content="Create correctly sized passport, identity, and travel photos with guided capture, instant checks, and ready-to-download files for 35 official programme profiles." />
+  <title>KVNP Studio | Passport Photos, Prepared Properly</title>
+  <meta name="description" content="Prepare passport, visa, identity, and travel photos with guided capture, country-specific sizing, quality checks, and ready-to-download files." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="KVNP Studio" />
   <meta property="og:url" content="https://passport.kvnp.ca/" />
-  <meta property="og:title" content="Passport photos. Done right." />
-  <meta property="og:description" content="Pick your programme, get guided, and download the right photo file without the guesswork." />
+  <meta property="og:title" content="One photo. Ready for the right application." />
+  <meta property="og:description" content="Country-specific photo preparation, useful checks, and print or digital exports in one guided studio." />
   <meta property="og:image" content="https://passport.kvnp.ca/screenshots/app-shell.png" />
   <meta property="og:image:width" content="1440" />
   <meta property="og:image:height" content="1200" />
   <meta property="og:image:alt" content="KVNP Studio passport photo workspace" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Passport photos. Done right." />
-  <meta name="twitter:description" content="Guided capture, instant checks, and the right file for your programme." />
+  <meta name="twitter:title" content="One photo. Ready for the right application." />
+  <meta name="twitter:description" content="Guided capture, programme checks, and the right file for the application." />
   <meta name="twitter:image" content="https://passport.kvnp.ca/screenshots/app-shell.png" />
   <link rel="canonical" href="https://passport.kvnp.ca/" />
-  <link rel="stylesheet" href="/src/landing.css?v=kvnp-studio-32" />
+  <link rel="stylesheet" href="/src/landing.css?v=kvnp-light-02" />
   <script>if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documentElement.classList.add('anim');}</script>
 </head>
 <body>
-
-  <!-- ============ NAV ============ -->
   <header class="nav" id="nav">
     <a class="brand" href="/" aria-label="KVNP Studio home">
       <span class="brand-mark" aria-hidden="true">KV</span>
-      <span class="brand-txt"><strong>KVNP Studio</strong><span>Passport Photo Lab</span></span>
+      <span class="brand-txt"><strong>KVNP Studio</strong><span>Passport photo studio</span></span>
     </a>
-    <nav class="nav-links" id="navLinks" aria-label="Primary">
-      <a class="link" href="#showcase">Showcase</a>
-      <a class="link" href="#how">How it works</a>
+    <nav class="nav-links" id="navLinks" aria-label="Primary navigation">
+      <a class="link" href="#product">Product</a>
+      <a class="link" href="#showcase">Results</a>
       <a class="link" href="#countries">Countries</a>
-      <a class="link" href="/pricing">Membership</a>
       <a class="link" href="#trust">Trust</a>
       <a class="link" href="#contact">Support</a>
+      <a class="link guest-nav-link" href="/app?guest" data-guest-entry>Guest demo</a>
     </nav>
     <div class="nav-cta">
-      <a class="btn" href="/pricing" data-member-entry>Create my photo <span class="arw" aria-hidden="true">→</span></a>
-      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">☰</button>
+      <a class="nav-signin" href="/account">Sign in</a>
+      <a class="btn btn-small btn-arrow" href="/pricing" data-member-entry>Start my photo</a>
+      <button class="nav-toggle" id="navToggle" type="button" aria-label="Toggle menu" aria-expanded="false"><span></span><span></span></button>
     </div>
   </header>
 
   <main>
-
-    <!-- ============ HERO ============ -->
-    <section class="hero">
-      <div class="wrap hero-grid">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-photo" aria-hidden="true">
+        <img src="/assets/demo/px_220453.jpg" alt="" />
+        <span class="focus-frame"></span>
+        <span class="focus-line focus-line-x"></span>
+        <span class="focus-line focus-line-y"></span>
+        <span class="scan-line"></span>
+      </div>
+      <div class="wrap hero-content">
         <div class="hero-copy">
-          <span class="kicker" data-reveal="up">Passport photos made simple</span>
-          <h1 aria-label="Passport photos. Done right.">
-            <span class="line"><span class="lw">Passport photos.</span></span>
-            <span class="line"><span class="lw accent">Done right.</span></span>
+          <p class="eyebrow" data-reveal="up">KVNP passport photo studio</p>
+          <h1 id="hero-title" aria-label="One photo. Ready for the right application.">
+            <span class="line"><span class="lw">One photo.</span></span>
+            <span class="line"><span class="lw">Ready for the</span></span>
+            <span class="line"><span class="lw accent">right application.</span></span>
           </h1>
-          <p class="hero-sub" data-reveal="up">
-            Pick your destination. Studio guides the shot, checks the requirements, and prepares the right file.
-          </p>
+          <p class="hero-sub" data-reveal="up">Choose the country and document. KVNP guides the photo, checks the details, prepares the required size, and gives you the files you need.</p>
           <div class="hero-cta" data-reveal="up">
-            <a class="btn" href="/pricing" data-member-entry>Create my photo <span class="arw" aria-hidden="true">→</span></a>
-            <a class="btn ghost" href="#showcase">See the difference</a>
+            <a class="btn btn-arrow" href="/pricing" data-member-entry>Prepare my photo</a>
+            <a class="btn btn-secondary" href="/app?guest" data-guest-entry>Try guest demo</a>
           </div>
-          <div class="hero-trust" data-reveal="up">
-            <span>35 programmes / 26 countries</span>
-            <span>Instant photo checks</span>
-            <span>Print and digital</span>
+          <p class="hero-cta-note" data-reveal="up">Explore the complete workflow without payment. Membership is required for prepared downloads.</p>
+          <div class="hero-proof" data-reveal="up">
+            <span><strong>26</strong> countries</span>
+            <span><strong>35</strong> programme profiles</span>
+            <span><strong>5</strong> export options</span>
           </div>
         </div>
+      </div>
+      <div class="hero-status" aria-hidden="true">
+        <span class="status-dot"></span>
+        <span>Face found</span>
+        <span>Eyes open</span>
+        <span>Framing measured</span>
+      </div>
+    </section>
 
-        <figure class="pcard" data-reveal="scale" data-parallax="-40" aria-label="Example passport framing preview">
-          <span class="stamp" aria-hidden="true">Checked</span>
-          <div class="pcard-frame">
-            <div class="pcard-photo">
-              <img src="/screenshots/eval/raw/px_220453.jpg" alt="Portrait shown in a passport framing preview" />
-            </div>
-            <span class="pcard-cross" aria-hidden="true"></span>
-            <div class="pcard-data">
-              <span>Sample framing · 600×600</span>
-              <span class="ok">✓ Demo</span>
-            </div>
+    <section class="quick-proof" aria-label="KVNP product summary">
+      <div class="wrap proof-row">
+        <div><span class="proof-number">01</span><strong>Pick the programme</strong><p>Real country and document profiles.</p></div>
+        <div><span class="proof-number">02</span><strong>Add any portrait</strong><p>Upload a file or use guided capture.</p></div>
+        <div><span class="proof-number">03</span><strong>Prepare and review</strong><p>Format, checks, safe controls, and exports.</p></div>
+      </div>
+    </section>
+
+    <section class="product" id="product">
+      <div class="wrap">
+        <div class="section-intro two-column-intro">
+          <div>
+            <p class="eyebrow" data-reveal="up">More than a crop tool</p>
+            <h2 data-reveal="up">The application knows what it wants. KVNP loads the details.</h2>
           </div>
+          <p data-reveal="up">A passport photo is not only a rectangle. Head position, margins, expression, background, sharpness, canvas dimensions, file size, and output format can all matter. KVNP puts those decisions into one guided workflow.</p>
+        </div>
+
+        <div class="capability-grid">
+          <article class="capability capability-blue" data-reveal="up">
+            <span class="cap-index">01</span>
+            <h3>Programme-ready sizing</h3>
+            <p>Automatic crop, canvas, resolution, file-size targets, and print dimensions for the selected profile.</p>
+            <ul><li>Passport and visa profiles</li><li>Digital and print output</li><li>Country-specific guidance</li></ul>
+          </article>
+          <article class="capability capability-orange" data-reveal="up">
+            <span class="cap-index">02</span>
+            <h3>Photo quality review</h3>
+            <p>Face, gaze, posture, lighting, background, focus, and framing findings shown before export.</p>
+            <ul><li>Clear pass, warning, and retake states</li><li>Human checks stay visible</li><li>No acceptance promises</li></ul>
+          </article>
+          <article class="capability capability-green" data-reveal="up">
+            <span class="cap-index">03</span>
+            <h3>Useful preparation tools</h3>
+            <p>Identity-preserving colour, contrast, crop, background, and output controls where the programme permits them.</p>
+            <ul><li>Before and after review</li><li>Every pixel edit disclosed</li><li>Original always available</li></ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="showcase" id="showcase">
+      <div class="wrap showcase-grid">
+        <div class="showcase-copy">
+          <p class="eyebrow" data-reveal="up">See the preparation</p>
+          <h2 data-reveal="up">Move the line. Inspect the result.</h2>
+          <p data-reveal="up">The studio can isolate the portrait, prepare a permitted background variant, and size the output. The original is kept beside the result so you can judge the edges yourself.</p>
+          <div class="audit-list" data-reveal="up">
+            <div><span>Measured</span><strong>Face, gaze, posture, framing</strong></div>
+            <div><span>Prepared</span><strong>Crop, canvas, colour, background</strong></div>
+            <div><span>Delivered</span><strong>JPG, PNG, WebP, PDF, print sheet</strong></div>
+          </div>
+          <a class="text-link text-link-dark" href="/pricing" data-member-entry>Open the preparation studio</a>
+        </div>
+
+        <div class="comparison" data-reveal="scale">
+          <div class="ba" id="ba">
+            <img class="before-img" src="/screenshots/landing/px_1681010_before.jpg" alt="Original portrait with a busy background" />
+            <img class="after-img" id="baAfter" src="/screenshots/landing/px_1681010_after.jpg" alt="Prepared portrait with a plain background" />
+            <span class="ba-tag b">Original</span>
+            <span class="ba-tag a">Prepared preview</span>
+            <div class="ba-handle" id="baHandle" role="slider" aria-label="Compare original and prepared portrait" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" tabindex="0"><span class="ba-knob" aria-hidden="true"></span></div>
+          </div>
+          <p class="comparison-note">Drag to compare. Background replacement is offered only where the selected programme policy allows it.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="workflow" id="how">
+      <div class="wrap">
+        <div class="section-intro workflow-heading">
+          <div>
+            <p class="eyebrow" data-reveal="up">A calmer way through</p>
+            <h2 data-reveal="up">Four focused steps. No wall of controls.</h2>
+          </div>
+          <p data-reveal="up">Each stage asks only for what is needed next, while the programme rules stay active underneath.</p>
+        </div>
+        <div class="workflow-track">
+          <article class="workflow-step" data-reveal="up"><span>1</span><div><h3>Destination</h3><p>Select country, document, and submission type.</p></div></article>
+          <article class="workflow-step" data-reveal="up"><span>2</span><div><h3>Photo</h3><p>Upload an existing portrait or capture a new one.</p></div></article>
+          <article class="workflow-step" data-reveal="up"><span>3</span><div><h3>Prepare</h3><p>Review the source and apply only the controls you choose.</p></div></article>
+          <article class="workflow-step" data-reveal="up"><span>4</span><div><h3>Review</h3><p>Understand every finding, preview the document, then export.</p></div></article>
+        </div>
+        <figure class="workspace-shot" data-reveal="up">
+          <img src="/screenshots/app-shell.png" alt="KVNP Studio four-stage application workspace" loading="lazy" />
+          <figcaption><span>Live workspace</span><strong>The product, not a mockup.</strong></figcaption>
         </figure>
       </div>
     </section>
 
-    <!-- ============ MARQUEE ============ -->
-    <div class="marquee" aria-hidden="true">
-      <div class="marquee-track">
-        <b>United States&nbsp;&nbsp; United Kingdom&nbsp;&nbsp; India&nbsp;&nbsp; Canada&nbsp;&nbsp; Australia&nbsp;&nbsp; France&nbsp;&nbsp; Netherlands&nbsp;&nbsp; Ireland&nbsp;&nbsp; Italy&nbsp;&nbsp; Japan&nbsp;&nbsp; Singapore&nbsp;&nbsp; New Zealand</b>
-        <b>United States&nbsp;&nbsp; United Kingdom&nbsp;&nbsp; India&nbsp;&nbsp; Canada&nbsp;&nbsp; Australia&nbsp;&nbsp; France&nbsp;&nbsp; Netherlands&nbsp;&nbsp; Ireland&nbsp;&nbsp; Italy&nbsp;&nbsp; Japan&nbsp;&nbsp; Singapore&nbsp;&nbsp; New Zealand</b>
-      </div>
-    </div>
-
-    <!-- ============ MANIFESTO ============ -->
-    <section class="manifesto" id="manifesto">
-      <span class="ghost-word" aria-hidden="true">GO</span>
-      <div class="wrap">
-        <span class="kicker" data-reveal="up">Made for the journey</span>
-        <p class="big" data-reveal="up" style="margin-top:22px">
-          One photo.<br />One less thing to <em>worry about.</em>
-        </p>
-        <p class="small" data-reveal="up">
-          Get the shot right before it reaches your application.
-        </p>
-      </div>
-    </section>
-
-    <!-- ============ STATS ============ -->
-    <section class="stats">
-      <div class="stats-grid">
-        <div class="stat" data-reveal="up"><div class="n" data-count="17">17</div><div class="l">Programmes ready</div></div>
-        <div class="stat" data-reveal="up"><div class="n" data-count="478">478</div><div class="l">Facial landmarks checked</div></div>
-        <div class="stat" data-reveal="up"><div class="n"><span class="u">0</span></div><div class="l">Face reshaping</div></div>
-        <div class="stat" data-reveal="up"><div class="n" data-count="100" data-suffix="%">100%</div><div class="l">Of changes recorded</div></div>
-      </div>
-    </section>
-
-    <!-- ============ SHOWCASE ============ -->
-    <section class="showcase" id="showcase">
-      <div class="wrap showcase-inner">
-        <div class="showcase-copy">
-          <span class="kicker" data-reveal="up">See the difference</span>
-          <div class="sec-head" style="margin-bottom:0">
-            <h2 data-reveal="up">A better photo in seconds.</h2>
-            <p data-reveal="up">
-              Smart framing, instant quality checks, and the exact size your programme needs.
-            </p>
-          </div>
-          <p class="cap" data-reveal="up">
-            <strong>Your face stays yours.</strong> Studio changes pixels only when the selected programme allows it.
-          </p>
-          <div class="hero-cta" data-reveal="up" style="margin-top:26px">
-            <a class="btn" href="/pricing" data-member-entry>Try my photo <span class="arw" aria-hidden="true">→</span></a>
-          </div>
+    <section class="outputs">
+      <div class="wrap outputs-grid">
+        <div class="output-copy">
+          <p class="eyebrow" data-reveal="up">One prepared project</p>
+          <h2 data-reveal="up">Use it in the format the application expects.</h2>
+          <p data-reveal="up">Download the required digital file, preserve transparency where useful, generate a PDF report, or arrange copies on a print sheet.</p>
         </div>
-
-        <div class="ba" id="ba" data-reveal="scale">
-          <img class="before-img" src="/screenshots/landing/px_1681010_before.jpg" alt="Original photo before processing: busy brick-wall background" />
-          <img class="after-img" id="baAfter" src="/screenshots/landing/px_1681010_after.jpg" alt="Same photo after a background-matting stress test" />
-          <span class="ba-tag b">Before</span>
-          <span class="ba-tag a">After · Preview</span>
-          <div class="ba-handle" id="baHandle"><span class="ba-knob" aria-hidden="true">⇋</span></div>
+        <div class="format-board" data-reveal="scale">
+          <div class="format format-jpg"><strong>JPG</strong><span>Submission-ready</span></div>
+          <div class="format format-png"><strong>PNG</strong><span>High-quality export</span></div>
+          <div class="format format-webp"><strong>WebP</strong><span>Compact copy</span></div>
+          <div class="format format-pdf"><strong>PDF</strong><span>Audit report</span></div>
+          <div class="format format-print"><strong>Print sheet</strong><span>4x6 and A4 layouts</span></div>
         </div>
       </div>
     </section>
 
-    <!-- ============ HOW ============ -->
-    <section class="how" id="how">
-      <div class="wrap">
-        <div class="sec-head">
-          <span class="sec-num">— 01 / PROCESS</span>
-          <span class="kicker" data-reveal="up">How it works</span>
-          <h2 data-reveal="up">From camera to the right file.</h2>
-        </div>
-        <div class="steps">
-          <article class="step" data-reveal="up">
-            <span class="sn">STEP 01</span>
-            <h3>Choose your programme</h3>
-            <p>Pick the country and application type.</p>
-          </article>
-          <article class="step" data-reveal="up">
-            <span class="sn">STEP 02</span>
-            <h3>Add your photo</h3>
-            <p>Upload a portrait or use the guided camera.</p>
-          </article>
-          <article class="step" data-reveal="up">
-            <span class="sn">STEP 03</span>
-            <h3>Get instant checks</h3>
-            <p>Studio checks framing, pose, lighting, sharpness, and background.</p>
-          </article>
-          <article class="step" data-reveal="up">
-            <span class="sn">STEP 04</span>
-            <h3>Download and go</h3>
-            <p>Export JPG, PNG, WebP, PDF, or a ready-to-print sheet.</p>
-          </article>
-        </div>
-        <div class="how-shots">
-          <figure data-reveal="scale" data-parallax="-24">
-            <img src="/screenshots/country-programme-ui.png" alt="The studio's programme selector showing per-country rules" loading="lazy" />
-            <figcaption>Rules loaded per programme</figcaption>
-          </figure>
-          <figure data-reveal="scale" data-parallax="-48">
-            <img src="/screenshots/app-shell.png" alt="The studio compliance workspace with live checks" loading="lazy" />
-            <figcaption>The compliance workspace</figcaption>
-          </figure>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ FACES ============ -->
-    <section class="faces">
-      <div class="wrap">
-        <div class="sec-head">
-          <span class="kicker" data-reveal="up">Built for real people</span>
-          <h2 data-reveal="up">Curls. Glasses. Tricky light. Bring it.</h2>
-          <p data-reveal="up">Designed for the portraits people actually take.</p>
-        </div>
-        <div class="faces-row">
-          <figure class="face" data-reveal="up"><img src="/screenshots/landing/px_614810_after.jpg" alt="Pipeline lighting test output" loading="lazy" /><figcaption class="fl">Balanced light</figcaption></figure>
-          <figure class="face" data-reveal="up"><img src="/screenshots/landing/px_220453_after.jpg" alt="Pipeline eyeglasses and glare test output" loading="lazy" /><figcaption class="fl">Glare checked</figcaption></figure>
-          <figure class="face" data-reveal="up"><img src="/screenshots/landing/px_774909_after.jpg" alt="Pipeline hair-edge test output" loading="lazy" /><figcaption class="fl">Edges preserved</figcaption></figure>
-          <figure class="face" data-reveal="up"><img src="/screenshots/landing/px_1681010_after.jpg" alt="Pipeline curly-hair matting stress-test output" loading="lazy" /><figcaption class="fl">Curls preserved</figcaption></figure>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ TRUST ============ -->
-    <section class="trust" id="trust">
-      <div class="wrap">
-        <div class="sec-head">
-          <span class="sec-num">— 02 / HONESTY</span>
-          <span class="kicker" data-reveal="up">Why KVNP</span>
-          <h2 data-reveal="up">More confidence. Less retaking.</h2>
-          <p data-reveal="up">See what works, fix what does not, and keep moving.</p>
-        </div>
-        <div class="trust-grid">
-          <div class="tcard" data-reveal="up"><span class="tt">✓ Instant checks</span><h4>Know before you upload</h4><p>Get a clear ready, retake, or review result.</p></div>
-          <div class="tcard" data-reveal="up"><span class="tt">✓ Programme matched</span><h4>The right details, already loaded</h4><p>Size, framing, background, and file limits are built in.</p></div>
-          <div class="tcard" data-reveal="up"><span class="tt no">✗ No AI faces</span><h4>Your face stays yours</h4><p>No generative face restoration or reshaping.</p></div>
-          <div class="tcard" data-reveal="up"><span class="tt">✓ Flexible export</span><h4>One photo, every useful format</h4><p>JPG, PNG, WebP, PDF, and print sheets.</p></div>
-          <div class="tcard" data-reveal="up"><span class="tt">✓ Private by design</span><h4>No third-party face editor</h4><p>Processing stays inside KVNP Studio.</p></div>
-          <div class="tcard" data-reveal="up"><span class="tt">✓ 35 programmes</span><h4>A growing format library</h4><p>Twenty-six destinations, each linked to issuing-authority guidance.</p></div>
-        </div>
-        <div class="disclaimer" data-reveal="up">
-          <span class="dl">Note</span>
-          <p>KVNP Studio is an independent photo tool. Final acceptance always belongs to the issuing authority.</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ COUNTRIES ============ -->
     <section class="countries" id="countries">
       <div class="wrap">
-        <div class="sec-head">
-          <span class="kicker" data-reveal="up">Supported programmes</span>
-          <h2 data-reveal="up">Pick the destination. We load the details.</h2>
-          <p data-reveal="up">Thirty-five passport, identity, and travel-photo profiles across twenty-six destinations are ready now.</p>
+        <div class="section-intro two-column-intro">
+          <div>
+            <p class="eyebrow" data-reveal="up">Programme library</p>
+            <h2 data-reveal="up">Start with the destination. We handle the dimensions.</h2>
+          </div>
+          <p data-reveal="up">The library currently covers 35 passport, visa, identity, and travel-photo profiles across 26 countries and territories, with links back to issuing-authority guidance.</p>
         </div>
-        <div class="cty-grid">
-          <article class="cty" data-reveal="up"><div class="code"><span>US</span><span class="doc">Passport</span></div><h4>United States passport</h4><p>2×2 inch photo.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>US</span><span class="doc">Visa · DS-160</span></div><h4>United States visa</h4><p>600×600 digital file.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>US</span><span class="doc">Diversity Visa</span></div><h4>United States DV lottery</h4><p>Portal-ready square JPEG.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>GB</span><span class="doc">Passport</span></div><h4>United Kingdom passport</h4><p>Digital passport upload.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>IN</span><span class="doc">Passport · ICAO</span></div><h4>India passport</h4><p>Square ICAO photo.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>IN</span><span class="doc">e-Visa</span></div><h4>India visa online</h4><p>Square visa upload.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>CA</span><span class="doc">Passport</span></div><h4>Canada passport</h4><p>50×70 mm photo.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>CA</span><span class="doc">TRV</span></div><h4>Canada temporary resident visa</h4><p>35×45 mm visa photo.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>AU</span><span class="doc">Passport</span></div><h4>Australia passport</h4><p>35×45 mm photo.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>FR</span><span class="doc">Schengen visa</span></div><h4>France / Schengen visa</h4><p>35×45 mm visa photo.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>NL</span><span class="doc">Passport / ID</span></div><h4>Netherlands identity photo</h4><p>35×45 mm, 400+ DPI.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>IE</span><span class="doc">Passport</span></div><h4>Ireland passport</h4><p>35×45 mm minimum.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>IE</span><span class="doc">Visa</span></div><h4>Ireland visa</h4><p>Printed supporting photo.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>IT</span><span class="doc">Passport</span></div><h4>Italy passport</h4><p>35×45 mm ICAO photo.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>JP</span><span class="doc">Passport</span></div><h4>Japan passport</h4><p>35×45 mm biometric photo.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>SG</span><span class="doc">Passport</span></div><h4>Singapore passport</h4><p>400×514 digital file.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>NZ</span><span class="doc">Passport</span></div><h4>New Zealand passport</h4><p>3:4 digital JPEG.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>CH</span><span class="doc">Passport / ID</span></div><h4>Switzerland identity photo</h4><p>35 x 45 mm biometric photo.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>CN</span><span class="doc">Visa</span></div><h4>China visa</h4><p>Portal-sized 40-120 KB JPEG.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>HK</span><span class="doc">Passport</span></div><h4>Hong Kong passport</h4><p>High-resolution digital photograph.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>KR</span><span class="doc">Passport</span></div><h4>South Korea passport</h4><p>413 x 531 online photograph.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>MY</span><span class="doc">eVISA</span></div><h4>Malaysia eVISA</h4><p>35 x 50 mm portal photograph.</p><span class="tag strict">Format + checks</span></article>
+        <div class="country-board" data-reveal="up">
+          <div class="country-feature">
+            <span class="country-code">US</span><h3>United States</h3><p>Passport, visa, and Diversity Visa profiles.</p>
+          </div>
+          <div class="country-feature">
+            <span class="country-code">CA</span><h3>Canada</h3><p>Passport and temporary resident visa formats.</p>
+          </div>
+          <div class="country-feature">
+            <span class="country-code">GB</span><h3>United Kingdom</h3><p>Digital passport upload preparation.</p>
+          </div>
+          <div class="country-feature">
+            <span class="country-code">IN</span><h3>India</h3><p>Passport and e-Visa profiles.</p>
+          </div>
+          <div class="country-list" aria-label="More supported destinations">
+            <span>Australia</span><span>France</span><span>Netherlands</span><span>Ireland</span><span>Italy</span><span>Japan</span><span>Singapore</span><span>New Zealand</span><span>Switzerland</span><span>China</span><span>Hong Kong</span><span>South Korea</span><span>Malaysia</span><span>and more</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="trust" id="trust">
+      <div class="wrap trust-grid">
+        <div class="trust-copy">
+          <p class="eyebrow" data-reveal="up">Built around your identity</p>
+          <h2 data-reveal="up">Helpful automation without pretending to be the authority.</h2>
+          <p data-reveal="up">KVNP prepares and checks photographs. It does not issue passports, guarantee acceptance, or manufacture a new face.</p>
+          <a class="text-link text-link-dark" href="#contact">Ask a programme question</a>
+        </div>
+        <div class="trust-points">
+          <article data-reveal="up"><span class="trust-mark green">Yes</span><div><h3>Your original stays available</h3><p>Download it even when the studio recommends a retake.</p></div></article>
+          <article data-reveal="up"><span class="trust-mark blue">Clear</span><div><h3>Edits are disclosed</h3><p>The processing audit separates measurements, formatting, and pixel changes.</p></div></article>
+          <article data-reveal="up"><span class="trust-mark orange">No</span><div><h3>No generative face reshaping</h3><p>Identity-changing restoration and artificial face replacement are not part of the submission workflow.</p></div></article>
+          <article data-reveal="up"><span class="trust-mark dark">Final</span><div><h3>The authority decides</h3><p>Machine checks are guidance; the issuing authority makes the acceptance decision.</p></div></article>
         </div>
       </div>
     </section>
@@ -268,9 +237,9 @@
     <section class="contact" id="contact">
       <div class="wrap contact-grid">
         <div class="contact-copy" data-reveal="up">
-          <span class="kicker">Questions before you start?</span>
-          <h2>Talk to the studio team.</h2>
-          <p>Ask about a programme, a difficult photograph, or a download. Never include card details or identity-document numbers.</p>
+          <p class="eyebrow">Support before you submit</p>
+          <h2>Not sure which programme fits?</h2>
+          <p>Tell us the country, document, or photo problem. Do not include card details or identity-document numbers.</p>
         </div>
         <form id="contact-form" class="contact-form" data-enquiry-form data-reveal="up">
           <div class="contact-fields">
@@ -278,20 +247,19 @@
             <label><span>Email</span><input id="contact-email" name="email" required type="email" maxlength="320" autocomplete="email" /></label>
           </div>
           <label><span>Subject</span><input id="contact-subject" name="subject" required minlength="3" maxlength="200" placeholder="Country, programme, or account question" /></label>
-          <label><span>Message</span><textarea id="contact-message" name="message" required minlength="10" maxlength="5000" rows="5"></textarea></label>
-          <div class="contact-submit"><span id="contact-status" data-enquiry-status aria-live="polite"></span><button class="btn" type="submit">Send enquiry</button></div>
+          <label><span>Message</span><textarea id="contact-message" name="message" required minlength="10" maxlength="5000" rows="5" placeholder="Give us enough detail to help quickly."></textarea></label>
+          <div class="contact-submit"><span id="contact-status" data-enquiry-status aria-live="polite"></span><button class="btn btn-arrow" type="submit">Send enquiry</button></div>
         </form>
       </div>
     </section>
 
-    <!-- ============ FINAL CTA ============ -->
     <section class="final">
-      <div class="wrap">
-        <span class="kicker" data-reveal="up" style="justify-content:center; display:inline-flex">Start now</span>
-        <h2 data-reveal="up">Get the photo <em>done.</em></h2>
-        <p data-reveal="up">Choose your programme and let Studio guide the rest.</p>
-        <div class="hero-cta" data-reveal="up">
-          <a class="btn" href="/pricing" data-member-entry>Create my photo <span class="arw" aria-hidden="true">→</span></a>
+      <div class="wrap final-inner">
+        <p class="eyebrow" data-reveal="up">Your next application starts here</p>
+        <h2 data-reveal="up">Prepare the photo once. Leave with every file you need.</h2>
+        <div class="final-actions" data-reveal="up">
+          <a class="btn btn-arrow" href="/pricing" data-member-entry>Start my photo</a>
+          <a class="text-link" href="/app?guest" data-guest-entry>Explore as guest</a>
         </div>
       </div>
     </section>
@@ -299,9 +267,9 @@
 
   <dialog class="lead-dialog" id="contact-dialog" aria-labelledby="contact-dialog-title">
     <div class="lead-dialog-shell">
-      <button class="lead-dialog-close" type="button" data-dialog-close aria-label="Close contact form">&times;</button>
+      <button class="lead-dialog-close" type="button" data-dialog-close aria-label="Close contact form">x</button>
       <div class="lead-dialog-copy">
-        <span class="kicker">Need a hand?</span>
+        <p class="eyebrow">Need a hand?</p>
         <h2 id="contact-dialog-title">Let us point you to the right photo.</h2>
         <p>Tell us the country, document, or problem. The studio team will follow up by email.</p>
       </div>
@@ -312,38 +280,32 @@
         </div>
         <label><span>What can we help with?</span><input name="subject" required minlength="3" maxlength="200" placeholder="Country, programme, or account question" /></label>
         <label><span>Message</span><textarea name="message" required minlength="10" maxlength="5000" rows="4" placeholder="Give us enough detail to help quickly."></textarea></label>
-        <div class="contact-submit"><span data-enquiry-status aria-live="polite"></span><button class="btn" type="submit">Send enquiry</button></div>
+        <div class="contact-submit"><span data-enquiry-status aria-live="polite"></span><button class="btn btn-arrow" type="submit">Send enquiry</button></div>
       </form>
       <p class="lead-dialog-privacy">Do not include payment details or identity-document numbers.</p>
     </div>
   </dialog>
 
-  <!-- ============ FOOTER ============ -->
   <footer class="foot">
     <div class="wrap">
       <div class="foot-grid">
         <a class="brand" href="/">
           <span class="brand-mark" aria-hidden="true">KV</span>
-          <span class="brand-txt"><strong>KVNP Studio</strong><span>KVNP Holdings Inc · local processing</span></span>
+          <span class="brand-txt"><strong>KVNP Studio</strong><span>KVNP Holdings Inc</span></span>
         </a>
-        <nav class="foot-links" aria-label="Footer">
-          <a href="#showcase">Showcase</a>
-          <a href="#how">How it works</a>
-          <a href="#countries">Countries</a>
-          <a href="#trust">Trust</a>
-          <a href="/pricing" data-member-entry>Membership</a>
+        <nav class="foot-links" aria-label="Footer navigation">
+          <a href="#product">Product</a><a href="#showcase">Results</a><a href="#countries">Countries</a><a href="#trust">Trust</a><a href="/pricing" data-member-entry>Membership</a>
         </nav>
       </div>
       <div class="foot-fine">
-        Automated estimate only — not a government service, not affiliated with any passport or visa
-        authority, and not a guarantee of acceptance. The issuing authority makes the final decision.
-        <div class="credit">Demonstration portraits feature licensed stock models; no endorsement is implied. Images via Pexels. © 2026 KVNP Holdings Inc.</div>
+        Automated estimate only. KVNP Studio is an independent photo-preparation tool, is not affiliated with any passport or visa authority, and cannot guarantee acceptance. The issuing authority makes the final decision.
+        <div class="credit">Demonstration portraits feature licensed stock models; no endorsement is implied. Images via Pexels. Copyright 2026 KVNP Holdings Inc.</div>
       </div>
     </div>
   </footer>
 
   <script src="/src/vendor/gsap.min.js?v=kvnp-studio-31"></script>
   <script src="/src/vendor/ScrollTrigger.min.js?v=kvnp-studio-31"></script>
-  <script src="/src/landing.js?v=kvnp-studio-33"></script>
+  <script src="/src/landing.js?v=kvnp-light-02"></script>
 </body>
 </html>
