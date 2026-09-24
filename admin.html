@@ -1,78 +1,170 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Operations | KVNP Studio</title>
-    <link rel="stylesheet" href="/src/portal.css?v=kvnp-platform-2" />
-    <link rel="stylesheet" href="/src/admin.css?v=kvnp-platform-3" />
-  </head>
-  <body data-portal="admin">
-    <header class="portal-bar">
-      <a class="portal-brand" href="/"><span>KV</span><strong>KVNP Operations</strong></a>
-      <nav><a href="/app">Studio</a><a href="/account">My workspace</a><a class="active" href="/admin">Admin</a></nav>
-    </header>
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin | PassportLens</title>
+  <meta name="robots" content="noindex" />
+  <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/src/theme.css?v=pl-3" />
+  <link rel="stylesheet" href="/src/portal.css?v=pl-3" />
+  <style>
+    .invite-link{font-size:12.5px; word-break:break-all; background:var(--bg-2); padding:8px 10px; border-radius:8px; margin-top:6px;}
+    .enq{border-bottom:1px solid var(--line); padding:14px 0;}
+    .enq:last-child{border-bottom:0;}
+    .enq-head{display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:center;}
+    .enq pre{white-space:pre-wrap; font:inherit; color:var(--text-2); font-size:14px; margin:8px 0 10px;}
+    .enq .btn-row select{padding:6px 8px;}
+    .member{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); font-size:14px;}
+    .member:last-child{border-bottom:0;} .member small{display:block; color:var(--mut);}
+    .funnel{display:grid; gap:6px; font-size:14px;}
+    .funnel div{display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-bottom:1px solid var(--line);}
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/" aria-label="PassportLens home"><svg viewBox="0 0 48 48" aria-hidden="true"><rect x="2" y="2" width="44" height="44" rx="12" fill="#351C15"/><circle cx="24" cy="23" r="12.5" fill="none" stroke="#FFB500" stroke-width="3.5"/><circle cx="24" cy="23" r="5" fill="#FFB500"/><circle cx="29.5" cy="17.5" r="2" fill="#fff" opacity=".9"/><rect x="13" y="38" width="22" height="2.6" rx="1.3" fill="#FFB500" opacity=".85"/></svg><span class="brand-name">Passport<b>Lens</b></span></a>
+      <nav class="topnav" aria-label="Admin"><a href="/app">Studio</a><a href="/studio-advanced">Advanced</a><a href="/account">Account</a><a href="/admin" class="active">Admin</a></nav>
+      <div class="topbar-right"><span class="badge navy">Admin</span></div>
+    </div>
+  </header>
 
-    <main class="portal-shell admin-shell">
-      <section class="portal-intro">
-        <div><span class="eyebrow">Live operations</span><h1>Studio performance</h1><p>Payments, customer activity, downloads, and support without opening customer photos.</p></div>
-        <button id="refresh-admin" class="primary-button" type="button">Refresh</button>
-      </section>
+  <main class="page">
+    <div class="page-title"><div><h1>Operations</h1><p class="muted" id="mail-line"></p></div><button class="btn sm ghost" id="refresh" type="button">Refresh</button></div>
+    <div class="notice bad" id="err" hidden></div>
+    <div class="stat-grid" id="stats"></div>
 
-      <section id="admin-metrics" class="metric-strip metric-grid" aria-label="Business metrics"></section>
+    <div class="tabs">
+      <button type="button" class="on" data-tab="orgs">Businesses</button>
+      <button type="button" data-tab="users">Users</button>
+      <button type="button" data-tab="enquiries">Enquiries <span class="badge warn" id="enq-count" hidden></span></button>
+      <button type="button" data-tab="funnel">Traffic &amp; funnel</button>
+    </div>
 
-      <section class="portal-section footprint-section">
-        <div class="section-heading"><div><span class="eyebrow">Footprints / last 14 days</span><h2>Visitor activity</h2></div><div class="chart-legend"><span><i class="visitor-key"></i>Visitors</span><span><i class="studio-key"></i>Studio sessions</span><span><i class="processed-key"></i>Photos processed</span></div></div>
-        <div id="traffic-trend" class="traffic-trend" aria-label="Fourteen day visitor activity"></div>
-      </section>
+    <section class="tab-panel" data-panel="orgs">
+      <div class="grid-2">
+        <form class="card pad stack" id="org-form">
+          <h3>Set up a Gold / Platinum business</h3>
+          <p class="small muted">Creates the business with its plan and sends the owner an invitation to set a password. Silver businesses are created automatically when someone subscribes.</p>
+          <label class="field"><span>Business name</span><input id="of-name" required /></label>
+          <div class="two">
+            <label class="field"><span>Plan</span><select id="of-plan"><option value="gold">Gold — 10 logins</option><option value="platinum">Platinum — unlimited</option><option value="silver">Silver — 1 login (manual)</option></select></label>
+            <label class="field"><span>Logins (0 = unlimited)</span><input id="of-seats" type="number" min="0" value="10" /></label>
+          </div>
+          <div class="two">
+            <label class="field"><span>Owner name</span><input id="of-owner-name" /></label>
+            <label class="field"><span>Owner email</span><input id="of-owner-email" type="email" required /></label>
+          </div>
+          <label class="field"><span>Notes (internal)</span><input id="of-notes" placeholder="Hardware delivered, contract date…" /></label>
+          <div class="btn-row"><button class="btn" type="submit">Create business + send invite</button><span class="form-msg" id="of-msg"></span></div>
+        </form>
+        <div class="card pad" id="org-detail"><h3>Business details</h3><p class="muted small">Select a business in the list to see members, invites and photos.</p></div>
+      </div>
+      <div class="table-wrap" style="margin-top:18px"><table class="data"><thead><tr><th>Business</th><th>Plan</th><th>Status</th><th class="num">Logins</th><th class="num">Photos (month)</th><th class="num">Photos (total)</th><th>Owner</th></tr></thead><tbody id="orgs"></tbody></table></div>
+    </section>
 
-      <section class="admin-grid">
-        <div class="portal-section">
-          <div class="section-heading"><div><span class="eyebrow">Conversion / last 30 days</span><h2>Customer funnel</h2></div></div>
-          <div id="conversion-list" class="funnel-list"></div>
-        </div>
-        <div class="portal-section">
-          <div class="section-heading"><div><span class="eyebrow">Gateway</span><h2>Commerce status</h2></div></div>
-          <dl id="commerce-status" class="status-list"></dl>
-        </div>
-      </section>
+    <section class="tab-panel" data-panel="users" hidden>
+      <div class="table-wrap"><table class="data"><thead><tr><th>User</th><th>Role</th><th>Business</th><th>Last login</th><th></th></tr></thead><tbody id="users"></tbody></table></div>
+    </section>
 
-      <section class="admin-grid activity-grid">
-        <div class="portal-section">
-          <div class="section-heading"><div><span class="eyebrow">Demand</span><h2>Top destinations</h2></div></div>
-          <div id="destination-list" class="destination-list"></div>
-        </div>
-        <div class="portal-section">
-          <div class="section-heading"><div><span class="eyebrow">Live trail</span><h2>Recent activity</h2></div><span class="muted">No IP addresses stored</span></div>
-          <div id="recent-activity" class="activity-list"></div>
-        </div>
-      </section>
+    <section class="tab-panel" data-panel="enquiries" hidden>
+      <div class="card pad" id="enquiries"></div>
+    </section>
 
-      <section class="portal-section">
-        <div class="section-heading"><div><span class="eyebrow">Accounts</span><h2>Registered accounts</h2></div><span id="customer-count" class="muted"></span></div>
-        <div class="table-scroll"><table><thead><tr><th>Customer</th><th>Email</th><th>Role</th><th>Membership</th><th>Projects</th><th>Downloads</th><th>Joined</th><th>Last login</th></tr></thead><tbody id="admin-customers"></tbody></table></div>
-      </section>
+    <section class="tab-panel" data-panel="funnel" hidden>
+      <div class="grid-2">
+        <div class="card pad"><h3>Last 30 days</h3><div class="funnel" id="funnel"></div></div>
+        <div class="card pad"><h3>Traffic</h3><div class="funnel" id="traffic"></div><h3 style="margin-top:16px">Top destinations</h3><div class="funnel" id="destinations"></div></div>
+      </div>
+      <div class="card pad" style="margin-top:18px"><h3>Recent activity</h3><div class="table-wrap"><table class="data"><thead><tr><th>When</th><th>Who</th><th>Event</th><th>Detail</th></tr></thead><tbody id="activity"></tbody></table></div></div>
+    </section>
+  </main>
 
-      <section class="portal-section">
-        <div class="section-heading"><div><span class="eyebrow">Stripe Billing</span><h2>Recent subscriptions</h2></div></div>
-        <div class="table-scroll"><table><thead><tr><th>User</th><th>Status</th><th>Currency</th><th>Period end</th><th>Cancellation</th></tr></thead><tbody id="admin-subscriptions"></tbody></table></div>
-      </section>
+  <script>
+  (function () {
+    var $ = function (s) { return document.querySelector(s); };
+    var esc = function (v) { return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
+    var when = function (ts) { return ts ? new Date(ts * 1000).toLocaleString("en-CA", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"; };
+    var money = function (minor) { return "CAD " + ((minor || 0) / 100).toFixed(2); };
+    var state = { csrf: null, data: null };
+    function api(path, options) {
+      options = options || {}; options.credentials = "same-origin";
+      options.headers = Object.assign({ "content-type": "application/json" }, options.headers || {});
+      if (state.csrf) options.headers["x-kvnp-csrf"] = state.csrf;
+      return fetch(path, options).then(function (r) { return r.json().then(function (d) { if (!r.ok || d.ok === false) throw new Error(d.error || d.detail || "Request failed"); return d; }); });
+    }
+    function err(message) { $("#err").textContent = message; $("#err").hidden = !message; }
+    document.querySelectorAll("[data-tab]").forEach(function (b) { b.addEventListener("click", function () {
+      document.querySelectorAll("[data-tab]").forEach(function (x) { x.classList.toggle("on", x === b); });
+      document.querySelectorAll("[data-panel]").forEach(function (p) { p.hidden = p.getAttribute("data-panel") !== b.getAttribute("data-tab"); });
+    }); });
 
-      <section class="portal-section">
-        <div class="section-heading"><div><span class="eyebrow">Stripe payments</span><h2>Subscription invoices</h2></div></div>
-        <div class="table-scroll"><table><thead><tr><th>Invoice</th><th>User</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody id="admin-billing-payments"></tbody></table></div>
-      </section>
+    async function load() {
+      var d = await api("/api/admin/overview");
+      state.data = d;
+      $("#mail-line").textContent = d.mailConfigured ? "Email sending is configured." : "Email is not configured yet — invites and enquiry alerts show here only (set SMTP_* and KVNP_CONTACT_EMAIL in .env).";
+      var s = d.stats, m = d.metrics || {};
+      $("#stats").innerHTML = [[s.users, "users"], [s.organisations, "businesses"], [s.activeSubscriptions, "active subscriptions"], [s.photosThisMonth, "photos this month"], [s.photosTotal, "photos total"], [s.downloadsThisMonth, "downloads this month"], [money(m.stripeRevenueMinor), "Stripe revenue"], [m.openEnquiries || 0, "open enquiries"]].map(function (x) { return '<div class="stat"><b>' + esc(x[0]) + '</b><span>' + esc(x[1]) + '</span></div>'; }).join("");
+      $("#orgs").innerHTML = d.organisations.length ? d.organisations.map(function (o) { return '<tr class="click" data-org="' + o.id + '"><td><b>' + esc(o.name) + '</b></td><td><span class="badge gold">' + esc(o.planLabel) + '</span></td><td>' + (o.active ? '<span class="badge ok">active</span>' : '<span class="badge bad">' + esc(o.planStatus === "active" ? "no subscription" : "inactive") + '</span>') + '</td><td class="num">' + o.seatsUsed + ' / ' + (o.seatLimit || "∞") + (o.pendingInvites ? ' <span class="muted small">(+' + o.pendingInvites + ' invited)</span>' : '') + '</td><td class="num">' + o.photosThisMonth + '</td><td class="num">' + o.photosTotal + '</td><td>' + esc(o.ownerEmail || "—") + '</td></tr>'; }).join("") : '<tr><td colspan="7" class="empty">No businesses yet.</td></tr>';
+      document.querySelectorAll("[data-org]").forEach(function (row) { row.addEventListener("click", function () { openOrg(row.getAttribute("data-org")); }); });
+      $("#users").innerHTML = d.users.map(function (u) { return '<tr><td><b>' + esc(u.name) + '</b><br><span class="muted small">' + esc(u.email) + '</span></td><td>' + esc(u.role) + '</td><td>' + (u.orgName ? esc(u.orgName) + ' <span class="muted small">(' + esc(u.orgRole) + ', ' + esc(u.plan) + ')</span>' : '—') + '</td><td>' + when(u.lastLoginAt) + '</td><td><button class="btn sm ghost" data-credit="' + u.id + '">+1 photo credit</button></td></tr>'; }).join("");
+      document.querySelectorAll("[data-credit]").forEach(function (b) { b.addEventListener("click", async function () { if (!confirm("Give this user one free photo credit?")) return; try { var r = await api("/api/admin/users/" + b.getAttribute("data-credit") + "/credits", { method: "POST", body: JSON.stringify({ count: 1 }) }); b.textContent = "credits: " + r.credits; } catch (e) { err(e.message); } }); });
+      var open = d.enquiries.filter(function (e) { return e.status !== "resolved"; }).length;
+      $("#enq-count").hidden = !open; $("#enq-count").textContent = open;
+      $("#enquiries").innerHTML = d.enquiries.length ? d.enquiries.map(function (e) {
+        return '<div class="enq"><div class="enq-head"><div><b>' + esc(e.business || e.name) + '</b> <span class="badge ' + (e.status === "resolved" ? "ok" : e.status === "new" ? "warn" : "info") + '">' + esc(e.status) + '</span>' + (e.tier ? ' <span class="badge gold">' + esc(e.tier) + '</span>' : '') + '<br><span class="muted small">' + esc(e.name) + ' · <a href="mailto:' + esc(e.email) + '">' + esc(e.email) + '</a>' + (e.phone ? ' · ' + esc(e.phone) : '') + ' · ' + when(e.createdAt) + ' · ref ' + esc(e.id.slice(0, 8).toUpperCase()) + '</span></div></div><pre>' + esc(e.message) + '</pre><form class="btn-row" data-enquiry="' + e.id + '"><select name="status"><option value="new"' + (e.status === "new" ? " selected" : "") + '>New</option><option value="in_progress"' + (e.status === "in_progress" ? " selected" : "") + '>In progress</option><option value="resolved"' + (e.status === "resolved" ? " selected" : "") + '>Resolved</option></select><input class="input" name="note" placeholder="Internal note" value="' + esc(e.adminNote) + '" style="max-width:320px" /><button class="btn sm ghost" type="submit">Save</button></form></div>';
+      }).join("") : '<p class="muted">No enquiries yet.</p>';
+      document.querySelectorAll("[data-enquiry]").forEach(function (form) { form.addEventListener("submit", async function (ev) { ev.preventDefault(); try { await api("/api/admin/enquiries/" + form.getAttribute("data-enquiry"), { method: "PATCH", body: JSON.stringify({ status: form.status.value, adminNote: form.note.value }) }); load(); } catch (e) { err(e.message); } }); });
+      var f = d.funnel || {};
+      var steps = f.conversion30d || f.conversion || [];
+      $("#funnel").innerHTML = steps.length ? steps.map(function (x) { return '<div><span>' + esc(x.name) + '</span><b>' + esc(x.count) + (x.fromPreviousPercent != null ? ' <span class="muted small">(' + x.fromPreviousPercent + '%)</span>' : '') + '</b></div>'; }).join("") : '<p class="muted small">No funnel data yet.</p>';
+      var t = d.traffic || {};
+      $("#traffic").innerHTML = [["Unique visitors", t.uniqueVisitors], ["Active today", t.activeToday], ["Landing views", t.landingViews], ["Studio sessions", t.studioSessions]].map(function (x) { return '<div><span>' + x[0] + '</span><b>' + esc(x[1] == null ? "—" : x[1]) + '</b></div>'; }).join("");
+      $("#destinations").innerHTML = (d.destinations || []).map(function (x) { return '<div><span>' + esc(x.country) + '</span><b>' + esc(x.selections) + '</b></div>'; }).join("") || '<p class="muted small">—</p>';
+      $("#activity").innerHTML = (d.recentActivity || []).slice(0, 40).map(function (a) { return '<tr><td>' + when(a.createdAt) + '</td><td>' + esc(a.actor) + '</td><td>' + esc(a.name) + '</td><td class="muted">' + esc(a.detail) + '</td></tr>'; }).join("") || '<tr><td colspan="4" class="empty">No activity yet.</td></tr>';
+    }
 
-      <section class="portal-section">
-        <div class="section-heading"><div><span class="eyebrow">Orders</span><h2>Recent payment activity</h2></div></div>
-        <div class="table-scroll"><table><thead><tr><th>Reference</th><th>User</th><th>Amount</th><th>Provider</th><th>Status</th><th>Created</th></tr></thead><tbody id="admin-orders"></tbody></table></div>
-      </section>
+    async function openOrg(id) {
+      var d = await api("/api/admin/orgs/" + id);
+      var o = d.org;
+      $("#org-detail").innerHTML = '<div class="card-head"><h3>' + esc(o.name) + '</h3>' + (d.active ? '<span class="badge ok">active</span>' : '<span class="badge bad">inactive</span>') + '</div>' +
+        '<form id="org-edit" class="stack"><div class="two"><label class="field"><span>Name</span><input name="name" value="' + esc(o.name) + '" /></label><label class="field"><span>Plan</span><select name="plan"><option value="silver"' + (o.plan === "silver" ? " selected" : "") + '>Silver</option><option value="gold"' + (o.plan === "gold" ? " selected" : "") + '>Gold</option><option value="platinum"' + (o.plan === "platinum" ? " selected" : "") + '>Platinum</option></select></label></div>' +
+        '<div class="two"><label class="field"><span>Logins (0 = unlimited)</span><input name="seatLimit" type="number" min="0" value="' + o.seatLimit + '" /></label><label class="field"><span>Status</span><select name="planStatus"><option value="active"' + (o.planStatus === "active" ? " selected" : "") + '>Active</option><option value="inactive"' + (o.planStatus === "inactive" ? " selected" : "") + '>Inactive</option></select></label></div>' +
+        '<div class="two"><label class="field"><span>Billing</span><select name="planSource"><option value="manual"' + (o.planSource === "manual" ? " selected" : "") + '>Manual (invoice / contract)</option><option value="stripe"' + (o.planSource === "stripe" ? " selected" : "") + '>Stripe subscription of owner</option></select></label><label class="field"><span>Notes</span><input name="notes" value="' + esc(o.notes || "") + '" /></label></div>' +
+        '<div class="btn-row"><button class="btn sm" type="submit">Save</button><span class="form-msg" id="org-edit-msg"></span></div></form>' +
+        '<h3 style="margin-top:18px">Members (' + d.members.length + ')</h3><div>' + (d.members.map(function (m) { return '<div class="member"><div><b>' + esc(m.name) + '</b> <span class="badge ' + (m.orgRole === "owner" ? "gold" : "info") + '">' + esc(m.orgRole) + '</span><small>' + esc(m.email) + ' · last login ' + when(m.lastLoginAt) + '</small></div>' + (m.orgRole !== "owner" ? '<button class="btn sm ghost" data-remove-member="' + m.id + '">Remove</button>' : '') + '</div>'; }).join("") || '<p class="muted small">No members yet — the owner has not accepted the invite.</p>') + '</div>' +
+        '<h3 style="margin-top:18px">Invitations</h3><div>' + (d.invites.map(function (i) { return '<div class="member"><div>' + esc(i.email) + ' <span class="badge info">' + esc(i.role) + '</span><small>sent ' + when(i.createdAt) + (i.expired ? " · expired" : "") + '</small></div><button class="btn sm ghost" data-cancel-invite="' + i.id + '">Cancel</button></div>'; }).join("") || '<p class="muted small">None pending.</p>') + '</div>' +
+        '<form id="org-invite" class="btn-row" style="margin-top:10px"><input class="input" name="email" type="email" placeholder="email" required style="max-width:240px" /><select name="role"><option value="member">Member</option><option value="owner">Owner</option></select><button class="btn sm ghost" type="submit">Invite</button></form><div id="org-invite-msg" class="form-msg"></div>' +
+        '<h3 style="margin-top:18px">Usage</h3><p class="small muted">' + d.summary.photosThisMonth + ' photos this month · ' + d.summary.photosTotal + ' total · ' + d.summary.clients + ' clients · last activity ' + when(d.summary.lastActivityAt) + '</p>';
+      $("#org-edit").addEventListener("submit", async function (e) { e.preventDefault(); var f = e.target; try { await api("/api/admin/orgs/" + id, { method: "PATCH", body: JSON.stringify({ name: f.name.value, plan: f.plan.value, seatLimit: f.seatLimit.value, planStatus: f.planStatus.value, planSource: f.planSource.value, notes: f.notes.value }) }); $("#org-edit-msg").textContent = "Saved."; load(); openOrg(id); } catch (e2) { $("#org-edit-msg").textContent = e2.message; } });
+      $("#org-invite").addEventListener("submit", async function (e) { e.preventDefault(); var f = e.target; try { var r = await api("/api/admin/orgs/" + id + "/invites", { method: "POST", body: JSON.stringify({ email: f.email.value, role: f.role.value }) }); $("#org-invite-msg").innerHTML = r.emailed ? "Invitation emailed." : 'Email not configured — send this link:<div class="invite-link">' + esc(r.inviteUrl) + '</div>'; openOrgKeepMsg(id, $("#org-invite-msg").innerHTML); } catch (e2) { $("#org-invite-msg").textContent = e2.message; } });
+      document.querySelectorAll("[data-cancel-invite]").forEach(function (b) { b.addEventListener("click", async function () { try { await api("/api/admin/orgs/" + id + "/invites/" + b.getAttribute("data-cancel-invite"), { method: "DELETE" }); openOrg(id); } catch (e) { err(e.message); } }); });
+      document.querySelectorAll("[data-remove-member]").forEach(function (b) { b.addEventListener("click", async function () { if (!confirm("Remove this login from the business?")) return; try { await api("/api/admin/orgs/" + id + "/members/" + b.getAttribute("data-remove-member"), { method: "DELETE" }); openOrg(id); load(); } catch (e) { err(e.message); } }); });
+      $("#org-detail").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    async function openOrgKeepMsg(id, html) { await openOrg(id); $("#org-invite-msg").innerHTML = html; }
 
-      <section class="portal-section">
-        <div class="section-heading"><div><span class="eyebrow">Support</span><h2>Customer enquiries</h2></div><span id="enquiry-count" class="muted"></span></div>
-        <div id="admin-enquiries" class="enquiry-list"></div>
-      </section>
-    </main>
-    <script type="module" src="/src/admin.js?v=kvnp-stripe-1"></script>
-  </body>
+    $("#org-form").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var msg = $("#of-msg"); msg.className = "form-msg"; msg.textContent = "Creating…";
+      try {
+        var r = await api("/api/admin/orgs", { method: "POST", body: JSON.stringify({ name: $("#of-name").value, plan: $("#of-plan").value, seatLimit: $("#of-seats").value, ownerName: $("#of-owner-name").value, ownerEmail: $("#of-owner-email").value, notes: $("#of-notes").value }) });
+        msg.className = "form-msg ok";
+        msg.innerHTML = "Business created. " + (r.emailed ? "Invitation emailed to the owner." : (r.inviteUrl ? 'Email is not configured — send the owner this link:<div class="invite-link">' + esc(r.inviteUrl) + '</div>' : "Owner attached."));
+        $("#org-form").reset(); $("#of-seats").value = 10;
+        load();
+      } catch (e2) { msg.className = "form-msg bad"; msg.textContent = e2.message; }
+    });
+    $("#of-plan").addEventListener("change", function () { $("#of-seats").value = { gold: 10, platinum: 0, silver: 1 }[$("#of-plan").value]; });
+    $("#refresh").addEventListener("click", function () { load().catch(function (e) { err(e.message); }); });
+
+    fetch("/api/auth/me", { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (me) {
+      if (!me.user || me.user.role !== "admin") { location.href = "/app"; return; }
+      state.csrf = me.csrfToken;
+      load().catch(function (e) { err(e.message); });
+    });
+  })();
+  </script>
+</body>
 </html>

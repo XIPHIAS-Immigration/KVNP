@@ -1,349 +1,511 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en-CA">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>KVNP Studio | Passport Photos Without the Guesswork</title>
-  <meta name="description" content="Create correctly sized passport, identity, and travel photos with guided capture, instant checks, and ready-to-download files for 35 official programme profiles." />
-  <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="KVNP Studio" />
-  <meta property="og:url" content="https://passport.kvnp.ca/" />
-  <meta property="og:title" content="Passport photos. Done right." />
-  <meta property="og:description" content="Pick your programme, get guided, and download the right photo file without the guesswork." />
-  <meta property="og:image" content="https://passport.kvnp.ca/screenshots/app-shell.png" />
-  <meta property="og:image:width" content="1440" />
-  <meta property="og:image:height" content="1200" />
-  <meta property="og:image:alt" content="KVNP Studio passport photo workspace" />
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Passport photos. Done right." />
-  <meta name="twitter:description" content="Guided capture, instant checks, and the right file for your programme." />
-  <meta name="twitter:image" content="https://passport.kvnp.ca/screenshots/app-shell.png" />
+  <title>PassportLens | Passport &amp; Visa Photo Software for Canada</title>
+  <meta name="description" content="PassportLens checks your passport or visa photo against the official rules for 35+ programmes, cleans the background and gives you a file ready to submit or print. For individuals, photo studios, immigration consultants and pharmacies across Canada." />
+  <meta name="theme-color" content="#351C15" />
+  <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml" />
   <link rel="canonical" href="https://passport.kvnp.ca/" />
-  <link rel="stylesheet" href="/src/landing.css?v=kvnp-studio-32" />
+  <link rel="alternate" hreflang="en-CA" href="https://passport.kvnp.ca/" />
+  <link rel="alternate" hreflang="en-US" href="https://passport.kvnp.ca/us" />
+  <link rel="alternate" hreflang="x-default" href="https://passport.kvnp.ca/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="PassportLens" />
+  <meta property="og:url" content="https://passport.kvnp.ca/" />
+  <meta property="og:title" content="PassportLens — passport photos accepted the first time" />
+  <meta property="og:description" content="Official-rule checks for 35+ passport and visa programmes. Digital files and print sheets in minutes." />
+  <meta property="og:image" content="https://passport.kvnp.ca/screenshots/app-shell.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="PassportLens — passport photos accepted the first time" />
+  <meta name="twitter:description" content="Official-rule checks for 35+ passport and visa programmes. Digital files and print sheets in minutes." />
+  <meta name="twitter:image" content="https://passport.kvnp.ca/screenshots/app-shell.png" />
+  <link rel="stylesheet" href="/src/theme.css?v=pl-3" />
+  <link rel="stylesheet" href="/src/landing.css?v=pl-3" />
   <script>if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documentElement.classList.add('anim');}</script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      { "@type": "Organization", "name": "PassportLens", "legalName": "KVNP Holdings Inc", "url": "https://passport.kvnp.ca/", "logo": "https://passport.kvnp.ca/assets/brand/logo.svg", "areaServed": ["CA", "US"] },
+      { "@type": "SoftwareApplication", "name": "PassportLens", "applicationCategory": "PhotographyApplication", "operatingSystem": "Web",
+        "offers": [
+          { "@type": "Offer", "name": "One photo", "price": "9.99", "priceCurrency": "CAD" },
+          { "@type": "Offer", "name": "Silver monthly", "price": "100", "priceCurrency": "CAD" },
+          { "@type": "Offer", "name": "Silver yearly", "price": "999", "priceCurrency": "CAD" }
+        ],
+        "description": "Passport and visa photo compliance software: official-rule checks, background clean-up, digital files and print sheets for 35+ programmes." },
+      { "@type": "FAQPage", "mainEntity": [
+          { "@type": "Question", "name": "Will my photo be accepted by Passport Canada, IRCC or the US State Department?", "acceptedAnswer": { "@type": "Answer", "text": "PassportLens checks your photo against the published requirements for the programme you choose (size, head position, background, lighting, expression and file limits) and tells you plainly whether it is OK or what to fix. The final decision always belongs to the issuing authority." } },
+          { "@type": "Question", "name": "Which countries and documents are supported?", "acceptedAnswer": { "@type": "Answer", "text": "35+ programmes across 26 countries, including the Canadian passport, PR card, citizenship and visitor visa photos, the US passport, visa (DS-160) and diversity visa, the UK passport, Indian passport, e-Visa and OCI, Schengen visas, Australia, Japan, Singapore and more." } },
+          { "@type": "Question", "name": "Can I take the photo with my phone?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Use the guided camera or upload a photo from your phone. Stand in front of a plain wall in even light and PassportLens will crop, size and clean the background." } },
+          { "@type": "Question", "name": "Do you change my face?", "acceptedAnswer": { "@type": "Answer", "text": "No. PassportLens never reshapes, retouches or AI-restores a face. It only crops, sizes, cleans the background and evens out lighting. Every applied change is listed." } }
+      ] }
+    ]
+  }
+  </script>
 </head>
 <body>
 
-  <!-- ============ NAV ============ -->
+  <!-- ============ NAV (dark, UPS-style) ============ -->
   <header class="nav" id="nav">
-    <a class="brand" href="/" aria-label="KVNP Studio home">
-      <span class="brand-mark" aria-hidden="true">KV</span>
-      <span class="brand-txt"><strong>KVNP Studio</strong><span>Passport Photo Lab</span></span>
-    </a>
-    <nav class="nav-links" id="navLinks" aria-label="Primary">
-      <a class="link" href="#showcase">Showcase</a>
-      <a class="link" href="#how">How it works</a>
-      <a class="link" href="#countries">Countries</a>
-      <a class="link" href="/pricing">Membership</a>
-      <a class="link" href="#trust">Trust</a>
-      <a class="link" href="#contact">Support</a>
-    </nav>
-    <div class="nav-cta">
-      <a class="btn" href="/pricing" data-member-entry>Create my photo <span class="arw" aria-hidden="true">→</span></a>
-      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">☰</button>
+    <div class="wrap nav-inner">
+      <a class="brand on-dark" href="/" aria-label="PassportLens home">
+        <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="2" y="2" width="44" height="44" rx="12" fill="#FFB500"/><circle cx="24" cy="23" r="12.5" fill="none" stroke="#351C15" stroke-width="3.5"/><circle cx="24" cy="23" r="5" fill="#351C15"/><circle cx="29.5" cy="17.5" r="2" fill="#fff" opacity=".9"/><rect x="13" y="38" width="22" height="2.6" rx="1.3" fill="#351C15" opacity=".85"/></svg>
+        <span class="brand-name">Passport<b>Lens</b></span>
+      </a>
+      <nav class="nav-links" id="navLinks" aria-label="Primary">
+        <a href="#how">How it works</a>
+        <a href="#who">Who it's for</a>
+        <a href="#pricing">Pricing</a>
+        <a href="/requirements">Requirements</a>
+        <a href="#faq">FAQ</a>
+        <a href="#contact">Contact</a>
+      </nav>
+      <div class="nav-cta">
+        <a class="nav-signin" href="/app" data-signin>Sign in</a>
+        <a class="btn sm" href="#pricing" data-member-entry>Get started <span class="arw" aria-hidden="true">→</span></a>
+        <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false"><span></span><span></span><span></span></button>
+      </div>
     </div>
   </header>
 
   <main>
 
-    <!-- ============ HERO ============ -->
-    <section class="hero">
+    <!-- ============ HERO (dark brown band) ============ -->
+    <section class="hero" id="hero">
+      <div class="glow g1" aria-hidden="true"></div>
+      <div class="glow g2" aria-hidden="true"></div>
       <div class="wrap hero-grid">
         <div class="hero-copy">
-          <span class="kicker" data-reveal="up">Passport photos made simple</span>
-          <h1 aria-label="Passport photos. Done right.">
-            <span class="line"><span class="lw">Passport photos.</span></span>
-            <span class="line"><span class="lw accent">Done right.</span></span>
+          <span class="kicker on-dark" data-hero="kicker"><span data-r="ca">Passport &amp; visa photo software · Canada</span><span data-r="us" hidden>Passport &amp; visa photo software · United States</span></span>
+          <h1 id="hero-title" aria-label="Passport photos, accepted the first time.">
+            <span class="w">Passport</span> <span class="w">photos,</span><br />
+            <span class="w accent">accepted</span> <span class="w accent">the</span> <span class="w accent">first</span> <span class="w accent">time.</span>
           </h1>
-          <p class="hero-sub" data-reveal="up">
-            Pick your destination. Studio guides the shot, checks the requirements, and prepares the right file.
+          <svg class="hero-rule" viewBox="0 0 220 6" aria-hidden="true"><path class="draw" d="M2 3 H218" stroke="#FFB500" stroke-width="4" stroke-linecap="round" fill="none"/></svg>
+          <p class="hero-sub" data-hero="sub">
+            Choose the programme, add a photo, and PassportLens checks it against the official rules,
+            cleans the background and gives you a file ready to submit or print.
           </p>
-          <div class="hero-cta" data-reveal="up">
-            <a class="btn" href="/pricing" data-member-entry>Create my photo <span class="arw" aria-hidden="true">→</span></a>
-            <a class="btn ghost" href="/app?guest">Explore demo as guest</a>
+          <div class="hero-cta" data-hero="cta">
+            <a class="btn lg" href="/pricing?plan=single">Make my photo · <span data-price="single">CAD 9.99</span> <span class="arw" aria-hidden="true">→</span></a>
+            <a class="btn lg ghost on-dark" href="#pricing">For businesses</a>
           </div>
-          <div class="hero-trust" data-reveal="up">
-            <span>35 programmes / 26 countries</span>
-            <span>Instant photo checks</span>
-            <span>Print and digital</span>
+          <div class="hero-stats" data-hero="stats">
+            <div><b data-count="35" data-suffix="+">0</b><span>programmes</span></div>
+            <div><b data-count="26">0</b><span>countries</span></div>
+            <div><b data-count="2">0</b><span>min to a file</span></div>
+            <div><b data-count="0">0</b><span>face edits — ever</span></div>
           </div>
         </div>
 
-        <figure class="pcard" data-reveal="scale" data-parallax="-40" aria-label="Example passport framing preview">
-          <span class="stamp" aria-hidden="true">Checked</span>
-          <div class="pcard-frame">
-            <div class="pcard-photo">
-              <img src="/screenshots/eval/raw/px_220453.jpg" alt="Portrait shown in a passport framing preview" />
-            </div>
-            <span class="pcard-cross" aria-hidden="true"></span>
-            <div class="pcard-data">
-              <span>Sample framing · 600×600</span>
-              <span class="ok">✓ Demo</span>
-            </div>
+        <!-- Photo frame that assembles itself -->
+        <figure class="frame" id="frame" aria-label="A passport photo being checked">
+          <div class="frame-card" data-f="card">
+            <div class="frame-photo" data-f="photo"><img src="/screenshots/eval/raw/px_220453.jpg" alt="Portrait framed to passport size" /></div>
+            <svg class="frame-guides" viewBox="0 0 300 420" aria-hidden="true">
+              <path class="draw" d="M150 18 V402" stroke="#FFB500" stroke-width="1.5" stroke-dasharray="6 6" fill="none"/>
+              <path class="draw" d="M24 150 H276" stroke="#FFB500" stroke-width="1.5" stroke-dasharray="6 6" fill="none"/>
+              <path class="draw" d="M262 78 V296" stroke="#FFB500" stroke-width="2.5" fill="none"/>
+              <path class="draw" d="M254 78 H270 M254 296 H270" stroke="#FFB500" stroke-width="2.5" fill="none"/>
+            </svg>
+            <span class="corner tl" data-f="corner"></span><span class="corner tr" data-f="corner"></span>
+            <span class="corner bl" data-f="corner"></span><span class="corner br" data-f="corner"></span>
+            <span class="frame-label" data-f="label">Head 31–36 mm ✓</span>
+            <span class="frame-label two" data-f="label">Plain background ✓</span>
+            <span class="stamp" data-f="stamp">✓ Photo OK</span>
           </div>
+          <div class="frame-meta" data-f="meta"><span data-r="ca">Canada · Passport · 50 × 70 mm</span><span data-r="us" hidden>United States · Passport · 2 × 2 in</span></div>
         </figure>
       </div>
-    </section>
 
-    <!-- ============ MARQUEE ============ -->
-    <div class="marquee" aria-hidden="true">
-      <div class="marquee-track">
-        <b>United States&nbsp;&nbsp; United Kingdom&nbsp;&nbsp; India&nbsp;&nbsp; Canada&nbsp;&nbsp; Australia&nbsp;&nbsp; France&nbsp;&nbsp; Netherlands&nbsp;&nbsp; Ireland&nbsp;&nbsp; Italy&nbsp;&nbsp; Japan&nbsp;&nbsp; Singapore&nbsp;&nbsp; New Zealand</b>
-        <b>United States&nbsp;&nbsp; United Kingdom&nbsp;&nbsp; India&nbsp;&nbsp; Canada&nbsp;&nbsp; Australia&nbsp;&nbsp; France&nbsp;&nbsp; Netherlands&nbsp;&nbsp; Ireland&nbsp;&nbsp; Italy&nbsp;&nbsp; Japan&nbsp;&nbsp; Singapore&nbsp;&nbsp; New Zealand</b>
-      </div>
-    </div>
-
-    <!-- ============ MANIFESTO ============ -->
-    <section class="manifesto" id="manifesto">
-      <span class="ghost-word" aria-hidden="true">GO</span>
+      <!-- UPS-style task box -->
       <div class="wrap">
-        <span class="kicker" data-reveal="up">Made for the journey</span>
-        <p class="big" data-reveal="up" style="margin-top:22px">
-          One photo.<br />One less thing to <em>worry about.</em>
-        </p>
-        <p class="small" data-reveal="up">
-          Get the shot right before it reaches your application.
-        </p>
+        <div class="taskbox" id="taskbox" data-hero="task">
+          <label for="task-search"><b>What is the photo for?</b><span>Pick the programme — the exact size, background and file rules load automatically.</span></label>
+          <form class="task-row" action="/app" method="get">
+            <input id="task-search" class="input" type="search" name="q" placeholder="Search: Canada passport, PR card, US visa, OCI…" autocomplete="off" list="task-list" />
+            <datalist id="task-list"></datalist>
+            <button class="btn" type="submit">Start <span class="arw" aria-hidden="true">→</span></button>
+          </form>
+          <div class="chips">
+            <span data-r="ca"><a href="/app?programme=canada-passport-print-2026-06">🇨🇦 Canada passport</a><a href="/app?programme=canada-pr-card-digital-checker-2026-07">🇨🇦 PR card</a><a href="/app?programme=canada-trv-print-2026-06">🇨🇦 Visitor visa</a><a href="/app?programme=us-visa-ds160-digital-2026-06">🇺🇸 US visa</a><a href="/app?programme=india-oci-card-digital-2026-07">🇮🇳 OCI card</a></span>
+            <span data-r="us" hidden><a href="/app?programme=us-passport-print-2026-06">🇺🇸 US passport</a><a href="/app?programme=us-visa-ds160-digital-2026-06">🇺🇸 Visa · DS-160</a><a href="/app?programme=us-dv-lottery-digital-2026-06">🇺🇸 Diversity visa</a><a href="/app?programme=canada-passport-print-2026-06">🇨🇦 Canada passport</a><a href="/app?programme=india-oci-card-digital-2026-07">🇮🇳 OCI card</a></span>
+            <a href="/requirements">All 35+ programmes →</a>
+          </div>
+        </div>
       </div>
     </section>
 
-    <!-- ============ STATS ============ -->
-    <section class="stats">
-      <div class="stats-grid">
-        <div class="stat" data-reveal="up"><div class="n" data-count="17">17</div><div class="l">Programmes ready</div></div>
-        <div class="stat" data-reveal="up"><div class="n" data-count="478">478</div><div class="l">Facial landmarks checked</div></div>
-        <div class="stat" data-reveal="up"><div class="n"><span class="u">0</span></div><div class="l">Face reshaping</div></div>
-        <div class="stat" data-reveal="up"><div class="n" data-count="100" data-suffix="%">100%</div><div class="l">Of changes recorded</div></div>
-      </div>
-    </section>
-
-    <!-- ============ SHOWCASE ============ -->
-    <section class="showcase" id="showcase">
-      <div class="wrap showcase-inner">
-        <div class="showcase-copy">
-          <span class="kicker" data-reveal="up">See the difference</span>
-          <div class="sec-head" style="margin-bottom:0">
-            <h2 data-reveal="up">A better photo in seconds.</h2>
-            <p data-reveal="up">
-              Smart framing, instant quality checks, and the exact size your programme needs.
-            </p>
-          </div>
-          <p class="cap" data-reveal="up">
-            <strong>Your face stays yours.</strong> Studio changes pixels only when the selected programme allows it.
-          </p>
-          <div class="hero-cta" data-reveal="up" style="margin-top:26px">
-            <a class="btn" href="/pricing" data-member-entry>Try my photo <span class="arw" aria-hidden="true">→</span></a>
-          </div>
-        </div>
-
-        <div class="ba" id="ba" data-reveal="scale">
-          <img class="before-img" src="/screenshots/landing/px_1681010_before.jpg" alt="Original photo before processing: busy brick-wall background" />
-          <img class="after-img" id="baAfter" src="/screenshots/landing/px_1681010_after.jpg" alt="Same photo after a background-matting stress test" />
-          <span class="ba-tag b">Before</span>
-          <span class="ba-tag a">After · Preview</span>
-          <div class="ba-handle" id="baHandle"><span class="ba-knob" aria-hidden="true">⇋</span></div>
-        </div>
+    <!-- ============ QUICK CARDS ============ -->
+    <section class="quick">
+      <div class="wrap quick-grid" data-reveal>
+        <a class="qcard card hover" href="/pricing?plan=single">
+          <span class="qico"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.6 3.6-6 8-6s8 2.4 8 6"/></svg></span>
+          <b>I need one photo</b><span>Make it at home in minutes for <span data-price="single">CAD 9.99</span>.</span><i>→</i>
+        </a>
+        <a class="qcard card hover" href="#pricing">
+          <span class="qico"><svg viewBox="0 0 24 24"><path d="M3 9l1.5-5h15L21 9M3 9v11h18V9M3 9h18M9 20v-6h6v6"/></svg></span>
+          <b>I run a business</b><span>Unlimited photos, staff logins, client records.</span><i>→</i>
+        </a>
+        <a class="qcard card hover" href="/app?guest">
+          <span class="qico"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span>
+          <b>Try the free demo</b><span>Run the full check on sample portraits.</span><i>→</i>
+        </a>
       </div>
     </section>
 
     <!-- ============ HOW ============ -->
     <section class="how" id="how">
       <div class="wrap">
-        <div class="sec-head">
-          <span class="sec-num">— 01 / PROCESS</span>
-          <span class="kicker" data-reveal="up">How it works</span>
-          <h2 data-reveal="up">From camera to the right file.</h2>
+        <div class="sec-head" data-reveal>
+          <span class="kicker">How it works</span>
+          <h2>Three steps. No guesswork.</h2>
+          <p>Everything technical happens behind the scenes. You only see what matters: is the photo OK, and if not, what to fix.</p>
         </div>
-        <div class="steps">
-          <article class="step" data-reveal="up">
-            <span class="sn">STEP 01</span>
-            <h3>Choose your programme</h3>
-            <p>Pick the country and application type.</p>
+        <div class="steps" data-reveal>
+          <article class="step card hover">
+            <svg class="step-ico" viewBox="0 0 48 48" aria-hidden="true"><rect class="draw" x="8" y="10" width="32" height="28" rx="4"/><path class="draw" d="M14 20h20M14 27h14"/></svg>
+            <span class="sn">1</span>
+            <h3>Choose the programme</h3>
+            <p>Canadian passport, PR card, US visa, Indian OCI and more. The exact size, background and file rules load automatically.</p>
           </article>
-          <article class="step" data-reveal="up">
-            <span class="sn">STEP 02</span>
-            <h3>Add your photo</h3>
-            <p>Upload a portrait or use the guided camera.</p>
+          <article class="step card hover">
+            <svg class="step-ico" viewBox="0 0 48 48" aria-hidden="true"><path class="draw" d="M8 16h6l4-6h12l4 6h6v22H8z"/><circle class="draw" cx="24" cy="26" r="7"/></svg>
+            <span class="sn">2</span>
+            <h3>Add the photo</h3>
+            <p>Upload a portrait or use the guided camera. It tells you in plain words to move closer, look at the lens or find better light.</p>
           </article>
-          <article class="step" data-reveal="up">
-            <span class="sn">STEP 03</span>
-            <h3>Get instant checks</h3>
-            <p>Studio checks framing, pose, lighting, sharpness, and background.</p>
+          <article class="step card hover">
+            <svg class="step-ico" viewBox="0 0 48 48" aria-hidden="true"><circle class="draw" cx="24" cy="24" r="16"/><path class="draw" d="M15 25l6 6 12-13"/></svg>
+            <span class="sn">3</span>
+            <h3>Get the result and download</h3>
+            <p>A clear <b>Photo OK</b> or <b>Retake</b> with the one reason that matters. Then download the digital file or a ready-to-print sheet.</p>
           </article>
-          <article class="step" data-reveal="up">
-            <span class="sn">STEP 04</span>
-            <h3>Download and go</h3>
-            <p>Export JPG, PNG, WebP, PDF, or a ready-to-print sheet.</p>
-          </article>
-        </div>
-        <div class="how-shots">
-          <figure data-reveal="scale" data-parallax="-24">
-            <img src="/screenshots/country-programme-ui.png" alt="The studio's programme selector showing per-country rules" loading="lazy" />
-            <figcaption>Rules loaded per programme</figcaption>
-          </figure>
-          <figure data-reveal="scale" data-parallax="-48">
-            <img src="/screenshots/app-shell.png" alt="The studio compliance workspace with live checks" loading="lazy" />
-            <figcaption>The compliance workspace</figcaption>
-          </figure>
         </div>
       </div>
     </section>
 
-    <!-- ============ FACES ============ -->
-    <section class="faces">
-      <div class="wrap">
-        <div class="sec-head">
-          <span class="kicker" data-reveal="up">Built for real people</span>
-          <h2 data-reveal="up">Curls. Glasses. Tricky light. Bring it.</h2>
-          <p data-reveal="up">Designed for the portraits people actually take.</p>
+    <!-- ============ SHOWCASE ============ -->
+    <section class="showcase">
+      <div class="wrap showcase-inner">
+        <div class="ba" id="ba" data-reveal>
+          <img class="before-img" src="/screenshots/landing/px_1681010_before.jpg" alt="Original photo with a busy brick-wall background" />
+          <img class="after-img" id="baAfter" src="/screenshots/landing/px_1681010_after.jpg" alt="Same photo with a clean white background" />
+          <span class="ba-tag b">Before</span>
+          <span class="ba-tag a">After</span>
+          <div class="ba-handle" id="baHandle"><span class="ba-knob" aria-hidden="true">⇋</span></div>
         </div>
-        <div class="faces-row">
-          <figure class="face" data-reveal="up"><img src="/screenshots/landing/px_614810_after.jpg" alt="Pipeline lighting test output" loading="lazy" /><figcaption class="fl">Balanced light</figcaption></figure>
-          <figure class="face" data-reveal="up"><img src="/screenshots/landing/px_220453_after.jpg" alt="Pipeline eyeglasses and glare test output" loading="lazy" /><figcaption class="fl">Glare checked</figcaption></figure>
-          <figure class="face" data-reveal="up"><img src="/screenshots/landing/px_774909_after.jpg" alt="Pipeline hair-edge test output" loading="lazy" /><figcaption class="fl">Edges preserved</figcaption></figure>
-          <figure class="face" data-reveal="up"><img src="/screenshots/landing/px_1681010_after.jpg" alt="Pipeline curly-hair matting stress-test output" loading="lazy" /><figcaption class="fl">Curls preserved</figcaption></figure>
+        <div class="showcase-copy" data-reveal>
+          <span class="kicker">See the difference</span>
+          <h2>A clean, correctly sized photo from an ordinary picture.</h2>
+          <p>Curly hair, glasses, a busy wall behind you — PassportLens crops to the exact head size, replaces the background and keeps every edge of the real photo.</p>
+          <ul class="ticks">
+            <li>Exact size, head position and margins for the chosen programme</li>
+            <li>Plain background where the rules ask for one</li>
+            <li>Every applied change is listed, nothing is hidden</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ WHO ============ -->
+    <section class="who" id="who">
+      <div class="wrap">
+        <div class="sec-head center" data-reveal>
+          <span class="kicker">Who it's for</span>
+          <h2>One tool for applicants and the businesses that serve them.</h2>
+        </div>
+        <div class="who-grid" data-reveal>
+          <article class="who-card card hover">
+            <span class="who-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.6 3.6-6 8-6s8 2.4 8 6"/></svg></span>
+            <h3>Individuals</h3>
+            <p>Need one photo for a passport, visa or PR card? Make it at home in minutes for <span data-price="single">CAD 9.99</span>.</p>
+            <a href="/pricing?plan=single">Make my photo →</a>
+          </article>
+          <article class="who-card card hover">
+            <span class="who-ico"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span>
+            <h3>Photo studios</h3>
+            <p>Unlimited compliant photos, every programme's rules loaded, client records and receipts in one place.</p>
+            <a href="/for/photo-studios">For photo studios →</a>
+          </article>
+          <article class="who-card card hover">
+            <span class="who-ico"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h6M9 16h6"/></svg></span>
+            <h3>Immigration consultants</h3>
+            <p>Stop losing weeks to rejected photos. Check and prepare every client's photo before the application goes in.</p>
+            <a href="/for/immigration-consultants">For consultants →</a>
+          </article>
+          <article class="who-card card hover">
+            <span class="who-ico"><svg viewBox="0 0 24 24"><path d="M3 9l1.5-5h15L21 9M3 9v11h18V9M3 9h18M9 20v-6h6v6"/></svg></span>
+            <h3>Pharmacies &amp; print shops</h3>
+            <p>Add a passport photo service to your counter. We can supply the software, the papers and the full hardware setup.</p>
+            <a href="/for/pharmacies">For pharmacies →</a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PRICING ============ -->
+    <section class="pricing" id="pricing">
+      <div class="wrap">
+        <div class="sec-head center" data-reveal>
+          <span class="kicker">Pricing</span>
+          <h2>Simple plans. <span data-r="ca">Canadian</span><span data-r="us" hidden>US</span> dollars.</h2>
+          <p>Pay for one photo, or run a business on unlimited photos. <span data-r="ca">Prices exclude applicable GST/HST.</span><span data-r="us" hidden>Prices exclude applicable sales tax.</span></p>
+        </div>
+
+        <div class="toggles" data-reveal>
+          <div class="bill-toggle" role="group" aria-label="Billing period">
+            <button type="button" class="on" data-bill="monthly">Monthly</button>
+            <button type="button" data-bill="yearly">Yearly <span class="save">save 15%</span></button>
+          </div>
+          <div class="bill-toggle cur-toggle" role="group" aria-label="Currency">
+            <button type="button" class="on" data-cur="cad">CAD</button>
+            <button type="button" data-cur="usd">USD</button>
+          </div>
+        </div>
+
+        <div class="plans" data-reveal>
+          <article class="plan card">
+            <span class="plan-tier">One photo</span>
+            <div class="plan-price"><b data-price="single">CAD 9.99</b><span>one-time</span></div>
+            <p class="plan-for">For individuals who need a single passport or visa photo.</p>
+            <ul class="plan-list">
+              <li>Any of the 35+ programmes</li>
+              <li>Digital file: JPEG, PNG or PDF</li>
+              <li>Print sheet for 4×6 or A4 paper</li>
+              <li>Re-download for 30 days</li>
+            </ul>
+            <a class="btn ghost block" href="/pricing?plan=single" data-plan-link="single">Buy one photo</a>
+          </article>
+
+          <article class="plan card featured">
+            <span class="plan-flag">Most popular</span>
+            <span class="plan-tier">Silver</span>
+            <div class="plan-price">
+              <b data-price="silver">CAD 100</b>
+              <span data-period-monthly="per month" data-period-yearly="per year">per month</span>
+            </div>
+            <p class="plan-for">Software only. For one business with one login.</p>
+            <ul class="plan-list">
+              <li><b>Unlimited photos</b>, all programmes</li>
+              <li>Client records, sales &amp; receipts</li>
+              <li>Digital files and print sheets</li>
+              <li>Photos stored 30 days, download to your disk</li>
+              <li>Email support · cancel any time</li>
+            </ul>
+            <a class="btn block" href="/pricing?plan=silver" data-plan-link="silver">Start Silver</a>
+          </article>
+
+          <article class="plan card">
+            <span class="plan-tier">Gold</span>
+            <div class="plan-price"><b>Contact us</b><span>custom quote</span></div>
+            <p class="plan-for">Software plus the papers and materials passport photos need, with basic setup.</p>
+            <ul class="plan-list">
+              <li>Everything in Silver</li>
+              <li>Up to <b>10 logins</b> for your staff</li>
+              <li>Photo paper &amp; printing materials</li>
+              <li>Basic setup and training</li>
+            </ul>
+            <a class="btn ghost block" href="#contact" data-tier="Gold">Talk to us</a>
+          </article>
+
+          <article class="plan card">
+            <span class="plan-tier">Platinum</span>
+            <div class="plan-price"><b>Contact us</b><span>custom quote</span></div>
+            <p class="plan-for">The complete passport photo counter: software, hardware and setup.</p>
+            <ul class="plan-list">
+              <li>Everything in Gold</li>
+              <li><b>Unlimited logins</b></li>
+              <li>Full hardware: camera, lighting, printer</li>
+              <li>On-site setup and priority support</li>
+            </ul>
+            <a class="btn ghost block" href="#contact" data-tier="Platinum">Talk to us</a>
+          </article>
+        </div>
+        <p class="plan-note" data-reveal>Try before you buy: the <a href="/app?guest">free demo</a> runs the full check on sample portraits. Cancel Silver any time from your account.</p>
+      </div>
+    </section>
+
+    <!-- ============ PROGRAMMES ============ -->
+    <section class="programmes" id="programmes">
+      <div class="wrap">
+        <div class="sec-head" data-reveal>
+          <span class="kicker">Supported programmes</span>
+          <h2>Pick the destination. We load the rules.</h2>
+          <p>35+ passport, visa, residence and identity-photo programmes across 26 countries, each linked to the issuing authority's published requirements.</p>
+        </div>
+        <div class="prog-groups" data-reveal>
+          <div class="prog-group"><h3>🇨🇦 Canada</h3><ul><li>Passport</li><li>Permanent Resident card</li><li>Citizenship</li><li>Visitor visa (TRV)</li></ul></div>
+          <div class="prog-group"><h3>🇺🇸 United States</h3><ul><li>Passport</li><li>Visa · DS-160</li><li>Diversity visa</li></ul></div>
+          <div class="prog-group"><h3>🇮🇳 India</h3><ul><li>Passport · ICAO</li><li>e-Visa</li><li>OCI card</li></ul></div>
+          <div class="prog-group"><h3>🇬🇧 United Kingdom</h3><ul><li>Passport</li><li>Driving licence</li></ul></div>
+          <div class="prog-group"><h3>🇪🇺 Europe</h3><ul><li>Schengen visa</li><li>France</li><li>Germany</li><li>Netherlands</li><li>Ireland</li><li>Italy</li><li>Spain</li><li>Portugal</li><li>Switzerland</li><li>Austria</li><li>Poland</li><li>Belgium</li></ul></div>
+          <div class="prog-group"><h3>🌏 Asia-Pacific &amp; more</h3><ul><li>Australia</li><li>New Zealand</li><li>Japan</li><li>Singapore</li><li>South Korea</li><li>Hong Kong</li><li>China visa</li><li>Malaysia eVISA</li><li>UAE</li><li>Türkiye</li><li>Brazil</li></ul></div>
+        </div>
+        <div class="prog-cta" data-reveal>
+          <a class="btn navy" href="/app?guest">Open the demo <span class="arw" aria-hidden="true">→</span></a>
+          <a href="/requirements">See every programme's exact requirements →</a>
+          <span class="muted small">Don't see yours? <a href="#contact">Ask us</a> — new profiles are added on request.</span>
         </div>
       </div>
     </section>
 
     <!-- ============ TRUST ============ -->
-    <section class="trust" id="trust">
+    <section class="trust">
       <div class="wrap">
-        <div class="sec-head">
-          <span class="sec-num">— 02 / HONESTY</span>
-          <span class="kicker" data-reveal="up">Why KVNP</span>
-          <h2 data-reveal="up">More confidence. Less retaking.</h2>
-          <p data-reveal="up">See what works, fix what does not, and keep moving.</p>
+        <div class="sec-head" data-reveal>
+          <span class="kicker">Why PassportLens</span>
+          <h2>Honest checks, not promises.</h2>
         </div>
-        <div class="trust-grid">
-          <div class="tcard" data-reveal="up"><span class="tt">✓ Instant checks</span><h4>Know before you upload</h4><p>Get a clear ready, retake, or review result.</p></div>
-          <div class="tcard" data-reveal="up"><span class="tt">✓ Programme matched</span><h4>The right details, already loaded</h4><p>Size, framing, background, and file limits are built in.</p></div>
-          <div class="tcard" data-reveal="up"><span class="tt no">✗ No AI faces</span><h4>Your face stays yours</h4><p>No generative face restoration or reshaping.</p></div>
-          <div class="tcard" data-reveal="up"><span class="tt">✓ Flexible export</span><h4>One photo, every useful format</h4><p>JPG, PNG, WebP, PDF, and print sheets.</p></div>
-          <div class="tcard" data-reveal="up"><span class="tt">✓ Private by design</span><h4>No third-party face editor</h4><p>Processing stays inside KVNP Studio.</p></div>
-          <div class="tcard" data-reveal="up"><span class="tt">✓ 35 programmes</span><h4>A growing format library</h4><p>Twenty-six destinations, each linked to issuing-authority guidance.</p></div>
+        <div class="trust-grid" data-reveal>
+          <div class="tcard"><h4>Official rules, encoded</h4><p>Each programme's size, framing, background and file limits come from the issuing authority's published guidance, with a review date.</p></div>
+          <div class="tcard"><h4>Your face stays yours</h4><p>No retouching, no reshaping, no AI restoration. Only crop, background and lighting.</p></div>
+          <div class="tcard"><h4>Plain-language results</h4><p>"Photo OK" or "Retake — the background is not plain." No jargon, no numbers to interpret.</p></div>
+          <div class="tcard"><h4>Private by default</h4><p>Photos are processed on our own servers, never sent to third-party editors, and deleted after 30 days.</p></div>
         </div>
-        <div class="disclaimer" data-reveal="up">
+        <div class="disclaimer" data-reveal>
           <span class="dl">Note</span>
-          <p>KVNP Studio is an independent photo tool. Final acceptance always belongs to the issuing authority.</p>
+          <p>PassportLens is an independent tool and is not affiliated with any passport or visa authority. It checks against published requirements; final acceptance always belongs to the issuing authority.</p>
         </div>
       </div>
     </section>
 
-    <!-- ============ COUNTRIES ============ -->
-    <section class="countries" id="countries">
-      <div class="wrap">
-        <div class="sec-head">
-          <span class="kicker" data-reveal="up">Supported programmes</span>
-          <h2 data-reveal="up">Pick the destination. We load the details.</h2>
-          <p data-reveal="up">Thirty-five passport, identity, and travel-photo profiles across twenty-six destinations are ready now.</p>
+    <!-- ============ FAQ ============ -->
+    <section class="faq" id="faq">
+      <div class="wrap faq-inner">
+        <div class="sec-head" data-reveal>
+          <span class="kicker">FAQ</span>
+          <h2>Common questions.</h2>
         </div>
-        <div class="cty-grid">
-          <article class="cty" data-reveal="up"><div class="code"><span>US</span><span class="doc">Passport</span></div><h4>United States passport</h4><p>2×2 inch photo.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>US</span><span class="doc">Visa · DS-160</span></div><h4>United States visa</h4><p>600×600 digital file.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>US</span><span class="doc">Diversity Visa</span></div><h4>United States DV lottery</h4><p>Portal-ready square JPEG.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>GB</span><span class="doc">Passport</span></div><h4>United Kingdom passport</h4><p>Digital passport upload.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>IN</span><span class="doc">Passport · ICAO</span></div><h4>India passport</h4><p>Square ICAO photo.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>IN</span><span class="doc">e-Visa</span></div><h4>India visa online</h4><p>Square visa upload.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>CA</span><span class="doc">Passport</span></div><h4>Canada passport</h4><p>50×70 mm photo.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>CA</span><span class="doc">TRV</span></div><h4>Canada temporary resident visa</h4><p>35×45 mm visa photo.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>AU</span><span class="doc">Passport</span></div><h4>Australia passport</h4><p>35×45 mm photo.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>FR</span><span class="doc">Schengen visa</span></div><h4>France / Schengen visa</h4><p>35×45 mm visa photo.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>NL</span><span class="doc">Passport / ID</span></div><h4>Netherlands identity photo</h4><p>35×45 mm, 400+ DPI.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>IE</span><span class="doc">Passport</span></div><h4>Ireland passport</h4><p>35×45 mm minimum.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>IE</span><span class="doc">Visa</span></div><h4>Ireland visa</h4><p>Printed supporting photo.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>IT</span><span class="doc">Passport</span></div><h4>Italy passport</h4><p>35×45 mm ICAO photo.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>JP</span><span class="doc">Passport</span></div><h4>Japan passport</h4><p>35×45 mm biometric photo.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>SG</span><span class="doc">Passport</span></div><h4>Singapore passport</h4><p>400×514 digital file.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>NZ</span><span class="doc">Passport</span></div><h4>New Zealand passport</h4><p>3:4 digital JPEG.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>CH</span><span class="doc">Passport / ID</span></div><h4>Switzerland identity photo</h4><p>35 x 45 mm biometric photo.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>CN</span><span class="doc">Visa</span></div><h4>China visa</h4><p>Portal-sized 40-120 KB JPEG.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>HK</span><span class="doc">Passport</span></div><h4>Hong Kong passport</h4><p>High-resolution digital photograph.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>KR</span><span class="doc">Passport</span></div><h4>South Korea passport</h4><p>413 x 531 online photograph.</p><span class="tag strict">Format + checks</span></article>
-          <article class="cty" data-reveal="up"><div class="code"><span>MY</span><span class="doc">eVISA</span></div><h4>Malaysia eVISA</h4><p>35 x 50 mm portal photograph.</p><span class="tag strict">Format + checks</span></article>
+        <div class="faq-list" data-reveal>
+          <details open>
+            <summary><span data-r="ca">Will my photo be accepted by Passport Canada or IRCC?</span><span data-r="us" hidden>Will my photo be accepted by the US State Department or USCIS?</span></summary>
+            <p>PassportLens checks your photo against the published requirements for the programme you choose — size, head position, background, lighting, expression and file limits — and tells you plainly whether it is OK or what to fix. The final decision always belongs to the issuing authority.</p>
+          </details>
+          <details>
+            <summary>Which countries and documents are supported?</summary>
+            <p>35+ programmes across 26 countries, including the Canadian passport, PR card, citizenship and visitor visa; US passport, visa (DS-160) and diversity visa; UK passport; Indian passport, e-Visa and OCI; Schengen visas; Australia, Japan, Singapore and more.</p>
+          </details>
+          <details>
+            <summary>Can I take the photo with my phone?</summary>
+            <p>Yes. Use the guided camera or upload a photo from your phone. Stand in front of a plain wall in even daylight, and PassportLens will crop, size and clean the background.</p>
+          </details>
+          <details>
+            <summary>Do you change my face?</summary>
+            <p>No. PassportLens never reshapes, retouches or AI-restores a face. It only crops, sizes, cleans the background and evens out lighting. Every applied change is listed in the report.</p>
+          </details>
+          <details>
+            <summary>What do businesses get with Silver?</summary>
+            <p>Unlimited photos for all programmes, one login, a simple CRM to record each client, the photos you made for them, what you charged and whether it's paid, plus receipts, print sheets and email support. Gold and Platinum add staff logins, papers and materials, hardware and setup.</p>
+          </details>
+          <details>
+            <summary>How do I print the photo?</summary>
+            <p>Download a print sheet laid out for 4×6 inch or A4/Letter paper with cut guides, and print it at home, at a pharmacy kiosk or on your studio printer at the DPI the programme requires.</p>
+          </details>
         </div>
       </div>
     </section>
 
+    <!-- ============ CONTACT ============ -->
     <section class="contact" id="contact">
       <div class="wrap contact-grid">
-        <div class="contact-copy" data-reveal="up">
-          <span class="kicker">Questions before you start?</span>
-          <h2>Talk to the studio team.</h2>
-          <p>Ask about a programme, a difficult photograph, or a download. Never include card details or identity-document numbers.</p>
+        <div class="contact-copy" data-reveal>
+          <span class="kicker">Gold &amp; Platinum, or any question</span>
+          <h2>Tell us about your business.</h2>
+          <p>Let us know what you need — a full counter setup, papers and materials, or just a question about a programme. We reply by email within one business day.</p>
+          <ul class="ticks">
+            <li>Software, papers and printers for passport photos</li>
+            <li>Setup and training for your staff</li>
+            <li>New programme profiles on request</li>
+          </ul>
         </div>
-        <form id="contact-form" class="contact-form" data-enquiry-form data-reveal="up">
+        <form id="contact-form" class="contact-form card" data-enquiry-form data-reveal novalidate>
           <div class="contact-fields">
-            <label><span>Name</span><input id="contact-name" name="name" required minlength="2" maxlength="160" autocomplete="name" /></label>
-            <label><span>Email</span><input id="contact-email" name="email" required type="email" maxlength="320" autocomplete="email" /></label>
+            <label class="field"><span>Your name</span><input name="name" required minlength="2" maxlength="160" autocomplete="name" /></label>
+            <label class="field"><span>Business (optional)</span><input name="business" maxlength="160" autocomplete="organization" /></label>
           </div>
-          <label><span>Subject</span><input id="contact-subject" name="subject" required minlength="3" maxlength="200" placeholder="Country, programme, or account question" /></label>
-          <label><span>Message</span><textarea id="contact-message" name="message" required minlength="10" maxlength="5000" rows="5"></textarea></label>
-          <div class="contact-submit"><span id="contact-status" data-enquiry-status aria-live="polite"></span><button class="btn" type="submit">Send enquiry</button></div>
+          <div class="contact-fields">
+            <label class="field"><span>Email</span><input name="email" required type="email" maxlength="320" autocomplete="email" /></label>
+            <label class="field"><span>Phone (optional)</span><input name="phone" type="tel" maxlength="40" autocomplete="tel" /></label>
+          </div>
+          <label class="field"><span>I'm interested in</span>
+            <select name="tier" id="contact-tier">
+              <option value="Gold">Gold — software + papers &amp; materials + basic setup</option>
+              <option value="Platinum">Platinum — full hardware setup</option>
+              <option value="Silver">Silver — a question before I subscribe</option>
+              <option value="Question">General question</option>
+            </select>
+          </label>
+          <label class="field"><span>Message</span><textarea name="message" required minlength="10" maxlength="5000" rows="5" placeholder="City, how many photos a week, and what you need from us."></textarea></label>
+          <div class="contact-submit">
+            <span class="form-msg" data-enquiry-status aria-live="polite"></span>
+            <button class="btn" type="submit">Send message <span class="arw" aria-hidden="true">→</span></button>
+          </div>
+          <p class="contact-fine">Please don't include card details or identity-document numbers.</p>
         </form>
       </div>
     </section>
 
     <!-- ============ FINAL CTA ============ -->
     <section class="final">
-      <div class="wrap">
-        <span class="kicker" data-reveal="up" style="justify-content:center; display:inline-flex">Start now</span>
-        <h2 data-reveal="up">Get the photo <em>done.</em></h2>
-        <p data-reveal="up">Choose your programme and let Studio guide the rest.</p>
-        <div class="hero-cta" data-reveal="up">
-          <a class="btn" href="/pricing" data-member-entry>Create my photo <span class="arw" aria-hidden="true">→</span></a>
+      <div class="glow g3" aria-hidden="true"></div>
+      <div class="wrap center" data-reveal>
+        <h2>Get the photo right, <em>the first time.</em></h2>
+        <p>One photo for <span data-price="single">CAD 9.99</span>, or unlimited photos for your business.</p>
+        <div class="hero-cta center">
+          <a class="btn lg" href="/pricing?plan=single">Make my photo <span class="arw" aria-hidden="true">→</span></a>
+          <a class="btn lg ghost on-dark" href="#pricing">Business plans</a>
         </div>
       </div>
     </section>
   </main>
 
-  <dialog class="lead-dialog" id="contact-dialog" aria-labelledby="contact-dialog-title">
-    <div class="lead-dialog-shell">
-      <button class="lead-dialog-close" type="button" data-dialog-close aria-label="Close contact form">&times;</button>
-      <div class="lead-dialog-copy">
-        <span class="kicker">Need a hand?</span>
-        <h2 id="contact-dialog-title">Let us point you to the right photo.</h2>
-        <p>Tell us the country, document, or problem. The studio team will follow up by email.</p>
-      </div>
-      <form class="contact-form lead-dialog-form" data-enquiry-form>
-        <div class="contact-fields">
-          <label><span>Name</span><input name="name" required minlength="2" maxlength="160" autocomplete="name" /></label>
-          <label><span>Email</span><input name="email" required type="email" maxlength="320" autocomplete="email" /></label>
-        </div>
-        <label><span>What can we help with?</span><input name="subject" required minlength="3" maxlength="200" placeholder="Country, programme, or account question" /></label>
-        <label><span>Message</span><textarea name="message" required minlength="10" maxlength="5000" rows="4" placeholder="Give us enough detail to help quickly."></textarea></label>
-        <div class="contact-submit"><span data-enquiry-status aria-live="polite"></span><button class="btn" type="submit">Send enquiry</button></div>
-      </form>
-      <p class="lead-dialog-privacy">Do not include payment details or identity-document numbers.</p>
-    </div>
-  </dialog>
-
   <!-- ============ FOOTER ============ -->
   <footer class="foot">
     <div class="wrap">
       <div class="foot-grid">
-        <a class="brand" href="/">
-          <span class="brand-mark" aria-hidden="true">KV</span>
-          <span class="brand-txt"><strong>KVNP Studio</strong><span>KVNP Holdings Inc · local processing</span></span>
-        </a>
-        <nav class="foot-links" aria-label="Footer">
-          <a href="#showcase">Showcase</a>
+        <div class="foot-brand">
+          <a class="brand on-dark" href="/" aria-label="PassportLens home">
+            <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="2" y="2" width="44" height="44" rx="12" fill="#FFB500"/><circle cx="24" cy="23" r="12.5" fill="none" stroke="#351C15" stroke-width="3.5"/><circle cx="24" cy="23" r="5" fill="#351C15"/><circle cx="29.5" cy="17.5" r="2" fill="#fff" opacity=".9"/><rect x="13" y="38" width="22" height="2.6" rx="1.3" fill="#351C15" opacity=".85"/></svg>
+            <span class="brand-name">Passport<b>Lens</b></span>
+          </a>
+          <p>Passport and visa photo software for individuals, studios, consultants and pharmacies across Canada and the United States.</p>
+          <div class="region-links"><a href="/">🇨🇦 Canada</a> · <a href="/us">🇺🇸 United States</a></div>
+        </div>
+        <nav class="foot-col" aria-label="Product">
+          <h5>Product</h5>
           <a href="#how">How it works</a>
-          <a href="#countries">Countries</a>
-          <a href="#trust">Trust</a>
-          <a href="/pricing" data-member-entry>Membership</a>
+          <a href="#pricing">Pricing</a>
+          <a href="/requirements">Photo requirements</a>
+          <a href="/app?guest">Free demo</a>
+        </nav>
+        <nav class="foot-col" aria-label="Business">
+          <h5>For business</h5>
+          <a href="/for/photo-studios">Photo studios</a>
+          <a href="/for/immigration-consultants">Immigration consultants</a>
+          <a href="/for/pharmacies">Pharmacies</a>
+          <a href="/for/print-shops">Print shops</a>
+          <a href="#contact">Contact sales</a>
+        </nav>
+        <nav class="foot-col" aria-label="Account">
+          <h5>Account</h5>
+          <a href="/app" data-signin>Sign in</a>
+          <a href="/account">My account</a>
+          <a href="#faq">FAQ</a>
+          <a href="#contact">Support</a>
         </nav>
       </div>
       <div class="foot-fine">
-        Automated estimate only — not a government service, not affiliated with any passport or visa
-        authority, and not a guarantee of acceptance. The issuing authority makes the final decision.
-        <div class="credit">Demonstration portraits feature licensed stock models; no endorsement is implied. Images via Pexels. © 2026 KVNP Holdings Inc.</div>
+        <p>Automated check only — PassportLens is not a government service, is not affiliated with any passport or visa authority, and does not guarantee acceptance. The issuing authority makes the final decision.</p>
+        <p class="credit">Demonstration portraits feature licensed stock models via Pexels; no endorsement is implied. © 2026 KVNP Holdings Inc. All rights reserved.</p>
       </div>
     </div>
   </footer>
 
-  <script src="/src/vendor/gsap.min.js?v=kvnp-studio-31"></script>
-  <script src="/src/vendor/ScrollTrigger.min.js?v=kvnp-studio-31"></script>
-  <script src="/src/landing.js?v=kvnp-studio-33"></script>
+  <script src="/src/vendor/anime.umd.min.js?v=4.5.0"></script>
+  <script src="/src/landing.js?v=pl-3"></script>
 </body>
 </html>

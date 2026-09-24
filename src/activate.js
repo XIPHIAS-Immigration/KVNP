@@ -34,9 +34,9 @@ function showForm(data) {
   elements.error.hidden = true;
   elements.form.hidden = false;
   elements.title.textContent = "Payment confirmed";
-  elements.copy.textContent = `Membership purchased with ${data.email}.`;
+  elements.copy.textContent = `Purchase confirmed for ${data.email}.`;
   elements.accountEmail.textContent = data.existingAccount
-    ? `A KVNP account already uses ${data.email}. Enter its password to link this purchase.`
+    ? `A PassportLens account already uses ${data.email}. Enter its password to link this purchase.`
     : `Your login will use the payment email ${data.email}.`;
   elements.nameField.hidden = data.existingAccount;
   elements.confirmField.hidden = data.existingAccount;
@@ -46,13 +46,13 @@ function showForm(data) {
   elements.formTitle.textContent = data.existingAccount ? "Confirm your account" : "Create your account";
   elements.button.textContent = data.existingAccount ? "Link purchase and sign in" : "Activate and enter Studio";
   elements.note.textContent = data.existingAccount
-    ? "Use your existing KVNP password. The purchase cannot be linked by email alone."
-    : "Use at least 8 characters. KVNP stores a one-way password hash, never your readable password.";
+    ? "Use your existing PassportLens password. The purchase cannot be linked by email alone."
+    : "Use at least 8 characters. PassportLens stores a one-way password hash, never your readable password.";
 }
 
 async function verifyPayment() {
   if (!sessionId.startsWith("cs_")) {
-    showError("The Stripe checkout reference is missing. Return to Membership and reopen checkout.");
+    showError("The Stripe checkout reference is missing. Return to Pricing and reopen checkout.");
     return;
   }
   for (let attempt = 0; attempt < 8; attempt += 1) {
@@ -72,10 +72,10 @@ async function verifyPayment() {
       showForm(data);
       return;
     }
-    elements.copy.textContent = "Stripe is finalizing the subscription. Checking again...";
+    elements.copy.textContent = "Stripe is finalizing the payment. Checking again...";
     await wait(1800);
   }
-  showError("Stripe has not confirmed the subscription yet. Wait a minute, then refresh this page.");
+  showError("Stripe has not confirmed the payment yet. Wait a minute, then refresh this page.");
 }
 
 elements.form.addEventListener("submit", async (event) => {

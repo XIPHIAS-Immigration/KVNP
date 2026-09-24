@@ -256,7 +256,7 @@ def _write_pdf(rows):
 
     with PdfPages(PDF_PATH) as pdf:
         figure = plt.figure(figsize=(8.27, 11.69))
-        figure.suptitle("KVNP Studio - Extreme Capture Stress Test", fontsize=17, fontweight="bold", y=0.96)
+        figure.suptitle("PassportLens - Extreme Capture Stress Test", fontsize=17, fontweight="bold", y=0.96)
         lines = [
             f"Programme: {PROFILE['label']}",
             f"Real source portraits: {len(BASES)}",

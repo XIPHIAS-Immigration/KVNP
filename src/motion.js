@@ -1,4 +1,4 @@
-/* KVNP Studio motion layer (GSAP, self-hosted).
+/* PassportLens motion layer (GSAP, self-hosted).
    Hooks the existing DOM via MutationObservers so app logic stays untouched.
    No-ops cleanly when GSAP is missing or the user prefers reduced motion. */
 (function kvnpMotion() {

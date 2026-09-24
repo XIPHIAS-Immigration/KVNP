@@ -1,81 +1,166 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>My workspace | KVNP Studio</title>
-    <link rel="stylesheet" href="/src/portal.css?v=kvnp-platform-1" />
-    <link rel="stylesheet" href="/src/account.css?v=kvnp-stripe-1" />
-  </head>
-  <body>
-    <header class="portal-bar">
-      <a class="portal-brand" href="/"><span>KV</span><strong>KVNP Studio</strong></a>
-      <nav>
-        <a href="/app">New photo</a>
-        <a class="active" href="/account">My workspace</a>
-        <a id="admin-link" href="/admin" hidden>Admin</a>
-        <button id="sign-out" class="quiet-button" type="button">Sign out</button>
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>My account | PassportLens</title>
+  <meta name="robots" content="noindex" />
+  <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/src/theme.css?v=pl-3" />
+  <link rel="stylesheet" href="/src/portal.css?v=pl-3" />
+  <style>
+    .plan-card{display:flex; justify-content:space-between; gap:16px; align-items:flex-start; flex-wrap:wrap;}
+    .plan-card .big{font-family:var(--font-head); font-size:24px; font-weight:800; color:var(--navy);}
+    .member{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line); font-size:14px;}
+    .member:last-child{border-bottom:0;}
+    .member small{display:block; color:var(--mut);}
+    .invite-link{font-size:12.5px; word-break:break-all; background:var(--bg-2); padding:8px 10px; border-radius:8px; margin-top:6px;}
+    .photo-row img{width:44px; height:56px; object-fit:cover; border-radius:6px; background:var(--bg-3);}
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/" aria-label="PassportLens home"><svg viewBox="0 0 48 48" aria-hidden="true"><rect x="2" y="2" width="44" height="44" rx="12" fill="#351C15"/><circle cx="24" cy="23" r="12.5" fill="none" stroke="#FFB500" stroke-width="3.5"/><circle cx="24" cy="23" r="5" fill="#FFB500"/><circle cx="29.5" cy="17.5" r="2" fill="#fff" opacity=".9"/><rect x="13" y="38" width="22" height="2.6" rx="1.3" fill="#FFB500" opacity=".85"/></svg><span class="brand-name">Passport<b>Lens</b></span></a>
+      <nav class="topnav" aria-label="Account">
+        <a href="/app">Studio</a>
+        <a href="/crm" id="nav-crm" hidden>Clients</a>
+        <a href="/account" class="active">Account</a>
+        <a href="/admin" id="nav-admin" hidden>Admin</a>
       </nav>
-    </header>
+      <div class="topbar-right"><button class="btn sm ghost" id="signout" type="button">Sign out</button></div>
+    </div>
+  </header>
 
-    <main class="portal-shell">
-      <section class="portal-intro">
-        <div>
-          <span class="eyebrow">Customer workspace</span>
-          <h1 id="welcome-title">Your application photos</h1>
-          <p>Find prepared applications, purchase history, and support in one place.</p>
-        </div>
-        <a class="primary-button" href="/app">Create new photo</a>
-      </section>
+  <main class="page">
+    <div class="page-title"><div><h1 id="hello">My account</h1><p id="email" class="muted"></p></div></div>
+    <div class="notice ok" id="flash" hidden></div>
 
-      <section class="metric-strip" aria-label="Account summary">
-        <article><span>Applications</span><strong id="metric-projects">0</strong></article>
-        <article><span>Membership</span><strong id="metric-membership">-</strong></article>
-        <article><span>Ready to download</span><strong id="metric-ready">0</strong></article>
-      </section>
-
-      <section class="membership-band" id="membership-band">
-        <div><span class="eyebrow">Billing</span><h2 id="membership-title">Checking membership...</h2><p id="membership-detail">Your subscription status will appear here.</p></div>
-        <div class="membership-actions">
-          <a id="membership-join" class="primary-button" href="/pricing">View membership</a>
-          <button id="membership-manage" class="quiet-button bordered-button" type="button" hidden>Manage billing</button>
+    <div class="grid-2">
+      <section class="card pad">
+        <div class="plan-card">
+          <div><h3>Plan</h3><div class="big" id="plan-name">—</div><p class="small muted" id="plan-detail"></p></div>
+          <div class="stack" id="plan-actions"></div>
         </div>
       </section>
 
-      <section class="portal-section">
-        <div class="section-heading">
-          <div><span class="eyebrow">Applications</span><h2>Recent work</h2></div>
-          <span id="project-count" class="muted">Loading</span>
-        </div>
-        <div id="project-list" class="project-list"><p class="empty-state">Loading your workspace...</p></div>
+      <section class="card pad" id="business-card" hidden>
+        <div class="card-head"><h3>Business</h3><button class="btn sm ghost" id="rename-btn" type="button" hidden>Rename</button></div>
+        <div class="big" id="org-name"></div>
+        <p class="small muted" id="org-detail"></p>
+        <form id="rename-form" class="btn-row" hidden><input class="input" id="org-name-input" maxlength="160" /><button class="btn sm" type="submit">Save</button></form>
       </section>
+    </div>
 
-      <section class="portal-section">
-        <div class="section-heading">
-          <div><span class="eyebrow">Payments</span><h2>Orders and receipts</h2></div>
-        </div>
-        <div class="table-scroll">
-          <table>
-            <thead><tr><th>Reference</th><th>Product</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead>
-            <tbody id="order-list"><tr><td colspan="5">No orders yet.</td></tr></tbody>
-          </table>
-        </div>
-      </section>
+    <section class="card pad" id="team-card" hidden style="margin-top:18px">
+      <div class="card-head"><h3>Team logins</h3><span class="badge gold" id="seats"></span></div>
+      <div id="members"></div>
+      <form id="invite-form" class="btn-row" style="margin-top:14px" hidden>
+        <input class="input" id="invite-name" placeholder="Name (optional)" style="max-width:200px" />
+        <input class="input" id="invite-email" type="email" placeholder="colleague@business.ca" required style="max-width:280px" />
+        <button class="btn sm" type="submit">Send invite</button>
+        <span class="form-msg" id="invite-msg"></span>
+      </form>
+      <div id="invites"></div>
+    </section>
 
-      <section class="support-band">
-        <div class="support-copy">
-          <span class="eyebrow">Customer support</span>
-          <h2>Tell us what went wrong.</h2>
-          <p>Include the country and programme. Do not send payment-card information.</p>
-        </div>
-        <form id="enquiry-form" class="support-form">
-          <label><span>Subject</span><input id="enquiry-subject" required minlength="3" maxlength="200" placeholder="Photo, download, or payment question" /></label>
-          <label><span>Message</span><textarea id="enquiry-message" required minlength="10" maxlength="5000" rows="5" placeholder="Describe the issue and the application programme."></textarea></label>
-          <div id="enquiry-status" class="form-status" aria-live="polite"></div>
-          <button class="primary-button" type="submit">Send enquiry</button>
-        </form>
-      </section>
-    </main>
-    <script type="module" src="/src/account.js?v=kvnp-stripe-1"></script>
-  </body>
+    <section class="card pad" style="margin-top:18px">
+      <div class="card-head"><h3>Recent photos</h3><a class="small" id="crm-link" href="/crm" hidden>See all clients →</a></div>
+      <div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>Programme</th><th>Result</th><th></th></tr></thead><tbody id="photos"></tbody></table></div>
+    </section>
+  </main>
+
+  <script>
+  (function () {
+    var state = { csrf: null, data: null };
+    var $ = function (s) { return document.querySelector(s); };
+    var esc = function (v) { return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
+    var when = function (ts) { return ts ? new Date(ts * 1000).toLocaleDateString("en-CA", { year: "numeric", month: "short", day: "numeric" }) : ""; };
+    function api(path, options) {
+      options = options || {};
+      options.credentials = "same-origin";
+      options.headers = Object.assign({ "content-type": "application/json" }, options.headers || {});
+      if (state.csrf) options.headers["x-kvnp-csrf"] = state.csrf;
+      return fetch(path, options).then(function (r) { return r.json().then(function (d) { if (!r.ok || d.ok === false) throw new Error(d.error || d.detail || "Request failed"); return d; }); });
+    }
+    function flash(message, kind) { var el = $("#flash"); el.className = "notice " + (kind || "ok"); el.innerHTML = message; el.hidden = false; }
+
+    async function load() {
+      var me = await fetch("/api/auth/me", { credentials: "same-origin" }).then(function (r) { return r.json(); });
+      if (!me.user) { location.href = "/app"; return; }
+      state.csrf = me.csrfToken;
+      var data = await api("/api/account/summary");
+      state.data = data;
+      render(data);
+      var params = new URLSearchParams(location.search);
+      if (params.get("checkout") === "success") flash("Payment received — thank you. Your plan is active." + (params.get("product") === "single" ? " Your photo credit is ready in the studio." : ""), "ok");
+    }
+
+    function render(d) {
+      var plan = d.plan || {};
+      $("#hello").textContent = "Hi " + (d.user.name || "there");
+      $("#email").textContent = d.user.email;
+      $("#nav-admin").hidden = !plan.isAdmin;
+      $("#nav-crm").hidden = !(plan.crm && !plan.isAdmin);
+      $("#crm-link").hidden = !(plan.crm && !plan.isAdmin);
+      var name = "No plan", detail = "", actions = "";
+      if (plan.isAdmin) { name = "Administrator"; detail = "Unlimited access."; actions = '<a class="btn sm navy" href="/admin">Open admin</a>'; }
+      else if (plan.org && plan.org.plan !== "silver") { name = plan.org.planLabel + (plan.orgActive ? "" : " (inactive)"); detail = "Business plan managed by PassportLens. Logins: " + (plan.org.seatLimit || "unlimited") + "."; actions = '<a class="btn sm ghost" href="/#contact">Contact us</a>'; }
+      else if (plan.subscriptionActive || (plan.org && plan.org.plan === "silver")) {
+        var sub = d.subscription || {};
+        name = "Silver" + (plan.subscriptionActive ? "" : " (inactive)");
+        detail = sub.currentPeriodEnd ? (sub.cancelAtPeriodEnd ? "Ends " : "Renews ") + when(sub.currentPeriodEnd) + "." : "Unlimited photos, one login.";
+        actions = d.billingPortal ? '<button class="btn sm ghost" id="portal-btn" type="button">Manage billing</button>' : '';
+        if (!plan.subscriptionActive) actions += '<a class="btn sm" href="/pricing?plan=silver">Renew Silver</a>';
+      } else if (plan.credits > 0) { name = plan.credits + " photo credit" + (plan.credits === 1 ? "" : "s"); detail = "Each first download of a photo uses one credit. Files stay for 30 days."; actions = '<a class="btn sm" href="/app">Make a photo</a><a class="btn sm ghost" href="/pricing?plan=single">Buy another</a>'; }
+      else { detail = "Buy one photo, or a business plan for unlimited photos."; actions = '<a class="btn sm" href="/pricing">See plans</a>'; }
+      $("#plan-name").textContent = name;
+      $("#plan-detail").textContent = detail;
+      $("#plan-actions").innerHTML = actions;
+      var portal = $("#portal-btn");
+      if (portal) portal.addEventListener("click", async function () { try { var r = await api("/api/billing/portal", { method: "POST", body: "{}" }); location.href = r.url; } catch (e) { flash(e.message, "bad"); } });
+
+      if (d.org) {
+        $("#business-card").hidden = false;
+        $("#org-name").textContent = d.org.name;
+        $("#org-detail").textContent = d.org.planLabel + " · " + (d.org.seatsUsed || 0) + " of " + (d.org.seatLimit || "unlimited") + " logins used · you are the " + (plan.orgRole || "member");
+        var owner = plan.orgRole === "owner";
+        $("#rename-btn").hidden = !owner;
+        $("#rename-btn").onclick = function () { $("#rename-form").hidden = false; $("#org-name-input").value = d.org.name; };
+        $("#rename-form").onsubmit = async function (e) { e.preventDefault(); try { await api("/api/team", { method: "PATCH", body: JSON.stringify({ name: $("#org-name-input").value }) }); load(); } catch (err) { flash(err.message, "bad"); } };
+        if (plan.canManageTeam || (owner && d.members.length > 1)) {
+          $("#team-card").hidden = false;
+          $("#seats").textContent = (d.org.seatsUsed || d.members.length) + " / " + (d.org.seatLimit || "∞") + " logins";
+          $("#members").innerHTML = d.members.map(function (m) {
+            return '<div class="member"><div><b>' + esc(m.name) + '</b> <span class="badge ' + (m.orgRole === "owner" ? "gold" : "info") + '">' + esc(m.orgRole) + '</span><small>' + esc(m.email) + '</small></div>' + (owner && m.orgRole !== "owner" ? '<button class="btn sm ghost" data-remove="' + m.id + '">Remove</button>' : '') + '</div>';
+          }).join("");
+          document.querySelectorAll("[data-remove]").forEach(function (b) { b.addEventListener("click", async function () { if (!confirm("Remove this login?")) return; try { await api("/api/team/members/" + b.getAttribute("data-remove"), { method: "DELETE" }); load(); } catch (e) { flash(e.message, "bad"); } }); });
+          $("#invite-form").hidden = !plan.canManageTeam;
+          $("#invites").innerHTML = (d.invites || []).length ? '<p class="small muted" style="margin-top:12px">Pending invitations</p>' + d.invites.map(function (i) { return '<div class="member"><div>' + esc(i.email) + '<small>Sent ' + when(i.createdAt) + (i.expired ? " · expired" : "") + '</small></div><button class="btn sm ghost" data-cancel="' + i.id + '">Cancel</button></div>'; }).join("") : "";
+          document.querySelectorAll("[data-cancel]").forEach(function (b) { b.addEventListener("click", async function () { try { await api("/api/team/invites/" + b.getAttribute("data-cancel"), { method: "DELETE" }); load(); } catch (e) { flash(e.message, "bad"); } }); });
+        }
+      }
+      $("#photos").innerHTML = (d.projects || []).length ? d.projects.slice(0, 20).map(function (p) {
+        var status = p.resultStatus || p.status;
+        var badge = status === "ready" ? "ok" : status === "retake" || status === "fix" ? "bad" : "warn";
+        return '<tr><td>' + when(p.createdAt) + '</td><td>' + esc(p.programmeLabel || p.profileId) + (p.applicantName ? ' <span class="muted small">· ' + esc(p.applicantName) + '</span>' : '') + '</td><td><span class="badge ' + badge + '">' + esc(status || "") + '</span></td><td>' + (p.artifactAvailable ? '<a class="btn sm ghost" href="/api/projects/' + p.id + '/artifact">Download</a>' : '<span class="muted small">file expired</span>') + '</td></tr>';
+      }).join("") : '<tr><td colspan="4" class="empty">No photos yet. <a href="/app">Make one</a>.</td></tr>';
+    }
+
+    $("#invite-form").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var msg = $("#invite-msg"); msg.className = "form-msg"; msg.textContent = "Sending…";
+      try {
+        var r = await api("/api/team/invites", { method: "POST", body: JSON.stringify({ email: $("#invite-email").value, name: $("#invite-name").value }) });
+        msg.className = "form-msg ok";
+        msg.innerHTML = r.emailed ? "Invitation emailed." : 'Email is not set up yet — send this link yourself:<div class="invite-link">' + esc(r.inviteUrl) + '</div>';
+        $("#invite-email").value = ""; $("#invite-name").value = "";
+        load();
+      } catch (err) { msg.className = "form-msg bad"; msg.textContent = err.message; }
+    });
+    $("#signout").addEventListener("click", async function () { await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }); location.href = "/"; });
+    load().catch(function (e) { flash(e.message, "bad"); });
+  })();
+  </script>
+</body>
 </html>

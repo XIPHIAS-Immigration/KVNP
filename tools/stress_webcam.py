@@ -103,7 +103,7 @@ def summarize(rows, profiles):
 def write_pdf(rows, profiles):
     with PdfPages(PDF_PATH) as pdf:
         fig = plt.figure(figsize=(8.27, 11.69))
-        fig.suptitle("KVNP Passport Studio — Standard-Camera (Webcam) Stress Test", fontsize=15, fontweight="bold", y=0.96)
+        fig.suptitle("PassportLens — Standard-Camera (Webcam) Stress Test", fontsize=15, fontweight="bold", y=0.96)
         lines = [
             f"Cases: {len(rows)}  = real portraits x 5 simulated standard-camera captures",
             "Programme: United States passport",

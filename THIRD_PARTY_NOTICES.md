@@ -1,6 +1,6 @@
 # Third-party notices & licensing
 
-KVNP Passport Studio uses third-party models and libraries. **Before selling or
+PassportLens uses third-party models and libraries. **Before selling or
 distributing this product, confirm each item below is cleared for commercial use
 and reproduce its license/NOTICE as required.** This file is a starting checklist,
 not legal advice.
@@ -39,7 +39,7 @@ not legal advice.
   `src/demo-library.js`.
 - These portraits are used under the Pexels license published at
   https://www.pexels.com/license/. The photographers and depicted people do not
-  endorse KVNP Studio. Re-check the license and each source page before a public
+  endorse PassportLens. Re-check the license and each source page before a public
   commercial release.
 
 ## Action items before commercial release

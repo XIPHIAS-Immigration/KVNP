@@ -1,96 +1,88 @@
-const elements = {
-  accountLink: document.querySelector("#account-link"),
-  price: document.querySelector("#plan-price"),
-  includes: document.querySelector("#plan-includes"),
-  subscribe: document.querySelector("#subscribe-button"),
-  portal: document.querySelector("#portal-button"),
-  status: document.querySelector("#billing-status"),
-};
-
-const state = { user: null, csrf: null, commerce: null };
-const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
-
-async function load() {
-  const [commerceResponse, authResponse] = await Promise.all([
-    fetch("/api/commerce/config", { credentials: "same-origin" }),
-    fetch("/api/auth/me", { credentials: "same-origin" }),
-  ]);
-  state.commerce = await commerceResponse.json();
-  const auth = await authResponse.json();
-  state.user = auth.user || null;
-  state.csrf = auth.csrfToken || null;
-  render();
-}
-
-function render() {
-  const product = state.commerce?.product || {};
-  const subscription = state.commerce?.subscription || {};
-  elements.price.textContent = product.priceLabel || "Price shown at checkout";
-  elements.includes.innerHTML = (product.includes || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
-  elements.accountLink.textContent = state.user ? "My workspace" : "Sign in";
-  elements.accountLink.href = state.user ? "/account" : "/app?auth=login&next=/pricing";
-
-  if (subscription.active) {
-    elements.subscribe.hidden = true;
-    elements.portal.hidden = false;
-    elements.status.textContent = subscription.cancelAtPeriodEnd ? "Active until the end of the current billing period." : "Your membership is active.";
-    return;
+/* PassportLens — pricing page: starts Stripe Checkout for Silver or a single photo. */
+(function () {
+  "use strict";
+  var notice = document.getElementById("pricing-notice");
+  var params = new URLSearchParams(location.search);
+  var period = params.get("period") === "yearly" ? "yearly" : "monthly";
+  var currency = "cad";
+  var config = null;
+  var me = null;
+  function currentCurrency() {
+    var on = document.querySelector("[data-cur].on");
+    return on ? on.getAttribute("data-cur") : "cad";
   }
-  elements.subscribe.hidden = false;
-  elements.portal.hidden = true;
-  elements.subscribe.disabled = false;
-  elements.subscribe.textContent = "Pay securely with Stripe";
-  if (!state.commerce?.enabled) {
-    elements.subscribe.disabled = true;
-    elements.subscribe.textContent = "Checkout opening soon";
-    elements.status.textContent = "Stripe sandbox configuration is not complete on this server.";
-  }
-  if (new URLSearchParams(location.search).get("checkout") === "cancelled") {
-    elements.status.textContent = "Checkout was cancelled. Nothing was charged.";
-  }
-}
 
-async function startCheckout() {
-  elements.subscribe.disabled = true;
-  elements.subscribe.textContent = "Opening Stripe...";
-  elements.status.textContent = "";
-  const headers = state.csrf ? { "x-kvnp-csrf": state.csrf } : {};
-  const response = await fetch("/api/billing/checkout", {
-    method: "POST",
-    credentials: "same-origin",
-    headers,
+  function show(message, kind) {
+    notice.className = "notice pay-note " + (kind || "");
+    notice.innerHTML = message;
+    notice.hidden = false;
+  }
+
+  document.querySelectorAll("[data-bill]").forEach(function (button) {
+    button.addEventListener("click", function () { period = button.getAttribute("data-bill"); });
   });
-  const data = await response.json();
-  if (!response.ok || !data.checkout?.url) {
-    elements.subscribe.disabled = false;
-    elements.subscribe.textContent = "Pay securely with Stripe";
-    elements.status.textContent = data.error || data.detail || "Checkout could not start.";
-    return;
+  if (period === "yearly") {
+    var yearly = document.querySelector("[data-bill=yearly]");
+    if (yearly) yearly.click();
   }
-  location.href = data.checkout.url;
-}
+  if (params.get("plan")) {
+    var card = document.querySelector('[data-plan="' + params.get("plan") + '"]');
+    if (card) { card.classList.add("featured"); card.scrollIntoView({ block: "center" }); }
+  }
+  if (params.get("checkout") === "cancelled") show("Checkout was cancelled — nothing was charged. Pick a plan whenever you're ready.", "warn");
 
-async function openPortal() {
-  elements.portal.disabled = true;
-  elements.status.textContent = "Opening billing...";
-  const response = await fetch("/api/billing/portal", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "x-kvnp-csrf": state.csrf },
+  Promise.all([
+    fetch("/api/commerce/config", { credentials: "same-origin" }).then(function (r) { return r.json(); }),
+    fetch("/api/auth/me", { credentials: "same-origin" }).then(function (r) { return r.json(); }),
+  ]).then(function (results) {
+    config = results[0];
+    me = results[1];
+    // prices come from the server (.env) so the page never drifts from Stripe
+    if (config.prices && window.PL_PRICES) {
+      var fmt = function (cur, minor) { return cur + " " + (minor % 100 === 0 ? String(minor / 100) : (minor / 100).toFixed(2)); };
+      ["CAD", "USD"].forEach(function (cur) {
+        var p = config.prices[cur]; if (!p) return;
+        window.PL_PRICES[cur.toLowerCase()] = { single: fmt(cur, p.single), monthly: fmt(cur, p.monthly), yearly: fmt(cur, p.yearly) };
+      });
+      var onBtn = document.querySelector("[data-bill].on"); if (onBtn) onBtn.click();
+    }
+    if (config.currencies && config.currencies.indexOf("USD") === -1) {
+      var usdBtn = document.querySelector("[data-cur=usd]"); if (usdBtn) usdBtn.closest(".cur-toggle").hidden = true;
+    }
+    var plan = me && me.plan;
+    if (plan && plan.unlimited) {
+      show('Your plan is active. <a href="/app">Open the studio</a> or manage it from <a href="/account">your account</a>.', "ok");
+      document.querySelectorAll("[data-buy=silver]").forEach(function (b) { b.disabled = true; b.textContent = "Already active"; });
+    }
+    if (!config.enabled) {
+      show('Online payment is being set up. To get started today, <a href="/#contact">send us a message</a> and we will set your account up by hand.', "warn");
+      document.querySelectorAll("[data-buy]").forEach(function (b) { b.disabled = true; });
+    }
+  }).catch(function () {});
+
+  document.querySelectorAll("[data-buy]").forEach(function (button) {
+    button.addEventListener("click", async function () {
+      var product = button.getAttribute("data-buy");
+      button.disabled = true;
+      var label = button.textContent;
+      button.textContent = "Opening secure checkout…";
+      try {
+        var headers = { "content-type": "application/json" };
+        if (me && me.csrfToken) headers["x-kvnp-csrf"] = me.csrfToken;
+        var response = await fetch("/api/billing/checkout", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: headers,
+          body: JSON.stringify({ product: product, period: document.querySelector("[data-bill].on") ? document.querySelector("[data-bill].on").getAttribute("data-bill") : period, currency: currentCurrency() }),
+        });
+        var data = await response.json();
+        if (!response.ok || !data.ok || !data.checkout || !data.checkout.url) throw new Error(data.error || data.detail || "Checkout is temporarily unavailable.");
+        location.href = data.checkout.url;
+      } catch (error) {
+        show(error.message, "bad");
+        button.disabled = false;
+        button.textContent = label;
+      }
+    });
   });
-  const data = await response.json();
-  if (!response.ok || !data.url) {
-    elements.portal.disabled = false;
-    elements.status.textContent = data.error || data.detail || "Billing management could not open.";
-    return;
-  }
-  location.href = data.url;
-}
-
-elements.subscribe.addEventListener("click", startCheckout);
-elements.portal.addEventListener("click", openPortal);
-load().catch(() => {
-  elements.subscribe.disabled = true;
-  elements.subscribe.textContent = "Checkout unavailable";
-  elements.status.textContent = "Could not load billing configuration.";
-});
+})();

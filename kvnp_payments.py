@@ -76,8 +76,21 @@ class StripeGateway(PaymentGateway):
             or os.getenv("STRIPE_SECRET_KEY", "").strip()
         )
         self.webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()
-        self.price_id = os.getenv("STRIPE_PRICE_ID", "").strip()
+        # Silver monthly is the primary price (STRIPE_PRICE_ID kept for compatibility).
+        self.price_id = (
+            os.getenv("STRIPE_PRICE_SILVER_MONTHLY", "").strip() or os.getenv("STRIPE_PRICE_ID", "").strip()
+        )
+        self.price_ids = {
+            ("silver", "monthly", "cad"): self.price_id,
+            ("silver", "yearly", "cad"): os.getenv("STRIPE_PRICE_SILVER_YEARLY", "").strip(),
+            ("single", "once", "cad"): os.getenv("STRIPE_PRICE_SINGLE", "").strip(),
+            ("silver", "monthly", "usd"): os.getenv("STRIPE_PRICE_SILVER_MONTHLY_USD", "").strip(),
+            ("silver", "yearly", "usd"): os.getenv("STRIPE_PRICE_SILVER_YEARLY_USD", "").strip(),
+            ("single", "once", "usd"): os.getenv("STRIPE_PRICE_SINGLE_USD", "").strip(),
+        }
+        self.automatic_tax = os.getenv("STRIPE_AUTOMATIC_TAX", "false").strip().lower() in {"1", "true", "yes"}
         self.currency = os.getenv("STRIPE_CURRENCY", "CAD").strip().lower() or "cad"
+        self.currencies = ["cad"] + (["usd"] if self.price_ids[("single", "once", "usd")] or self.price_ids[("silver", "monthly", "usd")] else [])
         suffix = "".join(secrets.choice(string.ascii_lowercase) for _ in range(8))
         self.integration_identifier = (
             os.getenv("STRIPE_INTEGRATION_IDENTIFIER", "").strip() or f"kvnpweb-{suffix}"
@@ -101,21 +114,93 @@ class StripeGateway(PaymentGateway):
     def _request_options(self) -> dict:
         return {"api_key": self.api_key, "stripe_version": STRIPE_API_VERSION}
 
-    def validate_price(self) -> dict:
-        if not self.api_key or not self.price_id:
-            raise RuntimeError("Stripe sandbox credentials and STRIPE_PRICE_ID are not configured.")
-        if self._validated_price is not None:
-            return self._validated_price
-        price = self._sdk().Price.retrieve(self.price_id, **self._request_options())
+    def price_for(self, product: str, period: str, currency: str = "cad") -> str:
+        currency = "usd" if str(currency).lower() == "usd" else "cad"
+        key = ("single", "once", currency) if product == "single" else ("silver", "yearly" if period == "yearly" else "monthly", currency)
+        price_id = self.price_ids.get(key, "")
+        if not price_id:
+            raise RuntimeError(f"No Stripe Price is configured for {key[0]} {key[1]} in {currency.upper()}.")
+        return price_id
+
+    def validate_price(self, price_id: str | None = None, recurring: bool = True, currency: str | None = None) -> dict:
+        price_id = price_id or self.price_id
+        if not self.api_key or not price_id:
+            raise RuntimeError("Stripe credentials and the Stripe Price IDs are not configured.")
+        if self._validated_price is None:
+            self._validated_price = {}
+        if price_id in self._validated_price:
+            return self._validated_price[price_id]
+        price = self._sdk().Price.retrieve(price_id, **self._request_options())
         price_data = stripe_dict(price)
         if not price_data.get("active"):
             raise RuntimeError("The configured Stripe Price is inactive.")
-        if str(price_data.get("currency") or "").lower() != self.currency:
-            raise RuntimeError(f"The configured Stripe Price must use {self.currency.upper()}.")
-        if not price_data.get("recurring"):
+        expected = (currency or self.currency).lower()
+        if str(price_data.get("currency") or "").lower() != expected:
+            raise RuntimeError(f"The configured Stripe Price must use {expected.upper()}.")
+        if recurring and not price_data.get("recurring"):
             raise RuntimeError("The configured Stripe Price must be recurring.")
-        self._validated_price = price_data
+        if not recurring and price_data.get("recurring"):
+            raise RuntimeError("The single-photo Stripe Price must be one-time, not recurring.")
+        self._validated_price[price_id] = price_data
         return price_data
+
+    def create_checkout_for(
+        self,
+        product: str,
+        period: str,
+        user: dict | None,
+        success_url: str,
+        cancel_url: str,
+        checkout_id: str,
+        currency: str = "cad",
+    ) -> CheckoutSession:
+        """One entry point for every purchase: Silver monthly/yearly (subscription)
+        or a single photo (one-time payment), in CAD or USD."""
+        single = product == "single"
+        currency = "usd" if str(currency).lower() == "usd" else "cad"
+        price_id = self.price_for(product, period, currency)
+        self.validate_price(price_id, recurring=not single, currency=currency)
+        metadata = {
+            "kvnp_checkout_id": checkout_id,
+            "kvnp_product": "single-photo" if single else "studio-membership",
+            "kvnp_plan": "single" if single else f"silver-{'yearly' if period == 'yearly' else 'monthly'}",
+            "kvnp_currency": currency,
+        }
+        params = {
+            "mode": "payment" if single else "subscription",
+            "line_items": [{"price": price_id, "quantity": 1}],
+            "metadata": metadata,
+            "success_url": success_url,
+            "cancel_url": cancel_url,
+            "integration_identifier": self.integration_identifier,
+        }
+        if single:
+            params["payment_intent_data"] = {"metadata": metadata}
+            params["customer_creation"] = "always"
+        else:
+            params["subscription_data"] = {"metadata": metadata}
+        if self.automatic_tax:
+            params["automatic_tax"] = {"enabled": True}
+            if not single:
+                params["customer_update"] = {"address": "auto"}
+            params["billing_address_collection"] = "required"
+        if user:
+            metadata["kvnp_user_id"] = str(user["id"])
+            params["customer_email"] = user["email"]
+            params["client_reference_id"] = str(user["id"])
+        session = self._sdk().checkout.Session.create(
+            **params,
+            idempotency_key=f"kvnp-checkout-{checkout_id}",
+            **self._request_options(),
+        )
+        session_data = stripe_dict(session)
+        return CheckoutSession(
+            provider=self.name,
+            status=str(session_data.get("status") or "open"),
+            checkout_url=session_data.get("url"),
+            provider_order_id=session_data.get("id"),
+            development=not bool(session_data.get("livemode")),
+        )
 
     def create_subscription_checkout(
         self,

@@ -105,7 +105,7 @@ def _summary_page(pdf, results):
     remaining = Counter(f for r in results for f in r.get("after_fails", []))
 
     fig = plt.figure(figsize=(8.27, 11.69))
-    fig.suptitle("KVNP Passport Studio — Stress Test", fontsize=18, fontweight="bold", y=0.96)
+    fig.suptitle("PassportLens — Stress Test", fontsize=18, fontweight="bold", y=0.96)
     lines = [
         f"Images tested: {n}  (synthetic + real open-source portraits)",
         f"Programme: United States passport (strict — edits flag 'policy_review')",

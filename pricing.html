@@ -1,59 +1,170 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>KVNP Studio membership</title>
-    <meta name="description" content="Join KVNP Studio for country-specific photo preparation, validation and professional exports." />
-    <link rel="stylesheet" href="/src/portal.css?v=kvnp-stripe-2" />
-    <link rel="stylesheet" href="/src/pricing.css?v=kvnp-stripe-2" />
-  </head>
-  <body>
-    <header class="portal-bar">
-      <a class="portal-brand" href="/"><span>KV</span><strong>KVNP Studio</strong></a>
-      <nav>
-        <a href="/app">Studio</a>
-        <a class="active" href="/pricing">Membership</a>
-        <a id="account-link" href="/account">My workspace</a>
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pricing | PassportLens</title>
+  <meta name="description" content="PassportLens pricing in Canadian dollars: one passport photo for CAD 9.99, Silver unlimited photos for CAD 100/month, Gold and Platinum with staff logins, papers and full hardware setup." />
+  <link rel="canonical" href="https://passport.kvnp.ca/pricing" />
+  <meta name="theme-color" content="#351C15" />
+  <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="alternate" hreflang="en-CA" href="https://passport.kvnp.ca/pricing" />
+  <link rel="alternate" hreflang="en-US" href="https://passport.kvnp.ca/pricing?cur=usd" />
+  <link rel="stylesheet" href="/src/theme.css?v=pl-3" />
+  <link rel="stylesheet" href="/src/landing.css?v=pl-3" />
+  <link rel="stylesheet" href="/src/portal.css?v=pl-3" />
+  <style>
+    body{background:#fff;}
+    .nav{position:static;}
+    .pricing{padding-block:56px 80px;}
+    .plan .btn[disabled]{opacity:.6;}
+    .pay-note{max-width:720px; margin:0 auto 28px;}
+    .compare{max-width:900px; margin:56px auto 0;}
+    .compare h2{font-size:24px; margin-bottom:14px; text-align:center;}
+    .compare table{width:100%; border-collapse:collapse; font-size:14.5px; background:#fff; border:1px solid var(--line); border-radius:var(--r); overflow:hidden;}
+    .compare th,.compare td{padding:11px 14px; border-bottom:1px solid var(--line); text-align:center;}
+    .compare th:first-child,.compare td:first-child{text-align:left; color:var(--text-2);}
+    .compare th{background:var(--bg-2); color:var(--navy);}
+    .compare tr:last-child td{border-bottom:0;}
+    .compare td b{color:var(--ok);}
+  </style>
+</head>
+<body>
+  <header class="nav scrolled" id="nav">
+    <div class="wrap nav-inner">
+      <a class="brand on-dark" href="/" aria-label="PassportLens home">
+        <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="2" y="2" width="44" height="44" rx="12" fill="#FFB500"/><circle cx="24" cy="23" r="12.5" fill="none" stroke="#351C15" stroke-width="3.5"/><circle cx="24" cy="23" r="5" fill="#351C15"/><circle cx="29.5" cy="17.5" r="2" fill="#fff" opacity=".9"/><rect x="13" y="38" width="22" height="2.6" rx="1.3" fill="#351C15" opacity=".85"/></svg>
+        <span class="brand-name">Passport<b>Lens</b></span>
+      </a>
+      <nav class="nav-links" id="navLinks" aria-label="Primary">
+        <a href="/#how">How it works</a>
+        <a href="/requirements">Requirements</a>
+        <a href="/#who">Who it's for</a>
+        <a href="/pricing">Pricing</a>
+        <a href="/#contact">Contact</a>
       </nav>
-    </header>
+      <div class="nav-cta">
+        <a class="nav-signin" href="/app" data-signin>Sign in</a>
+        <a class="btn sm" href="/app?guest">Free demo</a>
+        <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false"><span></span><span></span><span></span></button>
+      </div>
+    </div>
+  </header>
 
-    <main class="pricing-shell">
-      <section class="pricing-intro">
-        <div>
-          <span class="eyebrow">KVNP Studio membership</span>
-          <h1>One membership. Every photo workflow.</h1>
-          <p>Pay securely, activate your private workspace, then prepare every country-sized photo from one focused studio.</p>
-          <div class="trust-line"><span>Pay first</span><span>Create account after payment</span><span>CAD billing</span></div>
+  <main>
+    <section class="pricing" id="pricing">
+      <div class="wrap">
+        <div class="sec-head center">
+          <span class="kicker">Pricing</span>
+          <h2>Simple plans. Pay in CAD or USD.</h2>
+          <p>Pay for one photo, or run a business on unlimited photos. Prices exclude applicable sales tax (GST/HST in Canada).</p>
         </div>
-        <aside class="price-panel" aria-labelledby="plan-name">
-          <span class="plan-kicker">Individual plan</span>
-          <h2 id="plan-name">Studio membership</h2>
-          <div id="plan-price" class="plan-price">Loading price...</div>
-          <p class="plan-note">The final amount and renewal interval are shown before payment.</p>
-          <ul id="plan-includes"></ul>
-          <button id="subscribe-button" class="primary-button pricing-button" type="button" disabled>Loading...</button>
-          <button id="portal-button" class="quiet-button portal-button" type="button" hidden>Manage billing</button>
-          <div id="billing-status" class="form-status" aria-live="polite"></div>
-          <small>Stripe handles payment details. After payment, you create your KVNP login using the email entered at checkout.</small>
-        </aside>
-      </section>
+        <div class="notice pay-note" id="pricing-notice" hidden></div>
 
-      <section class="value-grid" aria-label="Membership features">
-        <article><span>01</span><h2>Prepare</h2><p>Automatic crop, size, canvas and file-format controls for the selected programme.</p></article>
-        <article><span>02</span><h2>Review</h2><p>Face, posture, background and image-quality findings with human checks clearly separated.</p></article>
-        <article><span>03</span><h2>Export</h2><p>JPEG, PNG, PDF, print sheets and audit reports from your saved applications.</p></article>
-      </section>
+        <div class="toggles">
+          <div class="bill-toggle" role="group" aria-label="Billing period">
+            <button type="button" class="on" data-bill="monthly">Monthly</button>
+            <button type="button" data-bill="yearly">Yearly <span class="save">save 15%</span></button>
+          </div>
+          <div class="bill-toggle cur-toggle" role="group" aria-label="Currency">
+            <button type="button" class="on" data-cur="cad">CAD</button>
+            <button type="button" data-cur="usd">USD</button>
+          </div>
+        </div>
 
-      <section class="billing-faq">
-        <div><span class="eyebrow">Straightforward billing</span><h2>No payment surprises.</h2></div>
-        <dl>
-          <div><dt>When do I create my account?</dt><dd>Immediately after Stripe confirms payment. Choose your password on KVNP, then you are signed in automatically.</dd></div>
-          <div><dt>How do I cancel?</dt><dd>Open My workspace and choose Manage billing to use Stripe's secure customer portal.</dd></div>
-          <div><dt>Is acceptance guaranteed?</dt><dd>No software can make that promise. KVNP prepares and checks photos; the issuing authority makes the final decision.</dd></div>
-        </dl>
-      </section>
-    </main>
-    <script type="module" src="/src/pricing.js?v=kvnp-stripe-2"></script>
-  </body>
+        <div class="plans">
+          <article class="plan card" data-plan="single">
+            <span class="plan-tier">One photo</span>
+            <div class="plan-price"><b data-price="single">CAD 9.99</b><span>one-time</span></div>
+            <p class="plan-for">For individuals who need a single passport or visa photo.</p>
+            <ul class="plan-list">
+              <li>Any of the 35+ programmes</li>
+              <li>Digital file: JPEG, PNG or PDF</li>
+              <li>Print sheet for 4×6 or A4 paper</li>
+              <li>Re-download for 30 days</li>
+            </ul>
+            <button class="btn ghost block" type="button" data-buy="single">Buy one photo</button>
+          </article>
+
+          <article class="plan card featured" data-plan="silver">
+            <span class="plan-flag">Most popular</span>
+            <span class="plan-tier">Silver</span>
+            <div class="plan-price">
+              <b data-price="silver">CAD 100</b>
+              <span data-period-monthly="per month" data-period-yearly="per year">per month</span>
+            </div>
+            <p class="plan-for">Software only. For one business with one login.</p>
+            <ul class="plan-list">
+              <li><b>Unlimited photos</b>, all programmes</li>
+              <li>Client records, sales &amp; receipts</li>
+              <li>Digital files and print sheets</li>
+              <li>Photos stored 30 days, download to your disk</li>
+              <li>Email support · cancel any time</li>
+            </ul>
+            <button class="btn block" type="button" data-buy="silver">Start Silver</button>
+          </article>
+
+          <article class="plan card" data-plan="gold">
+            <span class="plan-tier">Gold</span>
+            <div class="plan-price"><b>Contact us</b><span>custom quote</span></div>
+            <p class="plan-for">Software plus the papers and materials passport photos need, with basic setup.</p>
+            <ul class="plan-list">
+              <li>Everything in Silver</li>
+              <li>Up to <b>10 logins</b> for your staff</li>
+              <li>Photo paper &amp; printing materials</li>
+              <li>Basic setup and training</li>
+            </ul>
+            <a class="btn ghost block" href="/#contact">Talk to us</a>
+          </article>
+
+          <article class="plan card" data-plan="platinum">
+            <span class="plan-tier">Platinum</span>
+            <div class="plan-price"><b>Contact us</b><span>custom quote</span></div>
+            <p class="plan-for">The complete passport photo counter: software, hardware and setup.</p>
+            <ul class="plan-list">
+              <li>Everything in Gold</li>
+              <li><b>Unlimited logins</b></li>
+              <li>Full hardware: camera, lighting, printer</li>
+              <li>On-site setup and priority support</li>
+            </ul>
+            <a class="btn ghost block" href="/#contact">Talk to us</a>
+          </article>
+        </div>
+        <p class="plan-note">Payment is handled by Stripe. You choose your PassportLens password after Stripe confirms the payment. Try the <a href="/app?guest">free demo</a> first if you like.</p>
+
+        <div class="compare">
+          <h2>What's included</h2>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th></th><th>One photo</th><th>Silver</th><th>Gold</th><th>Platinum</th></tr></thead>
+              <tbody>
+                <tr><td>Photos</td><td>1</td><td><b>Unlimited</b></td><td><b>Unlimited</b></td><td><b>Unlimited</b></td></tr>
+                <tr><td>Logins</td><td>1</td><td>1</td><td>10</td><td>Unlimited</td></tr>
+                <tr><td>All 35+ programmes</td><td><b>✓</b></td><td><b>✓</b></td><td><b>✓</b></td><td><b>✓</b></td></tr>
+                <tr><td>Digital files + print sheets</td><td><b>✓</b></td><td><b>✓</b></td><td><b>✓</b></td><td><b>✓</b></td></tr>
+                <tr><td>Client records, sales, receipts, CSV</td><td>—</td><td><b>✓</b></td><td><b>✓</b></td><td><b>✓</b></td></tr>
+                <tr><td>Photo papers &amp; materials</td><td>—</td><td>—</td><td><b>✓</b></td><td><b>✓</b></td></tr>
+                <tr><td>Camera, lighting, printer</td><td>—</td><td>—</td><td>—</td><td><b>✓</b></td></tr>
+                <tr><td>Setup &amp; training</td><td>—</td><td>—</td><td>Basic</td><td>On-site</td></tr>
+                <tr><td>Support</td><td>Email</td><td>Email</td><td>Email</td><td>Priority</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap">
+      <div class="foot-fine">
+        <p>Automated check only — PassportLens is not a government service and does not guarantee acceptance. The issuing authority makes the final decision.</p>
+        <p class="credit">© 2026 KVNP Holdings Inc. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/src/landing.js?v=pl-3"></script>
+  <script src="/src/pricing.js?v=pl-3"></script>
+</body>
 </html>

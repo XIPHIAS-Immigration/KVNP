@@ -172,7 +172,7 @@ def write_pdf(rows):
     st = bucket_stats(rows)
     with PdfPages(PDF_PATH) as pdf:
         fig = plt.figure(figsize=(8.27, 11.69))
-        fig.suptitle("KVNP Passport Studio — 300-Image Stress Test", fontsize=17, fontweight="bold", y=0.96)
+        fig.suptitle("PassportLens — 300-Image Stress Test", fontsize=17, fontweight="bold", y=0.96)
         lines = [
             f"Total images: {len(rows)}   (open-source: synthetic + Pexels portraits)",
             "Programme: United States passport",

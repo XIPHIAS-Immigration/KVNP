@@ -125,7 +125,7 @@ def write_pdf(rows):
     st = stats(rows)
     with PdfPages(PDF_PATH) as pdf:
         fig = plt.figure(figsize=(8.27, 11.69))
-        fig.suptitle("KVNP Passport Studio — 1000-Case Stress Test", fontsize=17, fontweight="bold", y=0.96)
+        fig.suptitle("PassportLens — 1000-Case Stress Test", fontsize=17, fontweight="bold", y=0.96)
         lines = [
             f"Total test cases: {len(rows)}   (open-source portraits + degraded variants)",
             "Programme: United States passport",

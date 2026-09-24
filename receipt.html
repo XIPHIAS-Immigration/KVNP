@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Receipt | PassportLens</title>
+  <meta name="robots" content="noindex" />
+  <link rel="stylesheet" href="/src/theme.css?v=pl-3" />
+  <style>
+    body{background:#fff;}
+    .receipt{max-width:640px; margin:30px auto; padding:0 20px;}
+    .sheet{border:1px solid var(--line); border-radius:14px; padding:32px;}
+    .head{display:flex; justify-content:space-between; gap:20px; align-items:flex-start; border-bottom:2px solid var(--gold); padding-bottom:16px; margin-bottom:20px;}
+    .head h1{font-size:22px;}
+    .head .biz{text-align:right; font-size:14px; color:var(--text-2);}
+    .head .biz b{display:block; font-size:18px; color:var(--navy);}
+    table{width:100%; border-collapse:collapse; font-size:15px;}
+    th,td{padding:10px 0; border-bottom:1px solid var(--line); text-align:left;}
+    th{color:var(--mut); font-weight:600; width:38%;}
+    .total{font-family:var(--font-head); font-size:22px; font-weight:800; color:var(--navy);}
+    .paid{display:inline-block; padding:5px 12px; border-radius:999px; font-weight:700; font-size:13px;}
+    .paid.yes{background:var(--ok-soft); color:var(--ok);} .paid.no{background:var(--warn-soft); color:var(--warn);}
+    .actions{display:flex; gap:10px; margin:18px 0; justify-content:flex-end;}
+    .foot{font-size:12px; color:var(--mut); margin-top:18px;}
+    @media print{ .actions{display:none;} .sheet{border:0; padding:0;} body{background:#fff;} }
+  </style>
+</head>
+<body>
+  <main class="receipt">
+    <div class="actions"><button class="btn ghost sm" onclick="history.back()">Back</button><button class="btn sm" onclick="print()">Print / Save as PDF</button></div>
+    <div class="sheet" id="sheet"><p class="muted">Loading…</p></div>
+  </main>
+  <script>
+  (function () {
+    var id = location.pathname.split("/").pop();
+    var esc = function (v) { return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
+    fetch("/api/crm/receipt/" + encodeURIComponent(id), { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) { document.getElementById("sheet").innerHTML = "<p>" + esc(d.detail || d.error || "Receipt not available.") + "</p>"; return; }
+      var p = d.project, c = d.client, o = d.org;
+      var date = new Date(p.createdAt * 1000).toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" });
+      var amount = p.saleAmountMinor == null ? "—" : (p.saleCurrency || "CAD") + " " + (p.saleAmountMinor / 100).toFixed(2);
+      document.title = "Receipt " + p.id.slice(0, 8).toUpperCase() + " | " + o.name;
+      document.getElementById("sheet").innerHTML =
+        '<div class="head"><div><h1>Receipt</h1><div class="muted small">No. ' + esc(p.id.slice(0, 8).toUpperCase()) + ' · ' + esc(date) + '</div></div><div class="biz"><b>' + esc(o.name) + '</b>Passport &amp; visa photos</div></div>' +
+        '<table><tr><th>Client</th><td>' + esc(c ? c.name : p.applicantName || "—") + (c && (c.phone || c.email) ? '<br><span class="muted small">' + esc([c.phone, c.email].filter(Boolean).join(" · ")) + '</span>' : '') + '</td></tr>' +
+        '<tr><th>Service</th><td>' + esc(p.programmeLabel) + ' — passport/visa photo, digital file and print sheet</td></tr>' +
+        '<tr><th>Amount</th><td class="total">' + esc(amount) + '</td></tr>' +
+        '<tr><th>Status</th><td>' + (p.salePaid === true ? '<span class="paid yes">Paid</span>' : p.salePaid === false ? '<span class="paid no">Payment due</span>' : '—') + '</td></tr></table>' +
+        '<p class="foot">Amount shown as recorded by the business. Taxes, if any, are included unless stated otherwise. Photo files are kept for 30 days. Generated with PassportLens.</p>';
+    });
+  })();
+  </script>
+</body>
+</html>

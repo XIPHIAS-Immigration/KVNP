@@ -1,154 +1,87 @@
-# KVNP Holdings Inc Passport Photo Studio
+# PassportLens
 
-A Python-backed passport and visa photo preparation studio.
+Passport and visa photo software for Canada: 35+ programmes with the issuing
+authority's published rules built in, a plain "Photo OK / Retake" verdict, clean
+background and print sheets, plus a small CRM for the businesses that use it.
+Built and operated by KVNP Holdings Inc.
 
 ## Run locally
 
-Serve the studio with npm:
-
 ```powershell
-npm run dev
+npm run dev          # starts server.py on http://localhost:4173
 ```
 
-Then open:
+No `npm install` is needed. Python 3.11+ with the packages in
+`requirements.txt` must be installed. The first start downloads the small
+MediaPipe models into `models/`. Copy `.env.example` to `.env` to change
+settings; without a `.env` the app runs with payments disabled, which lets you
+create accounts directly from `/api/auth/signup` for testing.
 
-```text
-http://localhost:4173
-```
+## Pages
 
-No `npm install` is required. The script starts `server.py`, which serves the browser UI and runs the Python MediaPipe processor.
+| Path | What it is |
+|------|------------|
+| `/` and `/us` | Marketing landing page for Canada / the United States (UPS-style brown+gold theme, anime.js motion) |
+| `/app` | The 5-step studio: programme → photo → result → adjust → download |
+| `/app?guest` | Free demo on bundled sample portraits (no uploads, no downloads) |
+| `/pricing` | Plans: One photo CAD 9.99 / USD 7.99, Silver CAD 100 (USD 75)/mo or CAD 999 (USD 749)/yr, Gold, Platinum — CAD/USD toggle |
+| `/activate` | After Stripe Checkout: choose a password, account is created |
+| `/account` | Plan, billing portal, team logins, recent photos |
+| `/crm` | Clients & photos for business plans: sales, paid/unpaid, receipts, CSV |
+| `/admin` | Operations: businesses (create Gold/Platinum + invite owner), users, enquiries, traffic |
+| `/studio-advanced` | The full technical studio (admins only) |
+| `/requirements`, `/requirements/<slug>` | SEO pages generated from the rules |
+| `/for/<audience>` | SEO pages for studios, consultants, pharmacies, print shops |
+| `/sitemap.xml`, `/robots.txt` | For search engines |
 
-## Current scope
+## Plans and access
 
-- accounts: sign up / sign in / guest, Argon2 passwords, opaque revocable sessions
-- customer workspace with named applications, purchase history, entitlements,
-  re-download status, and support enquiries
-- role-protected operations portal with revenue, order, download, funnel, and
-  enquiry reporting
-- PostgreSQL-ready transactional product schema with one-time import of legacy
-  SQLite users; local development falls back to `data/platform.db`
-- payment-provider boundary plus a locked mock checkout for entitlement testing;
-  Slice remains disabled until merchant UAT credentials are supplied
-- premium app-shell UI (sidebar nav, top bar, login screen)
-- image upload (multi-file batch queue)
-- camera capture
-- country and programme rule profiles
-- Python MediaPipe Face Landmarker / FaceMesh processing
-- Identity-preserving auto-correction: auto-straighten a tilted head and
-  normalize exposure / white balance, with every applied correction disclosed
-  in the result and report (geometry + tone only; the face is never altered)
-- Layered background matting: BiRefNet Portrait for quality still-image alpha,
-  optional MODNet for lighter CPU inference, and MediaPipe only as the fast
-  fallback/live-guidance engine (see `docs/matting.md`)
-- Honest matte diagnostics (stray islands, enclosed holes, shoulder coverage)
-- Before/after comparison slider, draggable, on every generated photo
-- Batch queue: upload several photos, step through them, per-job status dots
-- Print sheets: tile the photo onto 4x6 / 5x7 / A4 / Letter with DPI + copies
-  controls and cut guides (e.g. six 2x2 in photos on a 4x6) via `/api/print-sheet`
-- Capture-quality gates measured on the ORIGINAL photo (corrections never mask a
-  retake-worthy capture); strict "no alteration" programmes flag applied edits
-- OpenCV contrib studio enhancement pipeline
-- optional FSRCNN super-resolution refinement when the model is available
-- automatic crop and head-position calculation
-- clean background replacement
-- white balance, denoise, color, contrast, and sharpness enhancement
-- programme-specific JPEG compression targets
-- manual head-position override
-- pose, expression, quality, background, and file-size checks
-- JPEG export
-- JSON validation report
+- **One photo** (individual): Stripe one-time payment → 1 photo credit. The first
+  download of a photo uses the credit; that photo can be re-downloaded for 30 days.
+- **Silver**: Stripe subscription (monthly/yearly). A one-login business is created
+  automatically; unlimited photos and the CRM.
+- **Gold / Platinum**: sold by contact form. Create the business in `/admin`, which
+  emails the owner an invitation. Owners invite staff (10 logins for Gold,
+  unlimited for Platinum).
+- The photo engine (`/api/process`) requires a signed-in account with an active
+  plan or a credit; guests can only run the bundled demo portraits.
+- Every programme allows background clean-up, brightness and straightening
+  (the face is never altered). Set `KVNP_STRICT_POLICY=true` to restore the
+  old per-country validation-only locks.
 
-The first Python backend start downloads official MediaPipe model files into `models/` if they are missing. The checker compares images against published requirements encoded in `src/rules.js`. It does not claim official government approval.
+## Code map
+
+- `server.py` — FastAPI app: photo pipeline (MediaPipe + OpenCV + optional BiRefNet), auth, Stripe, downloads.
+- `kvnp_platform.py` — database models and queries (SQLite locally, PostgreSQL in production).
+- `kvnp_business.py` — organisations, seats, invites, photo credits, CRM.
+- `kvnp_routes.py` — team, CRM, admin and SEO page routes.
+- `kvnp_payments.py` — Stripe gateway (Silver monthly/yearly, single photo, optional Stripe Tax).
+- `kvnp_mail.py` — SMTP email (enquiry alerts, invitations, welcome).
+- `kvnp_pages.py` — server-rendered requirement and audience pages.
+- `src/rules.js` ↔ `data/profiles.json` — the programme rules (keep in sync with `tools/sync_rules.py`).
+- `studio.html` + `src/studio.js` — the simple studio; `index.html` + `src/app.js` — the advanced studio.
+- `src/theme.css` — the design system (navy + gold); `src/landing.css`, `src/portal.css`, `src/studio.css`, `src/pages.css`.
 
 ## Tests
 
 ```powershell
-python -m py_compile server.py        # backend syntax check
-python tools/test_matting.py          # matting + diagnostics regression tests
-python tools/test_corrections.py      # auto-correction (straighten / tone) tests
-python tools/test_print_sheet.py      # print-sheet layout tests
-python tools/test_platform.py         # accounts, orders, entitlements, admin
-python tools/test_workflow.py         # staged browser workflow regressions
-python tools/pipeline_smoketest.py    # run the full pipeline on sample portraits
+python -m py_compile server.py kvnp_platform.py kvnp_business.py kvnp_routes.py kvnp_payments.py kvnp_mail.py kvnp_pages.py
+python tools/test_matting.py
+python tools/test_corrections.py
+python tools/test_print_sheet.py
+python tools/test_platform.py
 ```
 
-`tools/pipeline_smoketest.py` writes generated photos and overlays to
-`screenshots/smoketest/` so matte edges can be inspected by eye.
+## Deploy
 
-## Quality portrait matting
+See `docs/aws-ec2-demo.md` (Docker Compose on EC2, CPU or GPU) and
+`docs/stripe-billing.md` (Stripe prices, webhook, tax). Set the email variables
+in `.env` (AWS SES SMTP credentials work) so the contact form and invitations
+are delivered.
 
-Docker Compose downloads and checksum-verifies the BiRefNet Portrait ONNX model
-into the persistent `kvnp_models` volume before the app starts. The weight is
-not committed to Git and is not re-downloaded after ordinary rebuilds. Set
-`KVNP_QUALITY_MODEL=none` to keep a lightweight MediaPipe/MODNet-only install.
-BiRefNet's official repository is MIT licensed; retain third-party notices and
-review the exact weight provenance before a commercial release.
-
-
-## Docker / AWS demo
-
-Deployment files are included for a short EC2 demo:
-
-- `requirements-base.txt` - shared Python runtime dependencies
-- `requirements.txt` / `Dockerfile` - CPU ONNX Runtime deployment
-- `requirements-gpu.txt` / `Dockerfile.gpu` - NVIDIA CUDA deployment
-- `compose.yaml` - app + Caddy HTTPS reverse proxy
-- `compose.gpu.yaml` - GPU override for the app service
-- `compose.postgres.yaml` - PostgreSQL persistence override
-- `Caddyfile` - automatic HTTPS for the configured domain
-- `.env.example` - production environment template
-- `docs/aws-ec2-demo.md` - EC2 + GoDaddy deployment runbook
-
-For local Docker smoke testing:
-
-```powershell
-docker build -t kvnp-passport-studio .
-docker run --rm -p 4173:4173 -e HOST=0.0.0.0 -e KVNP_SESSION_SECRET=dev-secret kvnp-passport-studio
-```
-
-For the AWS demo, follow `docs/aws-ec2-demo.md`.
-
-On an NVIDIA host with the driver and NVIDIA Container Toolkit installed, run:
+Create the first administrator by signing up normally, then promoting from the
+server shell:
 
 ```bash
-docker compose -f compose.yaml -f compose.gpu.yaml up -d --build
-docker compose -f compose.yaml -f compose.gpu.yaml exec -T app \
-  python -c "import onnxruntime as ort; print(ort.get_available_providers())"
+python tools/promote_admin.py you@example.com
 ```
-
-The provider check must include `CUDAExecutionProvider`; `/api/health` reports
-the quality model inventory and the active provider after the first matte job.
-
-For the production database, set `POSTGRES_PASSWORD` and
-`KVNP_COOKIE_SECURE=true` in `.env`, then include the PostgreSQL override:
-
-```bash
-docker compose -f compose.yaml -f compose.gpu.yaml -f compose.postgres.yaml up -d --build
-```
-
-Create the administrator as an ordinary account first, then promote it from the
-server shell. This prevents a public signup from claiming an administrator email:
-
-```bash
-docker compose -f compose.yaml -f compose.gpu.yaml -f compose.postgres.yaml exec -T app \
-  python tools/promote_admin.py admin@example.com
-```
-
-Commerce defaults to `disabled`, so deployment does not expose a fake checkout.
-For local entitlement testing only, set `KVNP_PAYMENT_MODE=mock` and
-`KVNP_ALLOW_MOCK_PAYMENTS=true`. Keep `KVNP_COMMERCE_ENFORCED=false` until a real
-provider webhook can grant entitlements.
-
-## Current starter programmes
-
-- United States passport
-- United States visa / DS-160
-- United States diversity visa
-- United Kingdom passport digital upload
-- India passport ICAO upload
-- India visa online / e-Visa
-- Canada passport digital photo
-- Canada temporary resident visa
-- Australia passport
-- France / Schengen visa
-

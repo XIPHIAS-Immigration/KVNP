@@ -40,6 +40,8 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(24), default="customer", nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(24), default="active", nullable=False)
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    org_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    org_role: Mapped[str | None] = mapped_column(String(16))
     created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
     updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
     last_login_at: Mapped[int | None] = mapped_column(BigInteger)
@@ -71,6 +73,13 @@ class Project(Base):
     summary_json: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
     created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
     updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    org_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    client_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    credit_id: Mapped[str | None] = mapped_column(String(36))
+    verdict: Mapped[str | None] = mapped_column(String(32))
+    sale_amount_minor: Mapped[int | None] = mapped_column(Integer)
+    sale_currency: Mapped[str | None] = mapped_column(String(3))
+    sale_paid: Mapped[bool | None] = mapped_column(Boolean)
 
 
 class Order(Base):
@@ -141,6 +150,8 @@ class CheckoutClaim(Base):
     provider_session_id: Mapped[str | None] = mapped_column(String(160), unique=True, index=True)
     provider_customer_id: Mapped[str | None] = mapped_column(String(160), index=True)
     provider_subscription_id: Mapped[str | None] = mapped_column(String(160), index=True)
+    provider_payment_id: Mapped[str | None] = mapped_column(String(160), index=True)
+    product: Mapped[str | None] = mapped_column(String(32))
     email: Mapped[str | None] = mapped_column(String(320), index=True)
     status: Mapped[str] = mapped_column(String(32), default="created", nullable=False, index=True)
     created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -244,6 +255,9 @@ class Enquiry(Base):
     email: Mapped[str] = mapped_column(String(320), nullable=False, index=True)
     subject: Mapped[str] = mapped_column(String(200), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
+    business: Mapped[str | None] = mapped_column(String(160))
+    phone: Mapped[str | None] = mapped_column(String(40))
+    tier: Mapped[str | None] = mapped_column(String(32))
     status: Mapped[str] = mapped_column(String(24), default="new", nullable=False, index=True)
     admin_note: Mapped[str] = mapped_column(Text, default="", nullable=False)
     created_at: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
@@ -273,6 +287,7 @@ Index("ix_checkout_claims_status_expires", CheckoutClaim.status, CheckoutClaim.e
 ENGINE = None
 SessionLocal = None
 DATABASE_URL = None
+ARTIFACT_TTL_SECONDS = int(os.getenv("KVNP_PHOTO_RETENTION_DAYS", "30")) * 24 * 60 * 60
 
 
 def _normalise_database_url(url: str) -> str:
@@ -523,7 +538,7 @@ def _checkout_token_digest(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def create_checkout_claim(user_id: int | None = None, ttl_seconds: int = 48 * 60 * 60) -> tuple[CheckoutClaim, str]:
+def create_checkout_claim(user_id: int | None = None, ttl_seconds: int = 48 * 60 * 60, product: str = "subscription") -> tuple[CheckoutClaim, str]:
     timestamp = now_ts()
     token = secrets.token_urlsafe(32)
     claim = CheckoutClaim(
@@ -531,6 +546,7 @@ def create_checkout_claim(user_id: int | None = None, ttl_seconds: int = 48 * 60
         token_hash=_checkout_token_digest(token),
         user_id=user_id,
         provider="stripe",
+        product=str(product or "subscription")[:32],
         status="created",
         created_at=timestamp,
         updated_at=timestamp,
@@ -560,6 +576,7 @@ def mark_checkout_paid(
     customer_id: str | None,
     subscription_id: str | None,
     email: str | None,
+    payment_id: str | None = None,
 ) -> CheckoutClaim:
     with session_scope() as session:
         claim = session.get(CheckoutClaim, claim_id)
@@ -568,6 +585,7 @@ def mark_checkout_paid(
         if claim.provider_session_id and claim.provider_session_id != session_id:
             raise ValueError("checkout_session")
         claim.provider_session_id = session_id[:160]
+        claim.provider_payment_id = str(payment_id)[:160] if payment_id else claim.provider_payment_id
         claim.provider_customer_id = str(customer_id)[:160] if customer_id else claim.provider_customer_id
         claim.provider_subscription_id = (
             str(subscription_id)[:160] if subscription_id else claim.provider_subscription_id
@@ -1036,7 +1054,7 @@ def register_artifact(user_id: int, project_id: str, storage_path: str, file_for
                 bytes=size,
                 created_at=timestamp,
                 updated_at=timestamp,
-                expires_at=timestamp + (24 * 60 * 60),
+                expires_at=timestamp + ARTIFACT_TTL_SECONDS,
             )
             session.add(artifact)
         else:
@@ -1044,7 +1062,7 @@ def register_artifact(user_id: int, project_id: str, storage_path: str, file_for
             artifact.format = file_format[:24]
             artifact.bytes = size
             artifact.updated_at = timestamp
-            artifact.expires_at = timestamp + (24 * 60 * 60)
+            artifact.expires_at = timestamp + ARTIFACT_TTL_SECONDS
         session.flush()
         return artifact
 
@@ -1112,6 +1130,9 @@ def record_event(name: str, user_id: int | None = None, project_id: str | None =
         "paid_account_activated",
         "download_completed",
         "enquiry_created",
+        "photo_saved_to_client",
+        "invite_sent",
+        "invite_accepted",
     }
     if name not in allowed:
         raise ValueError("event_name")
@@ -1129,7 +1150,7 @@ def record_event(name: str, user_id: int | None = None, project_id: str | None =
         )
 
 
-def create_enquiry(user_id: int | None, name: str, email: str, subject: str, message: str) -> Enquiry:
+def create_enquiry(user_id: int | None, name: str, email: str, subject: str, message: str, business: str = "", phone: str = "", tier: str = "") -> Enquiry:
     timestamp = now_ts()
     item = Enquiry(
         id=str(uuid.uuid4()),
@@ -1138,6 +1159,9 @@ def create_enquiry(user_id: int | None, name: str, email: str, subject: str, mes
         email=email.strip().lower()[:320],
         subject=subject.strip()[:200],
         message=message.strip()[:5000],
+        business=(business or "").strip()[:160] or None,
+        phone=(phone or "").strip()[:40] or None,
+        tier=(tier or "").strip()[:32] or None,
         status="new",
         admin_note="",
         created_at=timestamp,
@@ -1339,6 +1363,9 @@ def enquiry_dict(item: Enquiry) -> dict:
         "email": item.email,
         "subject": item.subject,
         "message": item.message,
+        "business": item.business,
+        "phone": item.phone,
+        "tier": item.tier,
         "status": item.status,
         "adminNote": item.admin_note,
         "createdAt": item.created_at,

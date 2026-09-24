@@ -16,6 +16,7 @@ import time
 import traceback
 import urllib.request
 import uuid
+import threading
 from pathlib import Path
 
 import cv2
@@ -25,13 +26,17 @@ import uvicorn
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision
 from PIL import Image
+from starlette.concurrency import run_in_threadpool
 
+import kvnp_business as business  # noqa: F401  (registers the extra tables before initialise)
+import kvnp_mail as mail
 import kvnp_platform as platform
+import kvnp_routes
 from kvnp_payments import gateway_for
 
 
@@ -186,6 +191,21 @@ birefnet_unavailable = False
 birefnet_provider = None
 HAS_GUIDED_FILTER = hasattr(cv2, "ximgproc") and hasattr(getattr(cv2, "ximgproc", None), "guidedFilter")
 _logged_warnings = set()
+# MediaPipe task objects are not thread-safe; jobs run in a thread pool so the
+# server keeps answering while photos process, and this lock serialises only
+# the few milliseconds spent inside MediaPipe itself.
+MP_LOCK = threading.Lock()
+MAX_CONCURRENT_JOBS = max(1, int(os.getenv("KVNP_MAX_CONCURRENT_JOBS", "2")))
+JOB_LIMITER = threading.BoundedSemaphore(MAX_CONCURRENT_JOBS)
+# Editing policy: by default every programme may have its background cleaned,
+# lighting evened and tilt straightened (the face is never altered). Set
+# KVNP_STRICT_POLICY=true to restore the old per-country validation-only locks.
+STRICT_POLICY = os.getenv("KVNP_STRICT_POLICY", "false").strip().lower() in {"1", "true", "yes"}
+
+
+def run_job(function, *args, **kwargs):
+    with JOB_LIMITER:
+        return function(*args, **kwargs)
 
 
 def log_warn(message):
@@ -291,7 +311,7 @@ def resolve_profile(client_profile):
     return profile, meta
 
 
-app = FastAPI(title="KVNP Holdings Inc Passport Photo Studio")
+app = FastAPI(title="PassportLens")
 app.mount("/src", StaticFiles(directory=ROOT / "src"), name="src")
 app.mount("/assets", StaticFiles(directory=ROOT / "assets"), name="assets")
 app.mount("/screenshots", StaticFiles(directory=ROOT / "screenshots"), name="screenshots")
@@ -312,6 +332,24 @@ PBKDF2_ROUNDS = 200_000
 PASSWORD_HASHER = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=2)
 COOKIE_SECURE = os.getenv("KVNP_COOKIE_SECURE", "false").strip().lower() in {"1", "true", "yes"}
 DATABASE_BACKEND = platform.initialise(DATA_DIR)
+SCHEMA_ADDED = business.ensure_schema(platform.ENGINE)
+if SCHEMA_ADDED:
+    print(f"[kvnp] database columns added: {', '.join(SCHEMA_ADDED)}", file=sys.stderr, flush=True)
+PRICE_SILVER_MONTHLY_MINOR = int(os.getenv("KVNP_PRICE_SILVER_MONTHLY_MINOR", "10000"))
+PRICE_SILVER_YEARLY_MINOR = int(os.getenv("KVNP_PRICE_SILVER_YEARLY_MINOR", "99900"))
+PRICE_SINGLE_MINOR = int(os.getenv("KVNP_PRICE_SINGLE_MINOR", "999"))
+PRICES = {
+    "CAD": {"single": PRICE_SINGLE_MINOR, "monthly": PRICE_SILVER_MONTHLY_MINOR, "yearly": PRICE_SILVER_YEARLY_MINOR},
+    "USD": {
+        "single": int(os.getenv("KVNP_PRICE_SINGLE_USD_MINOR", "799")),
+        "monthly": int(os.getenv("KVNP_PRICE_SILVER_MONTHLY_USD_MINOR", "7500")),
+        "yearly": int(os.getenv("KVNP_PRICE_SILVER_YEARLY_USD_MINOR", "74900")),
+    },
+}
+RATE_LIMITS = {}
+RATE_LIMIT_PAID = int(os.getenv("KVNP_RATE_LIMIT_PAID", "120"))
+RATE_LIMIT_GUEST = int(os.getenv("KVNP_RATE_LIMIT_GUEST", "30"))
+DEMO_DIR = ROOT / "assets" / "demo"
 PAYMENT_MODE = os.getenv("KVNP_PAYMENT_MODE", "disabled").strip().lower()
 PAYMENT_GATEWAY = gateway_for(PAYMENT_MODE)
 ALLOW_MOCK_PAYMENTS = os.getenv("KVNP_ALLOW_MOCK_PAYMENTS", "false").strip().lower() in {"1", "true", "yes"}
@@ -435,7 +473,7 @@ async def auth_signup(request: Request):
         return JSONResponse(
             {
                 "ok": False,
-                "error": "Complete membership payment before creating your KVNP account.",
+                "error": "Complete membership payment before creating your PassportLens account.",
                 "action": "/pricing",
             },
             status_code=403,
@@ -497,37 +535,114 @@ def auth_me(request: Request):
         "ok": True,
         "user": platform.user_dict(identity[0]) if identity else None,
         "csrfToken": identity[1].csrf_token if identity else None,
+        "plan": business.plan_for_user(identity[0].id) if identity else None,
+        "commerceMode": PAYMENT_MODE,
     }
+
+
+# ============================================================
+# Access control for the photo engine
+# ============================================================
+def plan_state(identity):
+    return business.plan_for_user(identity[0].id) if identity else None
+
+
+def enforce_rate_limit(request, identity, limit):
+    key = f"user:{identity[0].id}" if identity else f"ip:{request.client.host if request.client else 'unknown'}"
+    cutoff = time.time() - 600
+    hits = [item for item in RATE_LIMITS.get(key, []) if item > cutoff]
+    if len(hits) >= limit:
+        raise HTTPException(status_code=429, detail="Too many photos in a short time. Please wait a few minutes.")
+    hits.append(time.time())
+    RATE_LIMITS[key] = hits
+    if len(RATE_LIMITS) > 5000:
+        for stale in [k for k, v in RATE_LIMITS.items() if not v or v[-1] < cutoff]:
+            RATE_LIMITS.pop(stale, None)
+
+
+def demo_source_path(name):
+    """Resolve a guest-demo sample by file name; None when it is not one of ours."""
+    candidate = Path(str(name or "")).name
+    if not candidate or not candidate.lower().endswith(".jpg"):
+        return None
+    path = (DEMO_DIR / candidate).resolve()
+    if DEMO_DIR.resolve() not in path.parents or not path.is_file():
+        return None
+    return path
+
+
+def require_processing_access(request, demo_name=None):
+    """Signed-in users need a plan or a photo credit; guests may only run the
+    bundled demo portraits. Returns (identity, plan, demo_path)."""
+    identity = current_identity(request)
+    plan = plan_state(identity)
+    demo_path = demo_source_path(demo_name) if demo_name else None
+    if identity and plan and plan["canProcess"]:
+        enforce_rate_limit(request, identity, RATE_LIMIT_PAID)
+        return identity, plan, demo_path
+    if demo_path is not None:
+        enforce_rate_limit(request, identity, RATE_LIMIT_GUEST)
+        return identity, plan, demo_path
+    if identity:
+        raise HTTPException(
+            status_code=402,
+            detail="Your account has no active plan or photo credit. Choose a plan to make photos.",
+        )
+    raise HTTPException(status_code=401, detail="Sign in to make photos, or try the free demo portraits.")
+
+
+def require_download_access(request):
+    identity = current_identity(request)
+    plan = plan_state(identity)
+    if not identity:
+        raise HTTPException(status_code=401, detail="Sign in to download files.")
+    if not plan or not plan["canProcess"]:
+        raise HTTPException(status_code=402, detail="An active plan or photo credit is required to download files.")
+    enforce_rate_limit(request, identity, RATE_LIMIT_PAID)
+    return identity, plan
+
+
+def download_access_for_project(identity, plan, project_id):
+    """Unlimited plans always pass; single-photo buyers spend one credit per project."""
+    if plan.get("unlimited"):
+        return True
+    if platform.has_download_access(identity[0].id, project_id):
+        return True
+    if business.project_covered_by_credit(identity[0].id, project_id):
+        return True
+    return business.consume_credit_for_project(identity[0].id, project_id)
 
 
 def commerce_config(user=None):
     user_id = (user.get("id") if isinstance(user, dict) else user.id) if user else None
     subscription = platform.subscription_dict(platform.subscription_for_user(user_id)) if user_id else platform.subscription_dict(None)
     stripe_enabled = PAYMENT_MODE == "stripe" and PAYMENT_GATEWAY.configured
+    plan = business.plan_for_user(user_id) if user_id else None
     return {
         "mode": PAYMENT_MODE,
-        "enabled": PAYMENT_MODE in {"mock", "slice"} or stripe_enabled,
+        "enabled": stripe_enabled,
         "configured": PAYMENT_GATEWAY.configured,
-        "enforced": COMMERCE_ENFORCED,
-        "legacyCurrency": APPLICATION_CURRENCY,
-        "mockCompletionAvailable": PAYMENT_MODE == "mock" and ALLOW_MOCK_PAYMENTS,
-        "product": {
-            "code": "studio-membership" if PAYMENT_MODE == "stripe" else "application-pack",
-            "label": "KVNP Studio membership" if PAYMENT_MODE == "stripe" else "Application photo pack",
-            "amountMinor": SUBSCRIPTION_PRICE_MINOR if PAYMENT_MODE == "stripe" else APPLICATION_PRICE_MINOR,
-            "currency": "CAD" if PAYMENT_MODE == "stripe" else APPLICATION_CURRENCY,
-            "priceLabel": SUBSCRIPTION_PRICE_LABEL if PAYMENT_MODE == "stripe" else None,
-            "recurring": PAYMENT_MODE == "stripe",
-            "includes": [
-                "Country and programme presets",
-                "JPEG, PNG, PDF and print sheets",
-                "Background and tone studio tools",
-                "Photo audit reports",
-                "Unlimited prepared projects while active",
-            ],
+        "enforced": True,
+        "currency": "CAD",
+        "currencies": [c.upper() for c in getattr(PAYMENT_GATEWAY, "currencies", ["cad"])] if PAYMENT_MODE == "stripe" else ["CAD", "USD"],
+        "prices": PRICES,
+        "taxNote": "Prices exclude applicable GST/HST.",
+        "plans": {
+            "single": {"code": "single-photo", "label": "One photo", "amountMinor": PRICE_SINGLE_MINOR, "recurring": False},
+            "silver": {
+                "code": "studio-membership",
+                "label": "Silver",
+                "monthlyMinor": PRICE_SILVER_MONTHLY_MINOR,
+                "yearlyMinor": PRICE_SILVER_YEARLY_MINOR,
+                "recurring": True,
+                "seatLimit": 1,
+            },
+            "gold": {"code": "gold", "label": "Gold", "contact": True, "seatLimit": 10},
+            "platinum": {"code": "platinum", "label": "Platinum", "contact": True, "seatLimit": 0},
         },
         "signedIn": bool(user),
         "subscription": subscription,
+        "plan": plan,
     }
 
 
@@ -539,13 +654,21 @@ def get_commerce_config(request: Request):
 @app.get("/api/account/summary")
 def account_summary(request: Request):
     identity = require_identity(request)
+    plan = business.plan_for_user(identity[0].id)
+    org = business.org_for_user(identity[0].id)
     return {
         "ok": True,
         "user": platform.user_dict(identity[0]),
+        "plan": plan,
+        "org": business.org_dict(org, business.seats_used(org.id)) if org else None,
+        "members": business.org_members(org.id) if org else [],
+        "invites": business.list_invites(org.id) if org and identity[0].org_role == "owner" else [],
         "projects": platform.list_projects(identity[0].id),
         "orders": platform.list_orders(identity[0].id),
         "subscription": platform.subscription_dict(platform.subscription_for_user(identity[0].id)),
         "commerce": commerce_config(identity[0]),
+        "billingPortal": PAYMENT_MODE == "stripe" and bool(platform.billing_customer_for_user(identity[0].id)),
+        "mailConfigured": mail.configured(),
     }
 
 
@@ -628,9 +751,9 @@ def project_artifact_download(project_id: str, request: Request):
     project = platform.get_owned_project(identity[0].id, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found.")
-    access = platform.has_download_access(identity[0].id, project_id)
-    if COMMERCE_ENFORCED and not access:
-        raise HTTPException(status_code=402, detail="An active KVNP membership is required for prepared downloads.")
+    access = download_access_for_project(identity, business.plan_for_user(identity[0].id), project_id)
+    if not access:
+        raise HTTPException(status_code=402, detail="An active plan or a photo credit is required for prepared downloads.")
     artifact = platform.get_artifact(identity[0].id, project_id)
     if not artifact:
         raise HTTPException(status_code=404, detail="No saved prepared file is available for this application.")
@@ -656,27 +779,33 @@ def safe_provider_error(error: Exception) -> str:
     return value[:500]
 
 
-def start_stripe_subscription(identity, request: Request, project_id: str | None = None):
+def start_stripe_subscription(identity, request: Request, project_id: str | None = None, product: str = "silver", period: str = "monthly", currency: str = "cad"):
     if PAYMENT_MODE != "stripe" or not PAYMENT_GATEWAY.configured:
         return JSONResponse({"ok": False, "error": "Stripe checkout is not configured."}, status_code=503)
     user = identity[0] if identity else None
-    if user and platform.active_subscription(user.id):
+    product = "single" if product == "single" else "silver"
+    period = "yearly" if period == "yearly" else "monthly"
+    currency = "usd" if str(currency).lower() == "usd" else "cad"
+    if user and product == "silver" and platform.active_subscription(user.id):
         return JSONResponse(
-            {"ok": False, "error": "Your KVNP membership is already active. Manage it from your account."},
+            {"ok": False, "error": "Your PassportLens membership is already active. Manage it from your account."},
             status_code=409,
         )
     base_url = public_url(request)
-    claim, claim_token = platform.create_checkout_claim(user.id if user else None, CHECKOUT_CLAIM_TTL)
+    claim, claim_token = platform.create_checkout_claim(user.id if user else None, CHECKOUT_CLAIM_TTL, product=product)
     try:
-        checkout = PAYMENT_GATEWAY.create_subscription_checkout(
+        checkout = PAYMENT_GATEWAY.create_checkout_for(
+            product,
+            period,
             platform.user_dict(user) if user else None,
             (
-                f"{base_url}/account?checkout=success&session_id={{CHECKOUT_SESSION_ID}}"
+                f"{base_url}/account?checkout=success&session_id={{CHECKOUT_SESSION_ID}}&product={product}"
                 if user
-                else f"{base_url}/activate?session_id={{CHECKOUT_SESSION_ID}}"
+                else f"{base_url}/activate?session_id={{CHECKOUT_SESSION_ID}}&product={product}"
             ),
             f"{base_url}/pricing?checkout=cancelled",
             claim.id,
+            currency,
         )
         platform.attach_checkout_session(claim.id, checkout.provider_order_id)
     except Exception as error:
@@ -692,10 +821,13 @@ def start_stripe_subscription(identity, request: Request, project_id: str | None
         "checkout_started",
         user.id if user else None,
         project_id,
-        metadata={"provider": "stripe", "sessionId": checkout.provider_order_id, "claimId": claim.id},
+        metadata={"provider": "stripe", "sessionId": checkout.provider_order_id, "claimId": claim.id, "product": product, "period": period, "currency": currency},
     )
     response = JSONResponse({
         "ok": True,
+        "product": product,
+        "period": period,
+        "currency": currency,
         "checkout": {
             "provider": checkout.provider,
             "status": checkout.status,
@@ -724,8 +856,16 @@ async def billing_checkout(request: Request):
     else:
         origin = request.headers.get("origin")
         if origin and origin.rstrip("/") != public_url(request):
-            raise HTTPException(status_code=403, detail="Checkout must be started from the KVNP website.")
-    return start_stripe_subscription(identity, request)
+            raise HTTPException(status_code=403, detail="Checkout must be started from the PassportLens website.")
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    return start_stripe_subscription(
+        identity, request, None, str(body.get("product") or body.get("plan") or "silver"), str(body.get("period") or "monthly"), str(body.get("currency") or "cad")
+    )
 
 
 def stripe_id(value) -> str | None:
@@ -747,7 +887,8 @@ def refresh_checkout_claim(token: str | None, session_id: str):
     metadata = source.get("metadata") or {}
     if metadata.get("kvnp_checkout_id") != claim.id:
         raise ValueError("checkout_claim_mismatch")
-    if source.get("mode") != "subscription":
+    single = (claim.product or "subscription") == "single"
+    if source.get("mode") != ("payment" if single else "subscription"):
         raise ValueError("checkout_mode")
     if source.get("payment_status") not in {"paid", "no_payment_required"}:
         return claim
@@ -757,6 +898,7 @@ def refresh_checkout_claim(token: str | None, session_id: str):
         stripe_id(source.get("customer")),
         stripe_subscription_id(source),
         checkout_email(source),
+        stripe_id(source.get("payment_intent")) or str(source.get("id") or ""),
     )
 
 
@@ -791,6 +933,7 @@ def billing_activation_status(request: Request):
     return {
         "ok": True,
         "status": claim.status,
+        "product": claim.product or "subscription",
         "paid": claim.status == "paid",
         "claimed": claim.status == "claimed",
         "email": masked_email(claim.email),
@@ -821,9 +964,12 @@ async def billing_activate(request: Request):
             flush=True,
         )
         return JSONResponse({"ok": False, "error": "Payment verification is temporarily unavailable."}, status_code=503)
-    if not claim or claim.status != "paid" or not claim.email or not claim.provider_subscription_id:
+    single = bool(claim and (claim.product or "subscription") == "single")
+    if not claim or claim.status != "paid" or not claim.email or not (
+        claim.provider_payment_id if single else claim.provider_subscription_id
+    ):
         return JSONResponse(
-            {"ok": False, "error": "Stripe has not confirmed this subscription yet. Try again in a few seconds."},
+            {"ok": False, "error": "Stripe has not confirmed this payment yet. Try again in a few seconds."},
             status_code=409,
         )
 
@@ -833,7 +979,7 @@ async def billing_activate(request: Request):
         if not verify_user_password(user, password):
             record_login_failure(attempt_key)
             return JSONResponse(
-                {"ok": False, "error": "That email already has a KVNP account. Enter its existing password."},
+                {"ok": False, "error": "That email already has a PassportLens account. Enter its existing password."},
                 status_code=401,
             )
         AUTH_FAILURES.pop(attempt_key, None)
@@ -847,6 +993,20 @@ async def billing_activate(request: Request):
                 {"ok": False, "error": "An account with this payment email already exists. Refresh and sign in."},
                 status_code=409,
             )
+
+    if single:
+        try:
+            business.grant_credit(user.id, claim.provider_session_id or claim.provider_payment_id, 1)
+            platform.complete_checkout_claim(token, session_id, user.id)
+        except Exception as error:
+            print(f"[kvnp] Single-photo activation failed: {type(error).__name__}: {safe_provider_error(error)}", file=sys.stderr, flush=True)
+            return JSONResponse({"ok": False, "error": "Your payment is safe, but account setup needs another attempt."}, status_code=503)
+        platform.touch_login(user.id)
+        platform.record_event("paid_account_activated", user.id, metadata={"provider": "stripe", "product": "single-photo"})
+        mail.send_welcome(user.email, user.name or "there", "single photo credit", f"{public_url(request)}/app")
+        response = authenticated_response(user)
+        response.delete_cookie(CHECKOUT_CLAIM_COOKIE, path="/")
+        return response
 
     try:
         subscription = PAYMENT_GATEWAY.retrieve_subscription(claim.provider_subscription_id)
@@ -863,6 +1023,7 @@ async def billing_activate(request: Request):
             )
             platform.upsert_stripe_invoice(user.id, latest_invoice, invoice_status)
         platform.complete_checkout_claim(token, session_id, user.id)
+        business.ensure_silver_org(user.id)
     except Exception as error:
         print(
             f"[kvnp] Paid account activation failed: {type(error).__name__}: {safe_provider_error(error)}",
@@ -877,6 +1038,7 @@ async def billing_activate(request: Request):
         user.id,
         metadata={"provider": "stripe", "subscriptionId": saved.provider_subscription_id},
     )
+    mail.send_welcome(user.email, user.name or "there", "Silver membership", f"{public_url(request)}/app")
     response = authenticated_response(user)
     response.delete_cookie(CHECKOUT_CLAIM_COOKIE, path="/")
     return response
@@ -926,7 +1088,23 @@ def process_stripe_event(event: dict) -> bool:
     supplied_user_id = source_metadata.get("kvnp_user_id")
     checkout_claim_id = source_metadata.get("kvnp_checkout_id")
     if event_type == "checkout.session.completed":
-        if source.get("mode") != "subscription" or source.get("payment_status") not in {"paid", "no_payment_required"}:
+        if source.get("payment_status") not in {"paid", "no_payment_required"}:
+            return False
+        if source.get("mode") == "payment":
+            # One-time single-photo purchase.
+            if source_metadata.get("kvnp_product") != "single-photo":
+                return False
+            payment_id = stripe_id(source.get("payment_intent")) or str(source.get("id") or "")
+            if checkout_claim_id:
+                platform.mark_checkout_paid(
+                    str(checkout_claim_id), str(source.get("id") or ""), stripe_id(source.get("customer")), None, checkout_email(source), payment_id
+                )
+            buyer = platform.resolve_billing_user(None, source.get("client_reference_id") or supplied_user_id)
+            if buyer:
+                business.grant_credit(buyer, str(source.get("id") or payment_id), 1)
+                platform.record_event("payment_completed", buyer, metadata={"provider": "stripe", "product": "single-photo"})
+            return True
+        if source.get("mode") != "subscription":
             return False
         supplied_user_id = source.get("client_reference_id") or supplied_user_id
         subscription_id = stripe_subscription_id(source)
@@ -967,6 +1145,8 @@ def process_stripe_event(event: dict) -> bool:
         # possession of the browser claim and chooses account credentials.
         return bool(checkout_claim_id)
     saved = platform.upsert_stripe_subscription(user_id, subscription)
+    if saved.status in {"active", "trialing"}:
+        business.ensure_silver_org(user_id)
     if event_type == "invoice.paid":
         platform.upsert_stripe_invoice(user_id, source, "paid")
     elif event_type == "invoice.payment_failed":
@@ -1071,10 +1251,11 @@ async def authorize_download(request: Request):
     project = platform.get_owned_project(identity[0].id, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found.")
-    entitled = platform.has_download_access(identity[0].id, project_id)
-    if COMMERCE_ENFORCED and file_kind != "original" and not entitled:
+    plan = business.plan_for_user(identity[0].id)
+    entitled = download_access_for_project(identity, plan, project_id) if file_kind != "original" else True
+    if not entitled:
         return JSONResponse(
-            {"ok": False, "error": "An active KVNP membership is required for prepared downloads."},
+            {"ok": False, "error": "An active plan or a photo credit is required to download prepared files.", "action": "/pricing"},
             status_code=402,
         )
     platform.record_download(
@@ -1086,7 +1267,7 @@ async def authorize_download(request: Request):
         bool(body.get("warningAcknowledged")),
     )
     platform.record_event("download_completed", identity[0].id, project_id, metadata={"fileKind": file_kind})
-    return {"ok": True, "entitled": entitled, "enforced": COMMERCE_ENFORCED}
+    return {"ok": True, "entitled": entitled, "enforced": True, "credits": business.credits_remaining(identity[0].id)}
 
 
 @app.post("/api/events")
@@ -1127,9 +1308,17 @@ async def enquiries_create(request: Request):
         or len(message) > 5000
     ):
         return JSONResponse({"ok": False, "error": "Complete every enquiry field."}, status_code=422)
-    item = platform.create_enquiry(identity[0].id if identity else None, name, email, subject, message)
-    platform.record_event("enquiry_created", identity[0].id if identity else None, metadata={"enquiryId": item.id})
-    return {"ok": True, "reference": item.id[:8].upper()}
+    business_name = str(body.get("business") or "").strip()[:160]
+    phone = str(body.get("phone") or "").strip()[:40]
+    tier = str(body.get("tier") or "").strip()[:32]
+    item = platform.create_enquiry(identity[0].id if identity else None, name, email, subject, message, business_name, phone, tier)
+    platform.record_event("enquiry_created", identity[0].id if identity else None, metadata={"enquiryId": item.id, "tier": tier})
+    reference = item.id[:8].upper()
+    mail.send_enquiry_notification(
+        {"name": name, "email": email, "business": business_name, "phone": phone, "tier": tier, "message": message}, reference
+    )
+    mail.send_enquiry_receipt(email, name, reference)
+    return {"ok": True, "reference": reference}
 
 
 @app.get("/api/admin/dashboard")
@@ -1157,21 +1346,28 @@ async def admin_enquiry_update(enquiry_id: str, request: Request):
 
 
 @app.get("/")
-def index():
-    landing = ROOT / "landing.html"
-    if landing.exists():
-        return FileResponse(landing)
-    return FileResponse(ROOT / "index.html")
+def index(request: Request):
+    return Response(kvnp_routes.render_landing(ROOT, "ca", public_url(request)), media_type="text/html")
+
+
+@app.get("/us")
+def index_us(request: Request):
+    return Response(kvnp_routes.render_landing(ROOT, "us", public_url(request)), media_type="text/html")
+
+
+@app.get("/ca")
+def index_ca():
+    return RedirectResponse("/", status_code=301)
 
 
 @app.get("/app")
 def app_page():
-    return FileResponse(ROOT / "index.html")
+    return FileResponse(ROOT / "studio.html")
 
 
 @app.get("/studio")
 def studio_page():
-    return FileResponse(ROOT / "index.html")
+    return FileResponse(ROOT / "studio.html")
 
 
 @app.get("/account")
@@ -1223,10 +1419,13 @@ def health():
 
 @app.post("/api/process")
 async def process_photo(
-    image: UploadFile = File(...),
+    request: Request,
+    image: UploadFile | None = File(None),
     profile: str = Form(...),
     options: str = Form("{}"),
+    demo: str = Form(""),
 ):
+    identity, plan, demo_path = require_processing_access(request, demo or None)
     try:
         try:
             profile_data = json.loads(profile)
@@ -1236,8 +1435,24 @@ async def process_photo(
             option_data = json.loads(options)
         except (ValueError, TypeError):
             raise ValueError("Invalid JSON in options.")
-        image_bytes = await image.read()
-        result = process_image(image_bytes, profile_data, option_data)
+        if demo_path is not None:
+            image_bytes = demo_path.read_bytes()
+        elif image is not None:
+            image_bytes = await image.read()
+        else:
+            raise ValueError("Add a photo first.")
+        result = await run_in_threadpool(run_job, process_image, image_bytes, profile_data, option_data)
+        result["access"] = {
+            "signedIn": bool(identity),
+            "demo": demo_path is not None,
+            "canDownload": bool(identity and plan and plan["canProcess"]),
+            "isAdmin": bool(plan and plan.get("isAdmin")),
+        }
+        if identity:
+            try:
+                platform.record_event("processing_completed", identity[0].id, metadata={"profileId": profile_data.get("id"), "decision": result.get("decision", {}).get("status")})
+            except Exception:
+                pass
         return JSONResponse(result)
     except ValueError as error:
         return JSONResponse({"ok": False, "error": str(error)}, status_code=422)
@@ -1247,9 +1462,10 @@ async def process_photo(
 
 
 @app.post("/api/analyze")
-async def analyze_output(image: UploadFile = File(...), profile: str = Form(...), options: str = Form("{}")):
+async def analyze_output(request: Request, image: UploadFile = File(...), profile: str = Form(...), options: str = Form("{}")):
     """Re-run the pixel-dependent compliance checks on an adjusted output image so
     the analysis updates live as the operator tunes the photo."""
+    require_download_access(request)
     try:
         try:
             profile_data = json.loads(profile)
@@ -1263,7 +1479,7 @@ async def analyze_output(image: UploadFile = File(...), profile: str = Form(...)
         final = decode_image(await image.read())
         background_replaced = bool(option_data.get("backgroundReplaced", True))
         output_bytes = int(option_data.get("outputBytes") or 0)
-        checks = recompute_quality_checks(final, resolved_profile, background_replaced, output_bytes)
+        checks = await run_in_threadpool(run_job, recompute_quality_checks, final, resolved_profile, background_replaced, output_bytes)
         return JSONResponse({"ok": True, "checks": checks})
     except ValueError as error:
         return JSONResponse({"ok": False, "error": str(error)}, status_code=422)
@@ -1273,14 +1489,15 @@ async def analyze_output(image: UploadFile = File(...), profile: str = Form(...)
 
 
 @app.post("/api/print-sheet")
-async def print_sheet(image: UploadFile = File(...), spec: str = Form("{}")):
+async def print_sheet(request: Request, image: UploadFile = File(...), spec: str = Form("{}")):
+    require_download_access(request)
     try:
         try:
             spec_data = json.loads(spec)
         except (ValueError, TypeError):
             raise ValueError("Invalid JSON in spec.")
         photo = decode_image(await image.read())
-        sheet, layout = build_print_sheet(photo, spec_data)
+        sheet, layout = await run_in_threadpool(run_job, build_print_sheet, photo, spec_data)
         sheet_bytes = set_jpeg_dpi(encode_jpeg_bytes(sheet, 94), layout["dpi"])
         return JSONResponse(
             {
@@ -1298,15 +1515,16 @@ async def print_sheet(image: UploadFile = File(...), spec: str = Form("{}")):
 
 
 @app.post("/api/export")
-async def export_photo(image: UploadFile = File(...), spec: str = Form("{}")):
+async def export_photo(request: Request, image: UploadFile = File(...), spec: str = Form("{}")):
     """Encode the finished photo without re-running or altering the face pipeline."""
+    require_download_access(request)
     try:
         try:
             spec_data = json.loads(spec)
         except (ValueError, TypeError):
             raise ValueError("Invalid JSON in export spec.")
         photo = decode_image(await image.read())
-        output, metadata = encode_photo_export(photo, spec_data)
+        output, metadata = await run_in_threadpool(run_job, encode_photo_export, photo, spec_data)
         filename = f'passport-photo.{metadata["extension"]}'
         return Response(
             content=output,
@@ -1340,6 +1558,10 @@ def process_image(image_bytes, profile, options):
     # REGARDLESS of what the client asked for. Clamped requests are reported so
     # the UI can say "disabled by <country> policy" instead of silently ignoring.
     official_allowed = dict(profile.get("allowedEdits") or {})
+    if not STRICT_POLICY:
+        for key in ("straighten", "tone", "lighting", "background", "enhance"):
+            official_allowed[key] = True
+        official_allowed["rescue"] = False
     policy = edit_policy(profile)
     if policy["strict"]:
         for key in ("straighten", "tone", "lighting", "background", "enhance", "rescue"):
@@ -1409,7 +1631,8 @@ def process_image(image_bytes, profile, options):
     face["glareFraction"] = round(float(glare_fraction), 4)
 
     background_rgb = parse_color(options.get("backgroundColor") or profile.get("automation", {}).get("backgroundColor") or "#ffffff")
-    replace_background = permit("background", bool(options.get("backgroundReplaced", profile.get("automation", {}).get("backgroundReplacement", True))))
+    default_replace = True if not STRICT_POLICY else profile.get("automation", {}).get("backgroundReplacement", True)
+    replace_background = permit("background", bool(options.get("backgroundReplaced", default_replace)))
     enhance = permit("enhance", bool(options.get("enhanceOutput", profile.get("automation", {}).get("enhanceOutput", True))))
     enhancement_mode = str(options.get("enhancementMode") or profile.get("automation", {}).get("enhancementMode") or "studio")
     if enhancement_mode == "strong":
@@ -1481,6 +1704,15 @@ def process_image(image_bytes, profile, options):
         )
     if enhance:
         final = enhance_passport_photo(final, enhancement_mode)
+    # Plain brightness nudge chosen by the operator (identity-preserving: a
+    # uniform offset, never a face-aware edit). Disclosed like every correction.
+    try:
+        brightness = int(clamp(float(options.get("brightness", 0) or 0), -40, 40))
+    except (TypeError, ValueError):
+        brightness = 0
+    if brightness and permit("tone", True):
+        final = cv2.convertScaleAbs(final, alpha=1.0, beta=brightness)
+        corrections.append({"id": "brightness", "label": "Brightness", "detail": f"{brightness:+d} manual", "applied": True})
     # Stamp the print DPI into the JFIF metadata so labs print at the physical
     # size the programme requires (losslessly, after size-targeting).
     output_spec = profile["output"]
@@ -1889,7 +2121,8 @@ def detect_face(source_bgr):
     """
     height, width = source_bgr.shape[:2]
     mp_image = build_mp_image(source_bgr)
-    result = face_landmarker.detect(mp_image)
+    with MP_LOCK:
+        result = face_landmarker.detect(mp_image)
     faces = result.face_landmarks or []
     if not faces:
         raise ValueError("No face detected. Use a clear front-facing portrait.")
@@ -1922,7 +2155,8 @@ def measure_pose_posture(source_bgr, face):
 
     try:
         height, width = source_bgr.shape[:2]
-        result = pose_landmarker.detect(build_mp_image(source_bgr))
+        with MP_LOCK:
+            result = pose_landmarker.detect(build_mp_image(source_bgr))
         poses = result.pose_landmarks or []
         if not poses:
             return posture
@@ -2366,7 +2600,8 @@ def scale_face(face, scale):
 
 
 def run_selfie_segmenter(mp_image, width, height):
-    result = image_segmenter.segment(mp_image)
+    with MP_LOCK:
+        result = image_segmenter.segment(mp_image)
     masks = result.confidence_masks or []
     if not masks:
         return None
@@ -3819,6 +4054,12 @@ def mask_value(mask_stats, background_replaced):
 
 
 def edit_policy(profile):
+    if not STRICT_POLICY:
+        return {
+            "strict": False,
+            "mode": "assisted_editing",
+            "label": "identity must not be changed",
+        }
     policy_text = " ".join(
         [
             *profile.get("reviewChecks", []),
@@ -4119,7 +4360,7 @@ def build_pipeline_report(background_replaced, mask_stats, enhanced, enhancement
         {
             "id": "validation",
             "label": "Validation",
-            "engine": "KVNP compliance rules",
+            "engine": "PassportLens compliance rules",
             "status": "pass",
             "detail": "geometry, background, quality, file, and human-review flags",
         },
@@ -4592,6 +4833,9 @@ def file_size_target(min_bytes, max_bytes):
 
 def title_case(value):
     return " ".join(word[:1].upper() + word[1:] for word in value.split())
+
+
+kvnp_routes.register(app, globals())
 
 
 if __name__ == "__main__":

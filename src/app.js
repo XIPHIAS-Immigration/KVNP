@@ -408,7 +408,7 @@ function renderCommerce(message = "") {
     return;
   }
   elements.purchaseBand.dataset.state = "ready";
-  elements.purchaseStatus.textContent = product.recurring ? "KVNP Studio membership" : (state.account ? "One-time purchase" : "Account required at checkout");
+  elements.purchaseStatus.textContent = product.recurring ? "PassportLens membership" : (state.account ? "One-time purchase" : "Account required at checkout");
   elements.purchaseDetail.textContent = message || (state.account
     ? (product.recurring ? "See the membership plan and continue to secure Stripe Checkout." : "Purchase this prepared application once, then return to every included file from your workspace.")
     : "Explore with the guest demo, or pay securely first and create your account after Stripe confirms payment.");
@@ -2023,7 +2023,7 @@ function renderProfile() {
   if (elements.studioOutputPolicy) {
     elements.studioOutputPolicy.textContent = editable
       ? "Permitted corrections are disclosed in the audit report. Face shape and identity remain unchanged."
-      : "This programme requires original pixels. KVNP will crop, size and validate the photo without retouching it.";
+      : "This programme requires original pixels. PassportLens will crop, size and validate the photo without retouching it.";
   }
   if (elements.programmeMode) elements.programmeMode.textContent = describeSubmissionMode(catalogueMeta.submissionMode);
   if (elements.programmeStatus) {
@@ -2244,8 +2244,8 @@ function renderProgrammeNotice(meta) {
   elements.programmeNotice.innerHTML = generalUse
     ? "<strong>Clean general-use studio file</strong><span>Edit the background, colour, lighting and framing, then preview, print or download without an on-image watermark. This mode does not claim government-document compliance.</span>"
     : checkerOnly
-    ? "<strong>Bring or upload the original source</strong><span>This authority requires professional or secure capture. KVNP will measure it and preserve the original, but will not create an edited submission file.</span>"
-    : "<strong>Formatting workflow</strong><span>KVNP can size, encode and validate this programme. Any pixel correction blocked by the authority remains disabled.</span>";
+    ? "<strong>Bring or upload the original source</strong><span>This authority requires professional or secure capture. PassportLens will measure it and preserve the original, but will not create an edited submission file.</span>"
+    : "<strong>Formatting workflow</strong><span>PassportLens can size, encode and validate this programme. Any pixel correction blocked by the authority remains disabled.</span>";
 }
 
 function renderProcessingFailure() {
@@ -2715,7 +2715,7 @@ function buildBrowserPipeline() {
       {
         id: "validation",
         label: "Validation",
-        engine: "KVNP compliance rules",
+        engine: "PassportLens compliance rules",
         status: state.checks.some((item) => item.status === "fail") ? "fail" : "pass",
         detail: "geometry, background, quality, file, and human-review flags",
       },
@@ -2899,7 +2899,7 @@ async function createExportBlob() {
 }
 
 const REPORT_DISCLAIMER =
-  "KVNP Passport Studio is an automated assistant, not a government service. It is " +
+  "PassportLens is an automated assistant, not a government service. It is " +
   "not affiliated with or endorsed by any passport/visa authority. Machine checks " +
   "estimate likely acceptance and do not guarantee it; some requirements can only be " +
   "confirmed by a human. The final decision rests with the issuing authority.";
@@ -3013,7 +3013,7 @@ function renderSourceQuality() {
 
   if (!state.image) {
     elements.retakeGuidance.textContent = "Load a portrait to see whether the source is strong enough.";
-    renderCoachBanner("idle", "Add a portrait to begin", "KVNP will check camera level, shoulders, gaze, lighting and usable detail.");
+    renderCoachBanner("idle", "Add a portrait to begin", "PassportLens will check camera level, shoulders, gaze, lighting and usable detail.");
     renderCaptureReadiness(null);
     return;
   }
@@ -3770,7 +3770,7 @@ function updateDownloadAdvisory(issues = getDownloadIssues()) {
   if (state.profile?.checkerOnly && state.originalFile) {
     status = issues.length ? "warning" : "pass";
     strong.textContent = "Source-check programme";
-    detail.textContent = "This authority requires an unaltered professional photo. Download the untouched original; KVNP does not offer a prepared submission export.";
+    detail.textContent = "This authority requires an unaltered professional photo. Download the untouched original; PassportLens does not offer a prepared submission export.";
   } else if (state.processing) {
     strong.textContent = "Preparing your photo";
     detail.textContent = "The original is already available. The prepared file will appear when analysis finishes.";
@@ -4311,8 +4311,8 @@ function showBackgroundVariantDialog() {
     ? "Create a clean-background version?"
     : "Create a watermarked background preview?";
   elements.backgroundVariantCopy.textContent = eligible
-    ? "KVNP will isolate the person, preserve hair, ears and shoulders, and place the selected programme background behind them. The current prepared file will not be replaced."
-    : "This programme does not permit digital background replacement in submission mode. KVNP can still generate a separately named, permanently watermarked preview so you can inspect the matte.";
+    ? "PassportLens will isolate the person, preserve hair, ears and shoulders, and place the selected programme background behind them. The current prepared file will not be replaced."
+    : "This programme does not permit digital background replacement in submission mode. PassportLens can still generate a separately named, permanently watermarked preview so you can inspect the matte.";
   elements.backgroundVariantPolicy.className = `variant-policy ${eligible ? "allowed" : "blocked"}`;
   elements.backgroundVariantPolicy.innerHTML = eligible
     ? "<strong>Programme allows this processing path</strong><span>Acceptance is still decided by the issuing authority.</span>"
@@ -5453,7 +5453,7 @@ function setAuthMode(mode) {
   authEls.subtitle.textContent = "Sign in after completing your membership payment.";
   authEls.submit.textContent = "Sign in";
   authEls.nameField.hidden = true;
-  authEls.switchText.textContent = "New to KVNP Studio?";
+  authEls.switchText.textContent = "New to PassportLens?";
   authEls.switchBtn.textContent = "Purchase membership";
   authEls.password.autocomplete = "current-password";
   hideAuthError();

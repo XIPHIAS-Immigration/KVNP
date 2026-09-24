@@ -40,7 +40,7 @@ function renderMembership() {
   const join = document.querySelector("#membership-join");
   const manage = document.querySelector("#membership-manage");
   if (state.subscription.active) {
-    title.textContent = "KVNP Studio membership active";
+    title.textContent = "PassportLens membership active";
     detail.textContent = state.subscription.cancelAtPeriodEnd
       ? `Access continues until ${date(state.subscription.currentPeriodEnd)}.`
       : `Renews through Stripe. Current period ends ${date(state.subscription.currentPeriodEnd)}.`;

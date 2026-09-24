@@ -1,64 +1,46 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Activate your KVNP Studio account</title>
-    <meta name="description" content="Confirm your KVNP Studio payment and activate your private workspace." />
-    <link rel="stylesheet" href="/src/portal.css?v=kvnp-stripe-2" />
-    <link rel="stylesheet" href="/src/activate.css?v=kvnp-stripe-2" />
-  </head>
-  <body>
-    <header class="portal-bar">
-      <a class="portal-brand" href="/"><span>KV</span><strong>KVNP Studio</strong></a>
-      <nav><a href="/pricing">Membership</a><a href="/app?auth=login">Sign in</a></nav>
-    </header>
-
-    <main class="activation-shell">
-      <section class="activation-heading">
-        <span class="eyebrow">Secure activation</span>
-        <h1>Payment complete.<br />Make the workspace yours.</h1>
-        <p>We verify the Stripe payment before creating any account. Your card details never pass through KVNP.</p>
-      </section>
-
-      <ol class="activation-progress" aria-label="Membership activation steps">
-        <li class="complete"><span>01</span><strong>Payment</strong><small>Confirmed by Stripe</small></li>
-        <li class="active"><span>02</span><strong>Account details</strong><small>Choose your secure login</small></li>
-        <li><span>03</span><strong>Workspace</strong><small>Sign in automatically</small></li>
-      </ol>
-
-      <section class="activation-content">
-        <div class="activation-summary">
-          <span class="summary-mark" aria-hidden="true">✓</span>
-          <div>
-            <span class="eyebrow">Stripe payment</span>
-            <h2 id="payment-title">Verifying payment...</h2>
-            <p id="payment-copy">This normally takes only a few seconds.</p>
-          </div>
-        </div>
-
-        <form id="activation-form" class="activation-form" hidden>
-          <div class="form-heading">
-            <span class="eyebrow">Your private workspace</span>
-            <h2 id="form-title">Create your account</h2>
-            <p id="account-email"></p>
-          </div>
-          <label id="name-field"><span>Full name</span><input id="name" name="name" autocomplete="name" minlength="2" maxlength="120" required /></label>
-          <label><span>Password</span><input id="password" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="256" required /></label>
-          <label id="confirm-field"><span>Confirm password</span><input id="password-confirm" name="passwordConfirm" type="password" autocomplete="new-password" minlength="8" maxlength="256" required /></label>
-          <button id="activate-button" class="primary-button" type="submit">Activate and enter Studio</button>
-          <div id="activation-status" class="form-status" aria-live="polite"></div>
-          <small id="password-note">Use at least 8 characters. KVNP stores a one-way password hash, never your readable password.</small>
-        </form>
-
-        <div id="activation-error" class="activation-error" hidden>
-          <span class="eyebrow">Activation interrupted</span>
-          <h2>We could not verify this checkout.</h2>
-          <p id="activation-error-copy"></p>
-          <a class="quiet-link" href="/pricing">Return to membership</a>
-        </div>
-      </section>
-    </main>
-    <script type="module" src="/src/activate.js?v=kvnp-stripe-3"></script>
-  </body>
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Activate your account | PassportLens</title>
+  <meta name="robots" content="noindex" />
+  <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/src/theme.css?v=pl-3" />
+  <link rel="stylesheet" href="/src/portal.css?v=pl-3" />
+  <style>
+    .activate{max-width:560px; margin:40px auto; padding:0 20px;}
+    .activate .card{padding:30px; display:grid; gap:14px;}
+    .activate h1{font-size:26px;}
+    .activate .lead{color:var(--text-2);}
+    .steps-mini{display:flex; gap:8px; font-size:12.5px; color:var(--mut); margin-bottom:18px; flex-wrap:wrap;}
+    .steps-mini span{padding:4px 10px; border-radius:999px; background:var(--bg-3);} .steps-mini span.on{background:var(--gold); color:var(--navy); font-weight:700;}
+  </style>
+</head>
+<body>
+  <header class="topbar"><div class="topbar-inner">
+    <a class="brand" href="/" aria-label="PassportLens home"><svg viewBox="0 0 48 48" aria-hidden="true"><rect x="2" y="2" width="44" height="44" rx="12" fill="#351C15"/><circle cx="24" cy="23" r="12.5" fill="none" stroke="#FFB500" stroke-width="3.5"/><circle cx="24" cy="23" r="5" fill="#FFB500"/><circle cx="29.5" cy="17.5" r="2" fill="#fff" opacity=".9"/><rect x="13" y="38" width="22" height="2.6" rx="1.3" fill="#FFB500" opacity=".85"/></svg><span class="brand-name">Passport<b>Lens</b></span></a>
+  </div></header>
+  <main class="activate">
+    <div class="steps-mini"><span>1 Pay</span><span class="on">2 Create login</span><span>3 Make photos</span></div>
+    <h1 id="payment-title">Checking your payment…</h1>
+    <p class="lead" id="payment-copy">We verify the payment with Stripe before creating any account. Your card details never pass through PassportLens.</p>
+    <form class="card" id="activation-form" hidden novalidate>
+      <h2 id="form-title">Create your account</h2>
+      <p class="small muted" id="account-email"></p>
+      <label class="field" id="name-field"><span>Your name</span><input id="name" name="name" autocomplete="name" minlength="2" maxlength="120" /></label>
+      <label class="field"><span>Password</span><input id="password" name="password" type="password" required minlength="8" maxlength="256" /></label>
+      <label class="field" id="confirm-field"><span>Confirm password</span><input id="password-confirm" type="password" minlength="8" maxlength="256" /></label>
+      <p class="small muted" id="password-note"></p>
+      <p class="form-msg bad" id="activation-status" aria-live="polite"></p>
+      <button class="btn block" type="submit" id="activate-button">Activate and enter the studio</button>
+    </form>
+    <div class="notice bad" id="activation-error" hidden>
+      <b>We could not verify this payment.</b>
+      <p id="activation-error-copy"></p>
+      <p><a href="/pricing">Back to pricing</a> · <a href="/#contact">Contact support</a></p>
+    </div>
+  </main>
+  <script type="module" src="/src/activate.js?v=pl-3"></script>
+</body>
 </html>
