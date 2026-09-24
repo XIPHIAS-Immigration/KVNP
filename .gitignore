@@ -46,3 +46,4 @@ tools/realesrgan-ncnn-vulkan*.zip
 Thumbs.db
 .vscode/
 .idea/
+_to_delete/
