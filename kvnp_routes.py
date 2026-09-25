@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 import kvnp_business as business
 import kvnp_mail as mail
 import kvnp_pages as pages
+import kvnp_cities as cities
 import kvnp_platform as platform
 
 
@@ -156,6 +157,17 @@ def register(app, env: dict) -> None:
     @app.get("/for/{slug}")
     def audience_page(slug: str, request: Request):
         html_text = pages.render_audience(slug, public_url(request))
+        if not html_text:
+            raise HTTPException(status_code=404, detail="Page not found.")
+        return Response(html_text, media_type="text/html")
+
+    @app.get("/passport-photos")
+    def city_index(request: Request):
+        return Response(cities.render_city_index(public_url(request)), media_type="text/html")
+
+    @app.get("/passport-photos/{slug}")
+    def city_page(slug: str, request: Request):
+        html_text = cities.render_city(slug, public_url(request), SLUG_MAP)
         if not html_text:
             raise HTTPException(status_code=404, detail="Page not found.")
         return Response(html_text, media_type="text/html")

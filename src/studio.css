@@ -55,6 +55,10 @@
 .demo-card img{width:100%; aspect-ratio:1; object-fit:cover; object-position:50% 20%; display:block;}
 .demo-card span{display:block; padding:8px 10px; font-size:12.5px; font-weight:600; color:var(--navy);}
 .demo-card:hover{border-color:var(--gold);}
+.demo-card{position:relative;}
+.demo-tag{position:absolute; top:8px; left:8px; font-style:normal; font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px; line-height:1.2;}
+.demo-tag.ok{background:var(--ok-soft); color:var(--ok);}
+.demo-tag.bad{background:var(--bad-soft); color:var(--bad);}
 
 /* step 3 */
 .processing{display:flex; flex-direction:column; align-items:center; gap:10px; padding:60px 20px; text-align:center;}

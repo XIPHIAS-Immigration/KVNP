@@ -3,9 +3,9 @@
    Talks to the same Python engine as the advanced studio; shows people a plain
    verdict and keeps the technical detail for admins. */
 
-import { RULE_PROFILES } from "./rules.js?v=pl-3";
-import { DEMO_PORTRAITS } from "./demo-library.js?v=pl-3";
-import { initCoach, analyzeFrame, coachAvailable } from "./capture.js?v=pl-3";
+import { RULE_PROFILES } from "./rules.js?v=pl-4";
+import { DEMO_PORTRAITS } from "./demo-library.js?v=pl-4";
+import { initCoach, analyzeFrame, coachAvailable } from "./capture.js?v=pl-4";
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -22,7 +22,7 @@ const state = {
   demoName: "",          // demo sample file name (guests)
   sourceUrl: "",         // object URL for the original preview
   result: null,
-  options: { backgroundReplaced: true, backgroundColor: null, backgroundCleanup: "balanced", brightness: 0, manualFace: null },
+  options: { backgroundReplaced: true, backgroundColor: null, backgroundCleanup: "balanced", brightness: 0, rotate: 0, manualFace: null },
   projectId: null,
   artifactSaved: false,
   clients: [],
@@ -53,7 +53,7 @@ const REASONS = {
   source_lighting: "The lighting is uneven or too dark/bright — use soft, even light from the front.",
   source_pose: "The head is tilted or turned — face the camera straight on with the head level.",
   source_head_pitch: "The camera is not at eye level — hold it level with the eyes and keep the chin neutral.",
-  source_shoulder_level: "The shoulders are not level — sit upright.",
+  source_shoulder_level: "One shoulder is higher than the other — sit up straight with both arms relaxed.",
   source_body_alignment: "The body is leaning — centre the head over the shoulders.",
   source_background_path: "The background is not plain enough — stand in front of a plain, light wall.",
   face_detection: "One clear face is needed — face the camera with nothing covering the face.",
@@ -66,7 +66,7 @@ const REASONS = {
   face_direction: "The face is turned — look straight at the camera.",
   mouth: "The mouth is open — close the mouth with a neutral expression.",
   eyes_open: "The eyes are not fully open.",
-  eye_gaze: "The eyes are not looking at the camera.",
+  eye_gaze: "The eyes are not looking straight at the camera — look into the lens.",
   glasses_glare: "There is glare on the glasses — remove them or change the light.",
   background_cleanup: "The background edges around hair or shoulders need a look — try a plainer wall or the Strong clean-up.",
   background_uniformity: "The background is not even — use a plain wall or the clean background option.",
@@ -210,6 +210,12 @@ function bindGlobal() {
   $("#brightness").addEventListener("input", () => {
     state.options.brightness = Number($("#brightness").value);
     $("#brightness-value").textContent = (state.options.brightness > 0 ? "+" : "") + state.options.brightness;
+  });
+  $("#rotate").addEventListener("input", () => {
+    state.options.rotate = Number($("#rotate").value);
+    // head position is measured in the rotated frame, so a new angle resets it
+    state.options.manualFace = null;
+    $("#rotate-value").textContent = formatDegrees(state.options.rotate);
   });
   $$("[data-nudge]").forEach((btn) => btn.addEventListener("click", () => nudge(btn.dataset.nudge)));
   $("#adjust-apply").addEventListener("click", () => runProcess({ stay: 4 }));
@@ -358,6 +364,7 @@ function resetOptions() {
     backgroundColor: (state.profile && state.profile.automation && state.profile.automation.backgroundColor) || "#ffffff",
     backgroundCleanup: "balanced",
     brightness: 0,
+    rotate: 0,
     manualFace: null,
   };
 }
@@ -392,7 +399,10 @@ function useFile(file) {
 
 function renderDemoLibrary() {
   const grid = $("#demo-grid");
-  grid.innerHTML = DEMO_PORTRAITS.map((item) => `<button type="button" class="demo-card" data-path="${escapeHtml(item.path)}"><img src="/${escapeHtml(item.path)}" alt="${escapeHtml(item.title)}" loading="lazy" /><span>${escapeHtml(item.title)}</span></button>`).join("");
+  grid.innerHTML = DEMO_PORTRAITS.map((item) => {
+    const tag = item.expect === "pass" ? '<em class="demo-tag ok">Good example</em>' : '<em class="demo-tag bad">Shows a retake</em>';
+    return `<button type="button" class="demo-card" data-path="${escapeHtml(item.path)}"><img src="/${escapeHtml(item.path)}" alt="${escapeHtml(item.title)}" loading="lazy" />${tag}<span>${escapeHtml(item.title)}</span></button>`;
+  }).join("");
   $$(".demo-card", grid).forEach((btn) => btn.addEventListener("click", () => {
     const path = btn.dataset.path;
     state.demoName = path.split("/").pop();
@@ -494,6 +504,7 @@ function buildOptions() {
     backgroundColor: state.options.backgroundColor,
     backgroundCleanup: state.options.backgroundCleanup,
     brightness: state.options.brightness,
+    rotateDegrees: state.options.rotate,
     autoCorrect: true,
     autoStraighten: true,
     autoTone: true,
@@ -553,18 +564,22 @@ function renderResult(data) {
   const decision = data.decision || {};
   const verdict = $("#verdict");
   const icon = $("#verdict-icon");
-  const failing = [...(data.sourceQuality || []), ...(data.checks || [])].filter((c) => c.status === "fail");
-  const warnings = [...(data.sourceQuality || []), ...(data.checks || [])].filter((c) => c.status === "warning");
+  // Demo samples are small web copies, so their resolution notes are about the
+  // sample file, not the customer's photo - leave them out of the verdict.
+  const demoIgnore = state.demoName ? new Set(["source_resolution", "source_face_pixels"]) : new Set();
+  const all = [...(data.sourceQuality || []), ...(data.checks || [])].filter((c) => !demoIgnore.has(c.id));
+  const failing = all.filter((c) => c.status === "fail");
+  const warnings = all.filter((c) => c.status === "warning");
   const humans = (data.checks || []).filter((c) => c.status === "review" && /^review_/.test(c.id));
   let level = "ok", title = "Photo OK", message = "The photo meets the programme's measurable rules. Download it, or adjust the background first.";
   let reasons = [];
-  if (decision.status === "retake" || decision.status === "fix" || failing.length) {
+  if ((!state.demoName && (decision.status === "retake" || decision.status === "fix")) || failing.length) {
     level = "bad";
     title = decision.status === "fix" ? "Not OK yet" : "Please retake the photo";
     message = decision.status === "fix" ? "One thing needs fixing before this photo can be used." : "Something in the original photo can't be corrected safely. Here's what to change:";
     reasons = failing.map(plainReason).filter(Boolean);
     if (!reasons.length) reasons = [decision.message || "The photo needs a retake."];
-  } else if (warnings.length || decision.status === "review" || decision.status === "policy_review") {
+  } else if (warnings.length || decision.status === "policy_review" || (decision.status === "review" && !state.demoName)) {
     level = "warn";
     title = "Almost — please check";
     message = "The photo is usable, but look at the points below before you submit it.";
@@ -594,9 +609,11 @@ function renderResult(data) {
   const applied = [];
   if (edits.background) applied.push("background cleaned");
   if (edits.straighten) applied.push("straightened");
-  if (edits.tone) applied.push("exposure balanced");
+  if ((data.corrections || []).some((c) => c.id === "exposure")) applied.push("light balanced");
+  else if (edits.tone) applied.push("colour balanced");
   if (edits.lighting) applied.push("lighting evened");
   if ((data.corrections || []).some((c) => c.id === "brightness")) applied.push("brightness adjusted");
+  if ((data.corrections || []).some((c) => c.id === "rotate")) applied.push("rotated");
   $("#edits-note").textContent = applied.length ? `Applied: ${applied.join(", ")}. The face itself was not changed.` : "Only cropped and resized. The face itself was not changed.";
   const downloadButton = $("#to-download");
   downloadButton.disabled = false;
@@ -671,6 +688,12 @@ function renderAdjustControls() {
   $$("#bg-strength button").forEach((b) => b.classList.toggle("on", b.dataset.value === state.options.backgroundCleanup));
   $("#brightness").value = state.options.brightness;
   $("#brightness-value").textContent = (state.options.brightness > 0 ? "+" : "") + state.options.brightness;
+  $("#rotate").value = state.options.rotate;
+  $("#rotate-value").textContent = formatDegrees(state.options.rotate);
+}
+
+function formatDegrees(value) {
+  return `${value > 0 ? "+" : ""}${value}°`;
 }
 
 function nudge(direction) {

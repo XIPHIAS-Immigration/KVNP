@@ -150,7 +150,7 @@ def test_guest_demo_library_and_walkthrough():
         "demo-walkthrough-close",
     ):
         assert f'id="{element_id}"' in html, element_id
-    assert demo.count('path: "assets/demo/') == 24
+    assert demo.count('path: "assets/demo/') == 19
     assert len(portraits) == 24, len(portraits)
     assert all(path.stat().st_size > 10_000 for path in portraits)
     assert "function renderDemoLibrary()" in app

@@ -241,3 +241,7 @@ html.anim.motion-ready .draw{visibility:visible;}
 .foot-fine{border-top:1px solid rgba(255,255,255,.14); margin-top:40px; padding-top:22px; font-size:12.5px; color:rgba(255,255,255,.6); display:grid; gap:8px;}
 @media (max-width:860px){ .foot-grid{grid-template-columns:1fr 1fr;} }
 @media (max-width:520px){ .foot-grid{grid-template-columns:1fr;} }
+
+.city-strip{margin-top:22px; text-align:center; line-height:1.9;}
+.city-strip a{color:var(--navy); text-decoration:underline; text-decoration-color:var(--gold-line); text-underline-offset:3px;}
+.city-strip a:hover{text-decoration-color:var(--gold);}

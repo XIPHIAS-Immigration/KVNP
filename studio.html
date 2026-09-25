@@ -7,9 +7,9 @@
   <meta name="robots" content="noindex" />
   <meta name="theme-color" content="#351C15" />
   <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/src/theme.css?v=pl-3" />
-  <link rel="stylesheet" href="/src/portal.css?v=pl-3" />
-  <link rel="stylesheet" href="/src/studio.css?v=pl-3" />
+  <link rel="stylesheet" href="/src/theme.css?v=pl-4" />
+  <link rel="stylesheet" href="/src/portal.css?v=pl-4" />
+  <link rel="stylesheet" href="/src/studio.css?v=pl-4" />
 </head>
 <body class="studio-body">
 
@@ -192,7 +192,7 @@
                 <h3>Next</h3>
                 <div class="stack">
                   <button class="btn block" type="button" id="to-download" data-go="5">Download <span class="arw" aria-hidden="true">→</span></button>
-                  <button class="btn ghost block" type="button" data-go="4">Adjust background &amp; brightness</button>
+                  <button class="btn ghost block" type="button" data-go="4">Adjust background, light &amp; tilt</button>
                   <button class="btn ghost block" type="button" id="retake-btn" data-go="2">Use a different photo</button>
                 </div>
                 <p class="small muted" id="edits-note"></p>
@@ -235,6 +235,12 @@
             <div class="control">
               <b>Brightness <span class="hint" id="brightness-value">0</span></b>
               <input type="range" id="brightness" min="-30" max="30" step="1" value="0" />
+              <span class="hint">Light is balanced automatically. Change only if it still looks off.</span>
+            </div>
+            <div class="control">
+              <b>Rotate <span class="hint" id="rotate-value">0°</span></b>
+              <input type="range" id="rotate" min="-10" max="10" step="0.5" value="0" />
+              <span class="hint">Tilt is straightened automatically. Use this for a small final touch.</span>
             </div>
             <div class="control">
               <b>Head position</b>
@@ -332,6 +338,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-  <script type="module" src="/src/studio.js?v=pl-3"></script>
+  <script type="module" src="/src/studio.js?v=pl-4"></script>
 </body>
 </html>

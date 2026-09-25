@@ -12,7 +12,7 @@ import re
 from datetime import date
 
 PRODUCT = "PassportLens"
-STYLE_VERSION = "pl-3"
+STYLE_VERSION = "pl-4"
 
 BACKGROUND_LABELS = {
     "white": "Plain white",
@@ -133,7 +133,9 @@ def _head(title: str, description: str, canonical: str, jsonld: list | None = No
   <meta property="og:url" content="{_e(canonical)}" />
   <meta property="og:title" content="{_e(title)}" />
   <meta property="og:description" content="{_e(description)}" />
-  <meta property="og:image" content="{_e(canonical.split('/')[0] + '//' + canonical.split('/')[2])}/screenshots/app-shell.png" />
+  <meta property="og:image" content="{_e(canonical.split('/')[0] + '//' + canonical.split('/')[2])}/assets/brand/og-image.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="stylesheet" href="/src/theme.css?v={STYLE_VERSION}" />
   <link rel="stylesheet" href="/src/landing.css?v={STYLE_VERSION}" />
@@ -179,9 +181,9 @@ def _footer() -> str:
       <div class="foot-grid">
         <div class="foot-brand">
           <a class="brand on-dark" href="/">{_MARK_DARK}<span class="brand-name">Passport<b>Lens</b></span></a>
-          <p>Passport and visa photo software for individuals, studios, consultants and pharmacies across Canada.</p>
+          <p>Passport and visa photo software for individuals, studios, consultants and pharmacies across Canada and the United States.</p>
         </div>
-        <nav class="foot-col" aria-label="Product"><h5>Product</h5><a href="/#how">How it works</a><a href="/pricing">Pricing</a><a href="/requirements">Photo requirements</a><a href="/app?guest">Free demo</a></nav>
+        <nav class="foot-col" aria-label="Product"><h5>Product</h5><a href="/#how">How it works</a><a href="/pricing">Pricing</a><a href="/requirements">Photo requirements</a><a href="/passport-photos">Passport photos by city</a><a href="/app?guest">Free demo</a></nav>
         <nav class="foot-col" aria-label="Business"><h5>For business</h5><a href="/for/photo-studios">Photo studios</a><a href="/for/immigration-consultants">Immigration consultants</a><a href="/for/pharmacies">Pharmacies</a><a href="/for/print-shops">Print shops</a></nav>
         <nav class="foot-col" aria-label="Account"><h5>Account</h5><a href="/app">Sign in</a><a href="/account">My account</a><a href="/#faq">FAQ</a><a href="/#contact">Support</a></nav>
       </div>
@@ -414,6 +416,9 @@ def sitemap_xml(base_url: str, slug_map: dict[str, dict]) -> str:
     urls = [("/", "1.0", "weekly"), ("/us", "1.0", "weekly"), ("/pricing", "0.9", "monthly"), ("/requirements", "0.9", "weekly")]
     urls += [(f"/for/{slug}", "0.8", "monthly") for slug in AUDIENCES]
     urls += [(f"/requirements/{slug}", "0.8", "monthly") for slug, profile in slug_map.items() if profile.get("country") != "STUDIO"]
+    import kvnp_cities  # local import: kvnp_cities imports this module
+
+    urls += kvnp_cities.sitemap_paths()
     body = "".join(
         f"<url><loc>{_e(base_url + path)}</loc><lastmod>{today}</lastmod><changefreq>{freq}</changefreq><priority>{prio}</priority></url>"
         for path, prio, freq in urls

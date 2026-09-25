@@ -1610,10 +1610,36 @@ def process_image(image_bytes, profile, options):
         corrections.extend(tone_corrections)
         mp_image = build_mp_image(source)
 
+    geometry_changed = False
     if do_straighten:
         source, mp_image, landmarks, face, straighten = auto_straighten_source(source, landmarks, face)
         if straighten:
             corrections.append(straighten)
+            geometry_changed = True
+
+    try:
+        rotate_request = float(options.get("rotateDegrees", 0) or 0)
+    except (TypeError, ValueError):
+        rotate_request = 0.0
+    if abs(rotate_request) >= 0.2 and permit("straighten", True):
+        source, mp_image, landmarks, face, rotated = manual_rotate_source(source, landmarks, face, rotate_request)
+        if rotated:
+            corrections.append(rotated)
+            geometry_changed = True
+
+    # Shoulders: when the whole photo was rotated (camera held crooked), the
+    # same rotation usually levels the shoulders too, so judge them on the
+    # corrected photo. A person who is really leaning still shows as uneven.
+    if geometry_changed:
+        corrected_posture = measure_pose_posture(source, face)
+        if corrected_posture.get("shoulderLevelDegrees") is not None:
+            corrected_posture["pitchOffsetDegrees"] = posture.get("pitchOffsetDegrees")
+            corrected_posture["shoulderLevelOriginal"] = posture.get("shoulderLevelDegrees")
+            if corrected_posture.get("bodyLeanPercent") is None:
+                corrected_posture["bodyLeanPercent"] = posture.get("bodyLeanPercent")
+                corrected_posture["bodyLeanSource"] = posture.get("bodyLeanSource")
+            corrected_posture["afterCorrection"] = True
+            posture = corrected_posture
 
     height, width = source.shape[:2]
 
@@ -2244,7 +2270,7 @@ def auto_straighten_source(source_bgr, landmarks, face):
     can never make the photo worse.
     """
     roll = float(face.get("rollDegrees", 0.0))
-    if abs(roll) < 1.5 or abs(roll) > 18.0:
+    if abs(roll) < 1.5 or abs(roll) > 25.0:
         return source_bgr, build_mp_image(source_bgr), landmarks, face, None
 
     center = (float(face["centerX"]), float(face["centerY"]))
@@ -2265,6 +2291,34 @@ def auto_straighten_source(source_bgr, landmarks, face):
         "detail": f"levelled head tilt {abs(roll):.1f} deg -> {abs(new_roll):.1f} deg",
         "applied": True,
     }
+    return rotated, mp_image, new_landmarks, new_face, correction
+
+
+# Auto light: brighten/darken the whole photo when the face is outside this
+# band (0-255 face luminance), aiming for a natural, well-lit passport face.
+AUTO_LIGHT_LOW = 118.0
+AUTO_LIGHT_HIGH = 200.0
+AUTO_LIGHT_TARGET = 145.0
+MAX_MANUAL_ROTATE = 10.0
+
+
+def manual_rotate_source(source_bgr, landmarks, face, degrees):
+    """Operator-chosen small rotation (identity-preserving geometry).
+
+    Returns ``(image, mp_image, landmarks, face, correction|None)``. The face is
+    re-detected on the rotated image; if detection fails the rotation is
+    dropped rather than breaking the job.
+    """
+    degrees = clamp(float(degrees), -MAX_MANUAL_ROTATE, MAX_MANUAL_ROTATE)
+    if abs(degrees) < 0.2:
+        return source_bgr, build_mp_image(source_bgr), landmarks, face, None
+    center = (float(face["centerX"]), float(face["centerY"]))
+    rotated = rotate_image(source_bgr, degrees, center)
+    try:
+        mp_image, new_landmarks, new_face = detect_face(rotated)
+    except ValueError:
+        return source_bgr, build_mp_image(source_bgr), landmarks, face, None
+    correction = {"id": "rotate", "label": "Rotate", "detail": f"{degrees:+.1f} deg manual", "applied": True}
     return rotated, mp_image, new_landmarks, new_face, correction
 
 
@@ -2300,27 +2354,27 @@ def auto_tone_correct(source_bgr, landmarks=None):
 
     gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     luma = float(gray_image[sample_mask].mean())
-    if luma < 96.0 or luma > 190.0:
-        # Gamma on the LAB L channel brightens shadows/midtones toward the target
-        # without a linear multiply that would blow highlights to pure white.
-        # (gamma maps [0,1] -> [0,1], so white stays white - no new clipping - and
-        # chroma is untouched, preserving skin tone and likeness.)
-        normalized = max(1.0, luma) / 255.0
-        target = 125.0 / 255.0
-        gamma = clamp(math.log(target) / math.log(normalized), 0.72, 1.35)
-        lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
-        l_channel = np.power(lab[:, :, 0].astype(np.float32) / 255.0, gamma) * 255.0
-        lab[:, :, 0] = np.clip(l_channel, 0, 255).astype(np.uint8)
-        corrected = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR).astype(np.float32)
-        original = image.astype(np.float32)
-        blend = tone_mask[..., None] * 0.78
-        image = np.clip(original * (1.0 - blend) + corrected * blend, 0, 255).astype(np.uint8)
-        new_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        new_luma = float(new_gray[sample_mask].mean())
+    if luma < AUTO_LIGHT_LOW or luma > AUTO_LIGHT_HIGH:
+        # One gamma curve on the LAB L channel of the WHOLE photo, so the face,
+        # neck and shoulders brighten together (a face-only lift looks pasted
+        # on). Gamma maps [0,1] -> [0,1]: white stays white, black stays black,
+        # colour/chroma is untouched, so skin tone and likeness are preserved.
+        # Two passes because the face-mean response to one gamma is not exact.
+        new_luma = luma
+        for _ in range(2):
+            if AUTO_LIGHT_LOW <= new_luma <= AUTO_LIGHT_HIGH and abs(new_luma - AUTO_LIGHT_TARGET) < 12:
+                break
+            normalized = clamp(new_luma / 255.0, 0.02, 0.98)
+            gamma = clamp(math.log(AUTO_LIGHT_TARGET / 255.0) / math.log(normalized), 0.55, 1.45)
+            lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+            l_channel = np.power(lab[:, :, 0].astype(np.float32) / 255.0, gamma) * 255.0
+            lab[:, :, 0] = np.clip(l_channel, 0, 255).astype(np.uint8)
+            image = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+            new_luma = float(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)[sample_mask].mean())
         corrections.append(
             {
                 "id": "exposure",
-                "label": "Auto-exposure",
+                "label": "Auto light",
                 "detail": f"face brightness {luma:.0f} -> {new_luma:.0f}",
                 "applied": True,
             }
@@ -3856,7 +3910,7 @@ def build_overlay(source_bgr, points, crop, matte=None, face=None, profile=None,
         gaze = face.get("gazeOffsetPercent")
         level_status = threshold_status(roll, 4.0, 7.0)
         direction_status = threshold_status(yaw, 9.0, 14.0)
-        gaze_status = "review" if gaze is None else threshold_status(abs(float(gaze)), 3.0, 4.0)
+        gaze_status = "review" if gaze is None else threshold_status(abs(float(gaze)), GAZE_PASS_MAX, GAZE_WARN_MAX)
         pitch_offset = (posture or {}).get("pitchOffsetDegrees")
         pitch_status = "review" if pitch_offset is None else threshold_status(abs(float(pitch_offset)), 5.0, 9.0)
         shoulder_level = (posture or {}).get("shoulderLevelDegrees")
@@ -4136,7 +4190,7 @@ def build_checks(face, crop, profile, stats, background_stats_result, output_byt
         edit_risk_target = "avoid unless retake is impossible"
 
     gaze_offset = face.get("gazeOffsetPercent")
-    gaze_status = "review" if gaze_offset is None else threshold_status(float(gaze_offset), 3.0, 4.0)
+    gaze_status = "review" if gaze_offset is None else threshold_status(float(gaze_offset), GAZE_PASS_MAX, GAZE_WARN_MAX)
     gaze_value = "not measurable" if gaze_offset is None else f'{float(gaze_offset):.1f}% iris offset'
 
     checks = [
@@ -4229,7 +4283,8 @@ def build_posture_checks(posture):
             "source_shoulder_level",
             "Shoulder level",
             threshold_status(float(shoulder_level), 4.0, 7.0),
-            f"{float(shoulder_level):.1f} deg / {shoulder_note}",
+            f"{float(shoulder_level):.1f} deg / {shoulder_note}"
+            + (f" (after straightening; was {float(posture['shoulderLevelOriginal']):.1f} deg)" if posture.get("afterCorrection") and posture.get("shoulderLevelOriginal") is not None else ""),
             "<= 4 deg / shoulders level",
         )
 
@@ -4792,6 +4847,12 @@ def brightness_status(luma):
     if 80 <= luma <= 220:
         return "pass"
     return "warning"
+
+
+# Eye gaze (iris offset %, 0 = looking straight into the lens). Relaxed so a
+# slightly off-centre gaze asks the user to check instead of forcing a retake.
+GAZE_PASS_MAX = 5.0
+GAZE_WARN_MAX = 12.0
 
 
 def threshold_status(value, pass_max, warning_max):

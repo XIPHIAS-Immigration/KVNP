@@ -34,3 +34,8 @@ ul.sources a{color:var(--navy); text-decoration:underline; text-underline-offset
 .req-links a span{color:var(--mut); font-weight:400; font-size:12.5px; white-space:nowrap;}
 .req-links a:hover{border-color:var(--gold);}
 @media (max-width:860px){ .page-grid{grid-template-columns:1fr;} .side-card{position:static;} }
+
+.city-programmes,.city-index{grid-template-columns:repeat(auto-fill,minmax(220px,1fr));}
+.rel b{color:var(--navy); font-family:var(--font-head);}
+.trust-grid.city-steps{grid-template-columns:repeat(3,minmax(0,1fr));}
+@media (max-width:720px){.trust-grid.city-steps{grid-template-columns:1fr;}}
