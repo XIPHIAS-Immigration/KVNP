@@ -24,8 +24,11 @@
   <meta name="twitter:title" content="PassportLens — passport photos accepted the first time" />
   <meta name="twitter:description" content="Official-rule checks for 35+ passport and visa programmes. Digital files and print sheets in minutes." />
   <meta name="twitter:image" content="https://passport.kvnp.ca/assets/brand/og-image.jpg" />
-  <link rel="stylesheet" href="/src/theme.css?v=pl-4" />
-  <link rel="stylesheet" href="/src/landing.css?v=pl-4" />
+  <link rel="stylesheet" href="/src/theme.css?v=pl-5" />
+  <link rel="stylesheet" href="/src/landing.css?v=pl-5" />
+  <link rel="stylesheet" href="/src/home.css?v=pl-5" />
+  <link rel="preload" href="/assets/landing/hero-original.jpg" as="image" />
+  <link rel="modulepreload" href="/src/vendor/three/three.module.min.js" />
   <script>if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documentElement.classList.add('anim');}</script>
   <script type="application/ld+json">
   {
@@ -59,7 +62,8 @@
         <span class="brand-name">Passport<b>Lens</b></span>
       </a>
       <nav class="nav-links" id="navLinks" aria-label="Primary">
-        <a href="#how">How it works</a>
+        <a href="#story">How it works</a>
+        <a href="#demo">Try it</a>
         <a href="#who">Who it's for</a>
         <a href="#pricing">Pricing</a>
         <a href="/requirements">Requirements</a>
@@ -76,140 +80,144 @@
 
   <main>
 
-    <!-- ============ HERO (dark brown band) ============ -->
-    <section class="hero" id="hero">
-      <div class="glow g1" aria-hidden="true"></div>
-      <div class="glow g2" aria-hidden="true"></div>
-      <div class="wrap hero-grid">
-        <div class="hero-copy">
-          <span class="kicker on-dark" data-hero="kicker"><span data-r="ca">Passport &amp; visa photo software · Canada</span><span data-r="us" hidden>Passport &amp; visa photo software · United States</span></span>
-          <h1 id="hero-title" aria-label="Passport photos, accepted the first time.">
-            <span class="w">Passport</span> <span class="w">photos,</span><br />
-            <span class="w accent">accepted</span> <span class="w accent">the</span> <span class="w accent">first</span> <span class="w accent">time.</span>
-          </h1>
-          <svg class="hero-rule" viewBox="0 0 220 6" aria-hidden="true"><path class="draw" d="M2 3 H218" stroke="#FFB500" stroke-width="4" stroke-linecap="round" fill="none"/></svg>
-          <p class="hero-sub" data-hero="sub">
-            Choose the programme, add a photo, and PassportLens checks it against the official rules,
-            cleans the background and gives you a file ready to submit or print.
-          </p>
-          <div class="hero-cta" data-hero="cta">
-            <a class="btn lg" href="/pricing?plan=single">Make my photo · <span data-price="single">CAD 9.99</span> <span class="arw" aria-hidden="true">→</span></a>
-            <a class="btn lg ghost on-dark" href="#pricing">For businesses</a>
+    <!-- ============ STORY: hero + 4 pinned chapters (3D stage) ============ -->
+    <section class="story" id="story" aria-label="How PassportLens makes a passport photo">
+      <div class="story-sticky">
+        <div class="wrap story-grid">
+          <div class="story-copy">
+            <div class="cap is-on" data-cap="0">
+              <span class="kicker" data-hero="kicker"><span data-r="ca">Passport &amp; visa photo software · Canada</span><span data-r="us" hidden>Passport &amp; visa photo software · United States</span></span>
+              <h1 id="hero-title" aria-label="Passport photos, accepted the first time.">
+                <span class="w">Passport</span> <span class="w">photos,</span><br />
+                <span class="w accent">accepted</span> <span class="w accent">the</span> <span class="w accent">first</span> <span class="w accent">time.</span>
+              </h1>
+              <p class="hero-sub" data-hero="sub">Take it on your phone. PassportLens measures the face, cleans the background and checks it against the official rules for your country, then gives you a file ready to submit or print.</p>
+              <div class="hero-cta" data-hero="cta">
+                <a class="btn lg" href="/pricing?plan=single" data-plan-link="single">Make my photo · <span data-price="single">CAD 9.99</span> <span class="arw" aria-hidden="true">→</span></a>
+                <a class="btn lg ghost" href="#demo">Try it free</a>
+              </div>
+              <div class="hero-stats" data-hero="stats">
+                <div><b data-count="35" data-suffix="+">35+</b><span>programmes</span></div>
+                <div><b data-count="26">26</b><span>countries</span></div>
+                <div><b data-count="2">2</b><span>min to a file</span></div>
+                <div><b data-count="0">0</b><span>face edits, ever</span></div>
+              </div>
+              <a class="scroll-cue" href="#demo" data-hero="cue"><span class="mouse" aria-hidden="true"><i></i></span> Scroll to watch it work</a>
+            </div>
+
+            <div class="cap" data-cap="1">
+              <span class="kicker"><span class="num">01</span> Scan</span>
+              <h2>Every face, measured.</h2>
+              <p>478 points map the face in a fraction of a second. The eye line is levelled, the tilt straightened, and the head size measured against your programme's rule, automatically.</p>
+              <div class="cap-hud"><span class="hud-chip">Tilt <b data-hud="tilt">8°</b> → 0°</span><span class="hud-chip">478 landmarks</span></div>
+              <a class="cap-link" href="/pricing?plan=single" data-plan-link="single">Try it on your photo <span aria-hidden="true">→</span></a>
+            </div>
+
+            <div class="cap" data-cap="2">
+              <span class="kicker"><span class="num">02</span> Clean</span>
+              <h2>A plain background, without touching the face.</h2>
+              <p>The wall behind you dissolves to the colour the rules ask for, and light is balanced across the face and neck. Your features are never reshaped or retouched.</p>
+              <div class="cap-hud"><span class="hud-chip">Background → white</span><span class="hud-chip">Face unchanged ✓</span></div>
+              <a class="cap-link" href="/pricing?plan=single" data-plan-link="single">Try it on your photo <span aria-hidden="true">→</span></a>
+            </div>
+
+            <div class="cap" data-cap="3">
+              <span class="kicker"><span class="num">03</span> Rules</span>
+              <h2>35+ programmes. The right size for each.</h2>
+              <p>Pick the country and document. The frame, head size and file limits change to match the issuing authority's published rules.</p>
+              <div class="cap-flags" aria-hidden="true">
+                <span data-r="ca"><img class="flag" src="/assets/flags/us.svg" alt="" width="20" height="15" loading="lazy" /><img class="flag" src="/assets/flags/in.svg" alt="" width="20" height="15" loading="lazy" /><img class="flag" src="/assets/flags/gb.svg" alt="" width="20" height="15" loading="lazy" /><img class="flag" src="/assets/flags/ca.svg" alt="" width="20" height="15" loading="lazy" /></span><span data-r="us" hidden><img class="flag" src="/assets/flags/ca.svg" alt="" width="20" height="15" loading="lazy" /><img class="flag" src="/assets/flags/in.svg" alt="" width="20" height="15" loading="lazy" /><img class="flag" src="/assets/flags/gb.svg" alt="" width="20" height="15" loading="lazy" /><img class="flag" src="/assets/flags/us.svg" alt="" width="20" height="15" loading="lazy" /></span>
+              </div>
+              <div class="cap-hud"><span class="hud-chip" data-hud="spec">United States · 2 × 2 in</span></div>
+              <a class="cap-link" href="/requirements">See every programme <span aria-hidden="true">→</span></a>
+            </div>
+
+            <div class="cap" data-cap="4">
+              <span class="kicker"><span class="num">04</span> Ready</span>
+              <h2>Ready to submit, or print.</h2>
+              <p>Download the digital file within the programme's size limits, or a 4×6 print sheet with cut guides at the right DPI. Photo OK, the first time.</p>
+              <div class="hero-cta">
+                <a class="btn" href="/pricing?plan=single" data-plan-link="single">Make my photo · <span data-price="single">CAD 9.99</span> <span class="arw" aria-hidden="true">→</span></a>
+                <a class="btn ghost" href="#pricing">Business plans</a>
+              </div>
+            </div>
+
+            <ol class="story-rail" aria-hidden="true">
+              <li data-rail="0">Photo</li><li data-rail="1">Scan</li><li data-rail="2">Clean</li><li data-rail="3">Rules</li><li data-rail="4">Ready</li>
+              <span class="rail-fill"></span>
+            </ol>
           </div>
-          <div class="hero-stats" data-hero="stats">
-            <div><b data-count="35" data-suffix="+">0</b><span>programmes</span></div>
-            <div><b data-count="26">0</b><span>countries</span></div>
-            <div><b data-count="2">0</b><span>min to a file</span></div>
-            <div><b data-count="0">0</b><span>face edits — ever</span></div>
+
+          <div class="stage" id="stage">
+            <canvas id="stage-canvas" aria-label="3D animation: a phone takes a portrait, the face is scanned, the background cleaned and the photo placed in a passport" role="img"></canvas>
+            <div class="stage-posters" aria-hidden="true">
+              <img data-poster="0" data-src="/assets/landing/poster-0.jpg" alt="" /><img data-poster="1" data-src="/assets/landing/poster-1.jpg" alt="" /><img data-poster="2" data-src="/assets/landing/poster-2.jpg" alt="" /><img data-poster="3" data-src="/assets/landing/poster-3.jpg" alt="" /><img data-poster="4" data-src="/assets/landing/poster-4.jpg" alt="" />
+            </div>
+            <div class="stage-hud" aria-hidden="true">
+              <span class="hud-tl"><i class="rec"></i> PASSPORTLENS · LIVE CHECK</span>
+              <span class="hud-tr"><b data-hud="index">00</b> / 04</span>
+              <span class="hud-bl" data-hud="caption">Capturing portrait…</span>
+            </div>
+            <div class="stage-flash" aria-hidden="true"></div>
           </div>
         </div>
-
-        <!-- Photo frame that assembles itself -->
-        <figure class="frame" id="frame" aria-label="A passport photo being checked">
-          <div class="frame-card" data-f="card">
-            <div class="frame-photo" data-f="photo"><img src="/screenshots/eval/raw/px_220453.jpg" alt="Portrait framed to passport size" /></div>
-            <svg class="frame-guides" viewBox="0 0 300 420" aria-hidden="true">
-              <path class="draw" d="M150 18 V402" stroke="#FFB500" stroke-width="1.5" stroke-dasharray="6 6" fill="none"/>
-              <path class="draw" d="M24 150 H276" stroke="#FFB500" stroke-width="1.5" stroke-dasharray="6 6" fill="none"/>
-              <path class="draw" d="M262 78 V296" stroke="#FFB500" stroke-width="2.5" fill="none"/>
-              <path class="draw" d="M254 78 H270 M254 296 H270" stroke="#FFB500" stroke-width="2.5" fill="none"/>
-            </svg>
-            <span class="corner tl" data-f="corner"></span><span class="corner tr" data-f="corner"></span>
-            <span class="corner bl" data-f="corner"></span><span class="corner br" data-f="corner"></span>
-            <span class="frame-label" data-f="label">Head 31–36 mm ✓</span>
-            <span class="frame-label two" data-f="label">Plain background ✓</span>
-            <span class="stamp" data-f="stamp">✓ Photo OK</span>
-          </div>
-          <div class="frame-meta" data-f="meta"><span data-r="ca">Canada · Passport · 50 × 70 mm</span><span data-r="us" hidden>United States · Passport · 2 × 2 in</span></div>
-        </figure>
       </div>
+    </section>
 
-      <!-- UPS-style task box -->
+    <!-- ============ IN-PAGE DEMO ============ -->
+    <section class="demo" id="demo">
+      <div class="wrap demo-grid">
+        <div class="demo-copy" data-reveal>
+          <span class="kicker">Try it now · free</span>
+          <h2>Drag the slider. That's the whole job done.</h2>
+          <p>Real results from PassportLens on sample portraits. Pick a photo and a country, then drag to compare the original with the finished passport photo.</p>
+          <div class="demo-pick">
+            <span class="pick-label">Photo</span>
+            <div class="pick-row" role="group" aria-label="Sample photo">
+              <button type="button" class="pick on" data-demo-photo="street"><img src="/assets/landing/demo-street-ca-before.jpg" alt="Street portrait" /></button>
+              <button type="button" class="pick" data-demo-photo="senior"><img src="/assets/landing/demo-senior-ca-before.jpg" alt="Senior portrait" loading="lazy" /></button>
+              <button type="button" class="pick" data-demo-photo="glasses"><img src="/assets/landing/demo-glasses-ca-before.jpg" alt="Portrait with glasses" loading="lazy" /></button>
+            </div>
+            <span class="pick-label">Country</span>
+            <div class="pick-row chips" role="group" aria-label="Country">
+              <button type="button" class="chip on" data-demo-country="ca"><img class="flag" src="/assets/flags/ca.svg" alt="" width="20" height="15" loading="lazy" /> Canada <small>50×70 mm</small></button>
+              <button type="button" class="chip" data-demo-country="us"><img class="flag" src="/assets/flags/us.svg" alt="" width="20" height="15" loading="lazy" /> US <small>2×2 in</small></button>
+              <button type="button" class="chip" data-demo-country="in"><img class="flag" src="/assets/flags/in.svg" alt="" width="20" height="15" loading="lazy" /> India OCI <small>51×51 mm</small></button>
+            </div>
+          </div>
+          <div class="hero-cta">
+            <a class="btn lg" href="/pricing?plan=single" data-plan-link="single">Do this with my photo <span class="arw" aria-hidden="true">→</span></a>
+            <a class="btn lg ghost" href="/app?guest">Open the full demo</a>
+          </div>
+        </div>
+        <div class="demo-stage" data-reveal>
+          <div class="ba" id="ba" style="--ratio: 50 / 70">
+            <img class="before-img" id="baBefore" src="/assets/landing/demo-street-ca-before.jpg" alt="Original photo" />
+            <img class="after-img" id="baAfter" src="/assets/landing/demo-street-ca-after.jpg" alt="Finished passport photo" />
+            <span class="ba-tag b">Original</span>
+            <span class="ba-tag a">Passport-ready</span>
+            <div class="ba-handle" id="baHandle"><span class="ba-knob" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6l-6 6 6 6M15 6l6 6-6 6"/></svg></span></div>
+          </div>
+          <div class="demo-verdict"><span class="ok-dot"></span> Photo OK · checked against <b data-demo-rule>Canada passport rules</b></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ TASK SEARCH ============ -->
+    <section class="task">
       <div class="wrap">
-        <div class="taskbox" id="taskbox" data-hero="task">
-          <label for="task-search"><b>What is the photo for?</b><span>Pick the programme — the exact size, background and file rules load automatically.</span></label>
+        <div class="taskbox" id="taskbox" data-reveal>
+          <label for="task-search"><b>What is the photo for?</b><span>Pick the programme. The exact size, background and file rules load automatically.</span></label>
           <form class="task-row" action="/app" method="get">
             <input id="task-search" class="input" type="search" name="q" placeholder="Search: Canada passport, PR card, US visa, OCI…" autocomplete="off" list="task-list" />
             <datalist id="task-list"></datalist>
             <button class="btn" type="submit">Start <span class="arw" aria-hidden="true">→</span></button>
           </form>
           <div class="chips">
-            <span data-r="ca"><a href="/app?programme=canada-passport-print-2026-06">🇨🇦 Canada passport</a><a href="/app?programme=canada-pr-card-digital-checker-2026-07">🇨🇦 PR card</a><a href="/app?programme=canada-trv-print-2026-06">🇨🇦 Visitor visa</a><a href="/app?programme=us-visa-ds160-digital-2026-06">🇺🇸 US visa</a><a href="/app?programme=india-oci-card-digital-2026-07">🇮🇳 OCI card</a></span>
-            <span data-r="us" hidden><a href="/app?programme=us-passport-print-2026-06">🇺🇸 US passport</a><a href="/app?programme=us-visa-ds160-digital-2026-06">🇺🇸 Visa · DS-160</a><a href="/app?programme=us-dv-lottery-digital-2026-06">🇺🇸 Diversity visa</a><a href="/app?programme=canada-passport-print-2026-06">🇨🇦 Canada passport</a><a href="/app?programme=india-oci-card-digital-2026-07">🇮🇳 OCI card</a></span>
+            <span data-r="ca"><a href="/app?programme=canada-passport-print-2026-06"><img class="flag" src="/assets/flags/ca.svg" alt="" width="20" height="15" loading="lazy" /> Canada passport</a><a href="/app?programme=canada-pr-card-digital-checker-2026-07"><img class="flag" src="/assets/flags/ca.svg" alt="" width="20" height="15" loading="lazy" /> PR card</a><a href="/app?programme=canada-trv-print-2026-06"><img class="flag" src="/assets/flags/ca.svg" alt="" width="20" height="15" loading="lazy" /> Visitor visa</a><a href="/app?programme=us-visa-ds160-digital-2026-06"><img class="flag" src="/assets/flags/us.svg" alt="" width="20" height="15" loading="lazy" /> US visa</a><a href="/app?programme=india-oci-card-digital-2026-07"><img class="flag" src="/assets/flags/in.svg" alt="" width="20" height="15" loading="lazy" /> OCI card</a></span>
+            <span data-r="us" hidden><a href="/app?programme=us-passport-print-2026-06"><img class="flag" src="/assets/flags/us.svg" alt="" width="20" height="15" loading="lazy" /> US passport</a><a href="/app?programme=us-visa-ds160-digital-2026-06"><img class="flag" src="/assets/flags/us.svg" alt="" width="20" height="15" loading="lazy" /> Visa · DS-160</a><a href="/app?programme=us-dv-lottery-digital-2026-06"><img class="flag" src="/assets/flags/us.svg" alt="" width="20" height="15" loading="lazy" /> Diversity visa</a><a href="/app?programme=canada-passport-print-2026-06"><img class="flag" src="/assets/flags/ca.svg" alt="" width="20" height="15" loading="lazy" /> Canada passport</a><a href="/app?programme=india-oci-card-digital-2026-07"><img class="flag" src="/assets/flags/in.svg" alt="" width="20" height="15" loading="lazy" /> OCI card</a></span>
             <a href="/requirements">All 35+ programmes →</a>
           </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ QUICK CARDS ============ -->
-    <section class="quick">
-      <div class="wrap quick-grid" data-reveal>
-        <a class="qcard card hover" href="/pricing?plan=single">
-          <span class="qico"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.6 3.6-6 8-6s8 2.4 8 6"/></svg></span>
-          <b>I need one photo</b><span>Make it at home in minutes for <span data-price="single">CAD 9.99</span>.</span><i>→</i>
-        </a>
-        <a class="qcard card hover" href="#pricing">
-          <span class="qico"><svg viewBox="0 0 24 24"><path d="M3 9l1.5-5h15L21 9M3 9v11h18V9M3 9h18M9 20v-6h6v6"/></svg></span>
-          <b>I run a business</b><span>Unlimited photos, staff logins, client records.</span><i>→</i>
-        </a>
-        <a class="qcard card hover" href="/app?guest">
-          <span class="qico"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span>
-          <b>Try the free demo</b><span>Run the full check on sample portraits.</span><i>→</i>
-        </a>
-      </div>
-    </section>
-
-    <!-- ============ HOW ============ -->
-    <section class="how" id="how">
-      <div class="wrap">
-        <div class="sec-head" data-reveal>
-          <span class="kicker">How it works</span>
-          <h2>Three steps. No guesswork.</h2>
-          <p>Everything technical happens behind the scenes. You only see what matters: is the photo OK, and if not, what to fix.</p>
-        </div>
-        <div class="steps" data-reveal>
-          <article class="step card hover">
-            <svg class="step-ico" viewBox="0 0 48 48" aria-hidden="true"><rect class="draw" x="8" y="10" width="32" height="28" rx="4"/><path class="draw" d="M14 20h20M14 27h14"/></svg>
-            <span class="sn">1</span>
-            <h3>Choose the programme</h3>
-            <p>Canadian passport, PR card, US visa, Indian OCI and more. The exact size, background and file rules load automatically.</p>
-          </article>
-          <article class="step card hover">
-            <svg class="step-ico" viewBox="0 0 48 48" aria-hidden="true"><path class="draw" d="M8 16h6l4-6h12l4 6h6v22H8z"/><circle class="draw" cx="24" cy="26" r="7"/></svg>
-            <span class="sn">2</span>
-            <h3>Add the photo</h3>
-            <p>Upload a portrait or use the guided camera. It tells you in plain words to move closer, look at the lens or find better light.</p>
-          </article>
-          <article class="step card hover">
-            <svg class="step-ico" viewBox="0 0 48 48" aria-hidden="true"><circle class="draw" cx="24" cy="24" r="16"/><path class="draw" d="M15 25l6 6 12-13"/></svg>
-            <span class="sn">3</span>
-            <h3>Get the result and download</h3>
-            <p>A clear <b>Photo OK</b> or <b>Retake</b> with the one reason that matters. Then download the digital file or a ready-to-print sheet.</p>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ SHOWCASE ============ -->
-    <section class="showcase">
-      <div class="wrap showcase-inner">
-        <div class="ba" id="ba" data-reveal>
-          <img class="before-img" src="/screenshots/landing/px_1681010_before.jpg" alt="Original photo with a busy brick-wall background" />
-          <img class="after-img" id="baAfter" src="/screenshots/landing/px_1681010_after.jpg" alt="Same photo with a clean white background" />
-          <span class="ba-tag b">Before</span>
-          <span class="ba-tag a">After</span>
-          <div class="ba-handle" id="baHandle"><span class="ba-knob" aria-hidden="true">⇋</span></div>
-        </div>
-        <div class="showcase-copy" data-reveal>
-          <span class="kicker">See the difference</span>
-          <h2>A clean, correctly sized photo from an ordinary picture.</h2>
-          <p>Curly hair, glasses, a busy wall behind you — PassportLens crops to the exact head size, replaces the background and keeps every edge of the real photo.</p>
-          <ul class="ticks">
-            <li>Exact size, head position and margins for the chosen programme</li>
-            <li>Plain background where the rules ask for one</li>
-            <li>Every applied change is listed, nothing is hidden</li>
-          </ul>
         </div>
       </div>
     </section>
@@ -284,7 +292,7 @@
             <a class="btn ghost block" href="/pricing?plan=single" data-plan-link="single">Buy one photo</a>
           </article>
 
-          <article class="plan card featured">
+          <article class="plan card featured dark-stage">
             <span class="plan-flag">Most popular</span>
             <span class="plan-tier">Silver</span>
             <div class="plan-price">
@@ -332,6 +340,28 @@
       </div>
     </section>
 
+    <!-- ============ BUSINESS BAND (dark stage) ============ -->
+    <section class="band">
+      <div class="wrap">
+        <div class="band-stage dark-stage" data-reveal>
+          <div class="band-copy">
+            <span class="kicker on-dark">For studios, pharmacies &amp; consultants</span>
+            <h2>Run a passport photo counter that never gets a photo rejected.</h2>
+            <p>Unlimited photos, every programme's rules, client records with sales and receipts. Gold and Platinum add staff logins, papers, printers and setup.</p>
+            <div class="hero-cta">
+              <a class="btn lg" href="/pricing?plan=silver" data-plan-link="silver">Start Silver · <span data-price="silver">CAD 100</span>/mo <span class="arw" aria-hidden="true">→</span></a>
+              <a class="btn lg ghost on-dark" href="#contact" data-tier="Gold">Talk to us</a>
+            </div>
+          </div>
+          <div class="band-stats">
+            <div><b data-count="35" data-suffix="+">35+</b><span>programmes loaded</span></div>
+            <div><b data-count="30">30</b><span>seconds per client</span></div>
+            <div><b data-count="10">10</b><span>staff logins on Gold</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ============ PROGRAMMES ============ -->
     <section class="programmes" id="programmes">
       <div class="wrap">
@@ -341,12 +371,12 @@
           <p>35+ passport, visa, residence and identity-photo programmes across 26 countries, each linked to the issuing authority's published requirements.</p>
         </div>
         <div class="prog-groups" data-reveal>
-          <div class="prog-group"><h3>🇨🇦 Canada</h3><ul><li>Passport</li><li>Permanent Resident card</li><li>Citizenship</li><li>Visitor visa (TRV)</li></ul></div>
-          <div class="prog-group"><h3>🇺🇸 United States</h3><ul><li>Passport</li><li>Visa · DS-160</li><li>Diversity visa</li></ul></div>
-          <div class="prog-group"><h3>🇮🇳 India</h3><ul><li>Passport · ICAO</li><li>e-Visa</li><li>OCI card</li></ul></div>
-          <div class="prog-group"><h3>🇬🇧 United Kingdom</h3><ul><li>Passport</li><li>Driving licence</li></ul></div>
-          <div class="prog-group"><h3>🇪🇺 Europe</h3><ul><li>Schengen visa</li><li>France</li><li>Germany</li><li>Netherlands</li><li>Ireland</li><li>Italy</li><li>Spain</li><li>Portugal</li><li>Switzerland</li><li>Austria</li><li>Poland</li><li>Belgium</li></ul></div>
-          <div class="prog-group"><h3>🌏 Asia-Pacific &amp; more</h3><ul><li>Australia</li><li>New Zealand</li><li>Japan</li><li>Singapore</li><li>South Korea</li><li>Hong Kong</li><li>China visa</li><li>Malaysia eVISA</li><li>UAE</li><li>Türkiye</li><li>Brazil</li></ul></div>
+          <div class="prog-group"><h3><img class="flag" src="/assets/flags/ca.svg" alt="" width="20" height="15" loading="lazy" /> Canada</h3><ul><li>Passport</li><li>Permanent Resident card</li><li>Citizenship</li><li>Visitor visa (TRV)</li></ul></div>
+          <div class="prog-group"><h3><img class="flag" src="/assets/flags/us.svg" alt="" width="20" height="15" loading="lazy" /> United States</h3><ul><li>Passport</li><li>Visa · DS-160</li><li>Diversity visa</li></ul></div>
+          <div class="prog-group"><h3><img class="flag" src="/assets/flags/in.svg" alt="" width="20" height="15" loading="lazy" /> India</h3><ul><li>Passport · ICAO</li><li>e-Visa</li><li>OCI card</li></ul></div>
+          <div class="prog-group"><h3><img class="flag" src="/assets/flags/gb.svg" alt="" width="20" height="15" loading="lazy" /> United Kingdom</h3><ul><li>Passport</li><li>Driving licence</li></ul></div>
+          <div class="prog-group"><h3><img class="flag" src="/assets/flags/fr.svg" alt="" width="20" height="15" loading="lazy" /> Europe</h3><ul><li>Schengen visa</li><li>France</li><li>Germany</li><li>Netherlands</li><li>Ireland</li><li>Italy</li><li>Spain</li><li>Portugal</li><li>Switzerland</li><li>Austria</li><li>Poland</li><li>Belgium</li></ul></div>
+          <div class="prog-group"><h3><img class="flag" src="/assets/flags/jp.svg" alt="" width="20" height="15" loading="lazy" /> Asia-Pacific &amp; more</h3><ul><li>Australia</li><li>New Zealand</li><li>Japan</li><li>Singapore</li><li>South Korea</li><li>Hong Kong</li><li>China visa</li><li>Malaysia eVISA</li><li>UAE</li><li>Türkiye</li><li>Brazil</li></ul></div>
         </div>
         <div class="prog-cta" data-reveal>
           <a class="btn navy" href="/app?guest">Open the demo <span class="arw" aria-hidden="true">→</span></a>
@@ -455,14 +485,15 @@
 
     <!-- ============ FINAL CTA ============ -->
     <section class="final">
-      <div class="glow g3" aria-hidden="true"></div>
-      <div class="wrap center" data-reveal>
+      <div class="wrap">
+      <div class="final-stage dark-stage center" data-reveal>
         <h2>Get the photo right, <em>the first time.</em></h2>
         <p>One photo for <span data-price="single">CAD 9.99</span>, or unlimited photos for your business.</p>
         <div class="hero-cta center">
           <a class="btn lg" href="/pricing?plan=single">Make my photo <span class="arw" aria-hidden="true">→</span></a>
           <a class="btn lg ghost on-dark" href="#pricing">Business plans</a>
         </div>
+      </div>
       </div>
     </section>
   </main>
@@ -477,11 +508,11 @@
             <span class="brand-name">Passport<b>Lens</b></span>
           </a>
           <p>Passport and visa photo software for individuals, studios, consultants and pharmacies across Canada and the United States.</p>
-          <div class="region-links"><a href="/">🇨🇦 Canada</a> · <a href="/us">🇺🇸 United States</a></div>
+          <div class="region-links"><a href="/"><img class="flag" src="/assets/flags/ca.svg" alt="" width="20" height="15" loading="lazy" /> Canada</a> · <a href="/us"><img class="flag" src="/assets/flags/us.svg" alt="" width="20" height="15" loading="lazy" /> United States</a></div>
         </div>
         <nav class="foot-col" aria-label="Product">
           <h5>Product</h5>
-          <a href="#how">How it works</a>
+          <a href="#story">How it works</a>
           <a href="#pricing">Pricing</a>
           <a href="/requirements">Photo requirements</a>
           <a href="/passport-photos">Passport photos by city</a>
@@ -510,7 +541,30 @@
     </div>
   </footer>
 
+  <!-- sticky sign-up pill -->
+  <div class="sticky-cta" id="stickyCta" aria-hidden="true">
+    <span class="sc-text"><b>Your passport photo in 2 minutes</b><span>Checked against the official rules</span></span>
+    <a class="btn" href="/pricing?plan=single" data-plan-link="single" tabindex="-1">Make my photo · <span data-price="single">CAD 9.99</span> <span class="arw" aria-hidden="true">→</span></a>
+  </div>
+
+  <!-- exit reminder -->
+  <div class="exit-card" id="exitCard" role="dialog" aria-labelledby="exitTitle" hidden>
+    <button class="exit-x" type="button" aria-label="Close" data-exit-close>×</button>
+    <img src="/assets/landing/hero-final.jpg" alt="" class="exit-photo" />
+    <div>
+      <b id="exitTitle">Before you go</b>
+      <p>Your first passport photo for <span data-price="single">CAD 9.99</span>, checked against the official rules. Not right? Retake as often as you like.</p>
+      <div class="exit-actions">
+        <a class="btn sm" href="/pricing?plan=single" data-plan-link="single">Make my photo <span class="arw" aria-hidden="true">→</span></a>
+        <a class="exit-demo" href="/app?guest">Try the free demo</a>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">{ "imports": { "three": "/src/vendor/three/three.module.min.js", "three/addons/": "/src/vendor/three/addons/" } }</script>
+  <script src="/src/vendor/lenis.min.js?v=1.3.26"></script>
   <script src="/src/vendor/anime.umd.min.js?v=4.5.0"></script>
-  <script src="/src/landing.js?v=pl-4"></script>
+  <script src="/src/landing.js?v=pl-5"></script>
+  <script type="module" src="/src/story.js?v=pl-5"></script>
 </body>
 </html>

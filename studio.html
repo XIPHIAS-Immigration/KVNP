@@ -7,9 +7,9 @@
   <meta name="robots" content="noindex" />
   <meta name="theme-color" content="#351C15" />
   <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/src/theme.css?v=pl-4" />
-  <link rel="stylesheet" href="/src/portal.css?v=pl-4" />
-  <link rel="stylesheet" href="/src/studio.css?v=pl-4" />
+  <link rel="stylesheet" href="/src/theme.css?v=pl-5" />
+  <link rel="stylesheet" href="/src/portal.css?v=pl-5" />
+  <link rel="stylesheet" href="/src/studio.css?v=pl-5" />
 </head>
 <body class="studio-body">
 
@@ -78,6 +78,7 @@
       <div class="notice warn" id="plan-notice" hidden></div>
 
       <ol class="stepper" id="stepper" aria-label="Steps">
+        <span class="stepper-track" aria-hidden="true"><span></span></span>
         <li data-go="1" class="active"><i>1</i><span>Programme</span></li>
         <li data-go="2"><i>2</i><span>Photo</span></li>
         <li data-go="3"><i>3</i><span>Result</span></li>
@@ -159,9 +160,20 @@
       <!-- STEP 3: result -->
       <section class="step-panel" data-step="3" hidden>
         <div class="processing" id="processing" hidden>
-          <div class="spinner" aria-hidden="true"></div>
-          <b>Checking the photo…</b>
-          <span class="muted small">Measuring the face, background and lighting against the rules.</span>
+          <div class="scan-frame" aria-hidden="true">
+            <img id="scan-img" alt="" />
+            <span class="scan-line"></span>
+            <span class="sc tl"></span><span class="sc tr"></span><span class="sc bl"></span><span class="sc br"></span>
+          </div>
+          <div class="scan-copy">
+            <b>Checking your photo…</b>
+            <ol class="scan-steps" id="scan-steps">
+              <li>Finding the face</li>
+              <li>Straightening and balancing light</li>
+              <li>Cleaning the background</li>
+              <li>Checking the programme's rules</li>
+            </ol>
+          </div>
         </div>
         <div id="result-view" hidden>
           <div class="verdict card" id="verdict">
@@ -183,7 +195,7 @@
                 <img class="after-img" id="after-img" alt="Prepared photo" />
                 <span class="ba-tag b">Original</span>
                 <span class="ba-tag a">Prepared</span>
-                <div class="ba-handle" id="ba-handle"><span class="ba-knob" aria-hidden="true">⇋</span></div>
+                <div class="ba-handle" id="ba-handle"><span class="ba-knob" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6l-6 6 6 6M15 6l6 6-6 6"/></svg></span></div>
               </div>
               <figcaption class="muted small">Drag the handle to compare. <span id="result-size"></span></figcaption>
             </figure>
@@ -338,6 +350,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-  <script type="module" src="/src/studio.js?v=pl-4"></script>
+  <script type="module" src="/src/studio.js?v=pl-5"></script>
 </body>
 </html>

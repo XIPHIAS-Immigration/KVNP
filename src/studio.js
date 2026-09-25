@@ -3,9 +3,9 @@
    Talks to the same Python engine as the advanced studio; shows people a plain
    verdict and keeps the technical detail for admins. */
 
-import { RULE_PROFILES } from "./rules.js?v=pl-4";
-import { DEMO_PORTRAITS } from "./demo-library.js?v=pl-4";
-import { initCoach, analyzeFrame, coachAvailable } from "./capture.js?v=pl-4";
+import { RULE_PROFILES } from "./rules.js?v=pl-5";
+import { DEMO_PORTRAITS } from "./demo-library.js?v=pl-5";
+import { initCoach, analyzeFrame, coachAvailable } from "./capture.js?v=pl-5";
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -28,13 +28,17 @@ const state = {
   clients: [],
   camera: { stream: null, raf: 0, lastAnalyze: 0, metrics: null },
   busy: false,
+  country: "",
 };
 
-const FLAGS = (code) => {
-  code = String(code || "").toUpperCase();
-  if (code.length !== 2 || !/^[A-Z]{2}$/.test(code)) return "🌐";
-  return String.fromCodePoint(...[...code].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
+/* Real flag images: emoji flags don't render on Windows. */
+const FLAG_CODES = new Set("ae at au be br ca ch cn de es fr gb hk ie in it jp kr my nl nz pl pt sg tr us".split(" "));
+const flagSrc = (code) => { const c = String(code || "").toLowerCase(); return FLAG_CODES.has(c) ? `/assets/flags/${c}.svg` : ""; };
+const FLAGS = (code, cls = "flag") => {
+  const src = flagSrc(code);
+  return src ? `<img class="${cls}" src="${src}" alt="" width="20" height="15" />` : `<span class="${cls} globe" aria-hidden="true">◎</span>`;
 };
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 const BACKGROUND_CHOICES = {
   white: ["#ffffff"],
@@ -293,8 +297,17 @@ function goStep(step, force = false) {
     if (step === 2 && !state.profile) { toast("Choose a programme first."); return; }
   }
   if (state.step === 2 && step !== 2) closeCamera();
+  const forward = step > state.step;
   state.step = step;
-  $$(".step-panel").forEach((panel) => { panel.hidden = Number(panel.dataset.step) !== step; });
+  $$(".step-panel").forEach((panel) => {
+    const show = Number(panel.dataset.step) === step;
+    panel.hidden = !show;
+    if (show && !REDUCED) {
+      panel.classList.remove("enter-fwd", "enter-back");
+      void panel.offsetWidth;
+      panel.classList.add(forward ? "enter-fwd" : "enter-back");
+    }
+  });
   refreshStepper();
   if (step === 4) renderAdjustControls();
   if (step === 5) prepareDownload();
@@ -302,6 +315,7 @@ function goStep(step, force = false) {
 }
 
 function refreshStepper() {
+  $("#stepper").style.setProperty("--progress", String((state.step - 1) / 4));
   $$("#stepper li").forEach((li) => {
     const n = Number(li.dataset.go);
     li.classList.toggle("active", n === state.step);
@@ -310,44 +324,102 @@ function refreshStepper() {
 }
 
 /* ---------- step 1 ---------- */
+function countryList() {
+  const map = new Map();
+  for (const profile of RULE_PROFILES) {
+    const key = profile.country === "STUDIO" ? "STUDIO" : profile.country;
+    if (!map.has(key)) map.set(key, { code: key, name: profile.country === "STUDIO" ? "Studio portrait" : profile.countryName, items: [] });
+    map.get(key).items.push(profile);
+  }
+  let priority = ["CA", "US", "IN", "GB"];
+  try { if (/^America\/(New_York|Chicago|Denver|Los_Angeles|Phoenix)/.test(Intl.DateTimeFormat().resolvedOptions().timeZone)) priority = ["US", "CA", "IN", "GB"]; } catch (e) {}
+  return [...map.values()].sort((a, b) => {
+    if (a.code === "STUDIO") return 1;
+    if (b.code === "STUDIO") return -1;
+    const pa = priority.indexOf(a.code), pb = priority.indexOf(b.code);
+    if (pa !== -1 || pb !== -1) return (pa === -1 ? 99 : pa) - (pb === -1 ? 99 : pb);
+    return a.name.localeCompare(b.name);
+  });
+}
+
 function renderProgrammes(query = "") {
   const q = query.trim().toLowerCase();
   const host = $("#prog-groups");
-  const groups = new Map();
-  for (const profile of RULE_PROFILES) {
-    const hay = `${profile.countryName} ${profile.country} ${profile.programme} ${profile.category} ${profile.document} ${profile.label}`.toLowerCase();
-    if (q && !hay.includes(q)) continue;
-    const key = profile.country === "STUDIO" ? "zzz" : profile.countryName;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(profile);
+  if (q) {
+    // search: flat list of matching documents
+    const hits = RULE_PROFILES.filter((p) => `${p.countryName} ${p.country} ${p.programme} ${p.category} ${p.document} ${p.label}`.toLowerCase().includes(q));
+    host.className = "prog-results";
+    host.innerHTML = hits.length
+      ? `<div class="prog-cards">${hits.map((p) => programmeCard(p, true)).join("")}</div>`
+      : `<p class="empty">No programme matches "${escapeHtml(query)}". <a href="/#contact">Ask us to add it.</a></p>`;
+    bindProgrammeCards(host);
+    return;
   }
-  const priority = ["Canada", "United States", "India", "United Kingdom"];
-  const keys = [...groups.keys()].sort((a, b) => {
-    const pa = priority.indexOf(a), pb = priority.indexOf(b);
-    if (pa !== -1 || pb !== -1) return (pa === -1 ? 99 : pa) - (pb === -1 ? 99 : pb);
-    return a.localeCompare(b);
-  });
-  host.innerHTML = keys.map((key) => {
-    const items = groups.get(key);
-    const first = items[0];
-    const title = key === "zzz" ? "General studio portrait" : `${FLAGS(first.country)} ${first.countryName}`;
-    return `<div class="prog-country"><h2>${title}</h2><div class="prog-cards">${items.map((p) => programmeCard(p)).join("")}</div></div>`;
-  }).join("") || `<p class="empty">No programme matches "${escapeHtml(query)}". <a href="/#contact">Ask us to add it.</a></p>`;
-  $$(".prog-card", host).forEach((btn) => btn.addEventListener("click", () => {
-    const profile = RULE_PROFILES.find((item) => item.id === btn.dataset.id);
-    if (profile) selectProgramme(profile);
-  }));
+  host.className = "flag-grid";
+  const countries = countryList();
+  host.innerHTML = countries.map((c, i) => `
+    <button type="button" class="flag-tile${state.country === c.code ? " on" : ""}" data-country="${escapeHtml(c.code)}" style="--i:${i}">
+      <span class="ft-flag">${c.code === "STUDIO" ? '<span class="ft-studio" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span>' : `<img src="${flagSrc(c.code)}" alt="" />`}</span>
+      <span class="ft-name">${escapeHtml(c.name)}</span>
+      <span class="ft-count">${c.items.length} ${c.items.length === 1 ? "photo type" : "photo types"}</span>
+    </button>`).join("");
+  $$(".flag-tile", host).forEach((tile) => tile.addEventListener("click", () => openCountry(tile.dataset.country)));
+  if (state.country) openCountry(state.country, true);
 }
 
-function programmeCard(profile) {
+function openCountry(code, instant = false) {
+  const host = $("#prog-groups");
+  const tile = $(`.flag-tile[data-country="${CSS.escape(code)}"]`, host);
+  if (!tile) return;
+  const wasOpen = state.country === code && $(".doc-drawer", host);
+  $(".doc-drawer", host)?.remove();
+  $$(".flag-tile", host).forEach((t) => t.classList.toggle("on", t === tile));
+  host.classList.add("has-open");
+  if (wasOpen && !instant) { state.country = ""; host.classList.remove("has-open"); tile.classList.remove("on"); return; }
+  state.country = code;
+  const country = countryList().find((c) => c.code === code);
+  // insert the drawer after the last tile on the clicked tile's row
+  const tiles = $$(".flag-tile", host);
+  const rowTop = tile.offsetTop;
+  let last = tile;
+  for (const t of tiles) if (t.offsetTop === rowTop) last = t;
+  const drawer = document.createElement("div");
+  drawer.className = "doc-drawer" + (instant || REDUCED ? " instant" : "");
+  drawer.style.setProperty("--x", `${tile.offsetLeft + tile.offsetWidth / 2}px`);
+  drawer.innerHTML = `
+    <div class="dd-head">${code === "STUDIO" ? "" : `<img src="${flagSrc(code)}" alt="" />`}<b>${escapeHtml(country.name)}</b><span>Choose the document</span></div>
+    <div class="prog-cards">${country.items.map((p, i) => programmeCard(p, false, i)).join("")}</div>`;
+  last.after(drawer);
+  bindProgrammeCards(drawer);
+  if (!instant) setTimeout(() => {
+    const r = drawer.getBoundingClientRect();
+    if (r.bottom > innerHeight - 20) window.scrollBy({ top: Math.min(r.bottom - innerHeight + 40, r.top - 90), behavior: REDUCED ? "auto" : "smooth" });
+  }, 120);
+}
+
+function bindProgrammeCards(root) {
+  $$(".prog-card", root).forEach((btn) => btn.addEventListener("click", () => {
+    const profile = RULE_PROFILES.find((item) => item.id === btn.dataset.id);
+    if (!profile) return;
+    btn.classList.add("picked");
+    setTimeout(() => selectProgramme(profile), REDUCED ? 0 : 260);
+  }));
+}
+function programmeCard(profile, withFlag = false, i = 0) {
   const out = profile.output || {};
   const size = out.printWidthMm ? `${out.printWidthMm} × ${out.printHeightMm} mm` : `${out.widthPx} × ${out.heightPx} px`;
   const on = state.profile && state.profile.id === profile.id ? "on" : "";
-  return `<button type="button" class="prog-card ${on}" data-id="${escapeHtml(profile.id)}"><b>${escapeHtml(profile.programme)}</b><span>${escapeHtml(size)} · ${escapeHtml(profile.delivery || "")}</span><span class="badge info tag">${escapeHtml(profile.category || "")}</span></button>`;
+  const ratio = out.widthPx && out.heightPx ? out.widthPx / out.heightPx : 0.75;
+  return `<button type="button" class="prog-card ${on}" data-id="${escapeHtml(profile.id)}" style="--i:${i}">
+    <span class="pc-shape" style="--r:${ratio.toFixed(3)}" aria-hidden="true"><i></i></span>
+    <span class="pc-text"><b>${withFlag ? FLAGS(profile.country) + " " + escapeHtml(profile.countryName) + " · " : ""}${escapeHtml(profile.programme)}</b><span>${escapeHtml(size)} · ${escapeHtml(profile.delivery || "")}</span></span>
+    <span class="pc-go" aria-hidden="true">→</span>
+  </button>`;
 }
 
 function selectProgramme(profile) {
   state.profile = profile;
+  state.country = profile.country === "STUDIO" ? "STUDIO" : profile.country;
   resetOptions();
   resetPhoto();
   $$(".prog-card").forEach((btn) => btn.classList.toggle("on", btn.dataset.id === profile.id));
@@ -524,6 +596,7 @@ async function runProcess({ stay } = {}) {
     goStep(3, true);
     $("#processing").hidden = false;
     $("#result-view").hidden = true;
+    startScan();
   } else {
     $("#adjust-busy").hidden = false;
   }
@@ -547,15 +620,39 @@ async function runProcess({ stay } = {}) {
     state.artifactSaved = false;
     renderResult(data);
     refreshStepper();
-    if (stayOnAdjust) $("#adjust-img").src = data.finalDataUrl;
+    if (stayOnAdjust) {
+      const img = $("#adjust-img");
+      img.classList.add("fade");
+      setTimeout(() => { img.src = data.finalDataUrl; img.onload = () => img.classList.remove("fade"); }, 160);
+    }
   } catch (error) {
     if (!stayOnAdjust) goStep(2, true);
     toast(error.message, "bad");
   } finally {
     state.busy = false;
+    stopScan();
     $("#processing").hidden = true;
     $("#adjust-busy").hidden = true;
   }
+}
+
+/* processing view: the photo with a scan line and ticking stages */
+let scanTimers = [];
+function startScan() {
+  const img = $("#scan-img");
+  img.src = state.demoName ? `/assets/demo/${state.demoName}` : (state.sourceUrl || "");
+  const items = $$("#scan-steps li");
+  items.forEach((li) => li.className = "");
+  scanTimers.forEach(clearTimeout);
+  scanTimers = [];
+  items.forEach((li, i) => {
+    scanTimers.push(setTimeout(() => { items.forEach((x, k) => { if (k < i) x.className = "done"; }); li.className = "now"; }, i * 750));
+  });
+}
+function stopScan() {
+  scanTimers.forEach(clearTimeout);
+  scanTimers = [];
+  $$("#scan-steps li").forEach((li) => li.className = "done");
 }
 
 /* ---------- step 3 ---------- */
@@ -586,11 +683,16 @@ function renderResult(data) {
     reasons = warnings.map(plainReason).filter(Boolean);
   }
   verdict.className = `verdict card ${level}`;
-  icon.textContent = level === "ok" ? "✓" : level === "warn" ? "!" : "✕";
+  icon.innerHTML = level === "ok"
+    ? '<svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="23"/><path d="M15 27l7 7 15-16"/></svg>'
+    : level === "warn"
+      ? '<svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="23"/><path d="M26 14v15M26 36v2"/></svg>'
+      : '<svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="23"/><path d="M18 18l16 16M34 18L18 34"/></svg>';
+  verdict.classList.remove("pop"); void verdict.offsetWidth; if (!REDUCED) verdict.classList.add("pop");
   $("#verdict-title").textContent = title;
   $("#verdict-message").textContent = message;
   const list = $("#verdict-reasons");
-  list.innerHTML = uniq(reasons).slice(0, 4).map((r) => `<li>${escapeHtml(r)}</li>`).join("");
+  list.innerHTML = uniq(reasons).slice(0, 4).map((r, i) => `<li style="--i:${i}">${escapeHtml(r)}</li>`).join("");
   list.hidden = !reasons.length;
   const confirmBox = $("#verdict-confirm");
   const confirmList = $("#verdict-confirm-list");
@@ -604,6 +706,7 @@ function renderResult(data) {
   $("#ba").style.setProperty("--ratio", `${out.widthPx} / ${out.heightPx}`);
   $("#result-size").textContent = `${out.widthPx} × ${out.heightPx} px · ${formatBytes(data.outputBytes)}`;
   resetCompare();
+  sweepCompare();
 
   const edits = data.effectiveEdits || {};
   const applied = [];
@@ -662,6 +765,20 @@ function bindCompare() {
   window.addEventListener("pointermove", (e) => { if (dragging) setPos(e.clientX); });
   window.addEventListener("pointerup", () => { dragging = false; });
   ba.addEventListener("pointerdown", (e) => { if (e.target !== handle && !handle.contains(e.target)) setPos(e.clientX); });
+}
+function sweepCompare() {
+  if (REDUCED) return;
+  const after = $("#after-img"), handle = $("#ba-handle");
+  const start = performance.now(), D = 1600;
+  const pos = (t) => t < 0.4 ? 0.5 + 0.42 * Math.sin((t / 0.4) * Math.PI / 2) : 0.92 - 0.42 * ((1 - Math.cos(((t - 0.4) / 0.6) * Math.PI)) / 2);
+  function step(now) {
+    const t = Math.min(1, (now - start) / D);
+    const p = (pos(t) * 100).toFixed(1);
+    after.style.clipPath = `inset(0 0 0 ${p}%)`;
+    handle.style.left = `${p}%`;
+    if (t < 1) requestAnimationFrame(step);
+  }
+  setTimeout(() => requestAnimationFrame(step), 450);
 }
 function resetCompare() {
   $("#after-img").style.clipPath = "inset(0 0 0 50%)";
@@ -793,6 +910,7 @@ async function exportFile(format) {
     downloadBlob(blob, `passportlens-${slug(state.profile.id)}.${format}`);
     trackEvent("download_completed", { format });
     toast("Downloaded.", "ok");
+    celebrate(button);
   } catch (error) {
     toast(error.message, "bad");
   } finally {
@@ -909,6 +1027,26 @@ function uniq(items) { return [...new Set(items)]; }
 function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 
 let toastTimer = 0;
+/* small gold burst from a button after a successful download */
+function celebrate(el) {
+  if (REDUCED || !el) return;
+  const r = el.getBoundingClientRect();
+  const layer = document.createElement("div");
+  layer.className = "burst";
+  layer.style.left = `${r.left + r.width / 2}px`;
+  layer.style.top = `${r.top + r.height / 2}px`;
+  for (let i = 0; i < 18; i++) {
+    const s = document.createElement("i");
+    const a = (i / 18) * Math.PI * 2, d = 50 + Math.random() * 50;
+    s.style.setProperty("--dx", `${Math.cos(a) * d}px`);
+    s.style.setProperty("--dy", `${Math.sin(a) * d - 20}px`);
+    s.style.setProperty("--c", i % 3 ? "#FFB500" : i % 2 ? "#3ddc84" : "#351C15");
+    layer.appendChild(s);
+  }
+  document.body.appendChild(layer);
+  setTimeout(() => layer.remove(), 1100);
+}
+
 function toast(message, kind = "") {
   const el = $("#toast");
   el.textContent = message;
