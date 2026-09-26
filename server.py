@@ -2098,6 +2098,13 @@ def calculate_crop(width, height, face, profile, allow_pad=False):
             if target is None:
                 target = (eye_rule.get("fromTopMinPercent", 33) + eye_rule.get("fromTopMaxPercent", 45)) / 2.0
             top = eye_y - ch * (target / 100.0)
+            # Leave a little air above the hair: move the frame up (eyes move
+            # down the photo) as far as the eye rule allows, so voluminous hair
+            # doesn't touch or run off the top edge.
+            eye_max = eye_rule.get("fromTopMaxPercent", target + 6)
+            want = visible_top - ch * 0.04
+            if want < top:
+                top = max(want, eye_y - ch * ((eye_max - 1.5) / 100.0))
             if not allow_pad:
                 # Without padding we cannot invent headroom, so never let the crown
                 # clip: keep at least a sliver of margin above the top of the head.

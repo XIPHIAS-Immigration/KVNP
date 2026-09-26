@@ -793,7 +793,7 @@ function renderAdjustControls() {
   const caution = $("#adjust-caution");
   const edits = state.profile.allowedEdits || {};
   caution.hidden = edits.background !== false;
-  if (edits.background === false) caution.textContent = `Note: ${state.profile.countryName}'s published rules say the photo must not be digitally altered. Cleaning the background is your choice; when in doubt, retake against a plain wall.`;
+  if (edits.background === false) caution.textContent = `Note: the published rules for ${state.profile.countryName} say the photo must not be digitally altered. Cleaning the background is your choice; when in doubt, retake against a plain wall.`;
   $("#bg-replace").checked = state.options.backgroundReplaced;
   const mode = (state.profile.background && state.profile.background.mode) || "white_or_off_white";
   const choices = BACKGROUND_CHOICES[mode] || BACKGROUND_CHOICES.white_or_off_white;
