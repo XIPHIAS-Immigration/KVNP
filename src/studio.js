@@ -3,9 +3,9 @@
    Talks to the same Python engine as the advanced studio; shows people a plain
    verdict and keeps the technical detail for admins. */
 
-import { RULE_PROFILES } from "./rules.js?v=pl-5";
-import { DEMO_PORTRAITS } from "./demo-library.js?v=pl-5";
-import { initCoach, analyzeFrame, coachAvailable } from "./capture.js?v=pl-5";
+import { RULE_PROFILES } from "./rules.js?v=pl-6";
+import { DEMO_PORTRAITS } from "./demo-library.js?v=pl-6";
+import { initCoach, analyzeFrame, coachAvailable } from "./capture.js?v=pl-6";
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -857,16 +857,19 @@ function openCropEditor() {
   const img = $("#ce-img");
   crop.src = { w: r.source.width, h: r.source.height };
   crop.box = { ...(r.crop || { x: 0, y: 0, width: r.source.width, height: r.source.height }) };
+  // live on <body> so no animated/transformed parent can trap the fixed overlay
+  if (editor.parentElement !== document.body) document.body.appendChild(editor);
   editor.hidden = false;
-  $("#adjust-controls").classList.add("dim");
-  img.onload = () => layoutCrop();
+  document.body.style.overflow = "hidden";
+  const relayout = () => requestAnimationFrame(() => requestAnimationFrame(layoutCrop));
+  img.onload = relayout;
   img.src = r.sourcePreviewDataUrl;
-  if (img.complete) layoutCrop();
+  if (img.complete) relayout();
   drawCropGuides();
 }
 function closeCropEditor() {
   $("#crop-editor").hidden = true;
-  $("#adjust-controls").classList.remove("dim");
+  document.body.style.overflow = "";
 }
 function applyCropEditor() {
   const b = crop.box;
@@ -878,11 +881,15 @@ function applyCropEditor() {
 function layoutCrop() {
   const stage = $("#ce-stage"), img = $("#ce-img");
   const sw = stage.clientWidth, sh = stage.clientHeight;
-  // leave room around the photo so the box can run past the edges (padded with the background)
-  const s = Math.min((sw * 0.8) / crop.src.w, (sh * 0.8) / crop.src.h);
+  // fit the photo AND the crop frame (which may run past the photo edges,
+  // padded with the background), with room to drag around them
+  const b = crop.box;
+  const minX = Math.min(0, b.x), minY = Math.min(0, b.y);
+  const maxX = Math.max(crop.src.w, b.x + b.width), maxY = Math.max(crop.src.h, b.y + b.height);
+  const s = Math.min((sw * 0.86) / (maxX - minX), (sh * 0.86) / (maxY - minY));
   crop.scale = s;
-  crop.ox = (sw - crop.src.w * s) / 2;
-  crop.oy = (sh - crop.src.h * s) / 2;
+  crop.ox = (sw - (maxX - minX) * s) / 2 - minX * s;
+  crop.oy = (sh - (maxY - minY) * s) / 2 - minY * s;
   Object.assign(img.style, { left: `${crop.ox}px`, top: `${crop.oy}px`, width: `${crop.src.w * s}px`, height: `${crop.src.h * s}px` });
   renderCropBox();
 }
@@ -895,12 +902,15 @@ function drawCropGuides() {
   const head = (state.profile && state.profile.head) || {};
   const top = Number(head.topMarginPercent || 10), target = Number(head.targetPercent || 70);
   const eye = head.eye;
+  // presentation attributes inline, so the guides stay thin lines even before the stylesheet loads
+  const line = 'stroke="#FFB500" stroke-width="1.5" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" fill="none"';
   $("#ce-guides").innerHTML = `
-    <line x1="50" y1="0" x2="50" y2="100" class="g-mid"/>
-    ${eye ? `<rect x="0" y="${eye.fromTopMinPercent}" width="100" height="${eye.fromTopMaxPercent - eye.fromTopMinPercent}" class="g-band"/><text x="2" y="${eye.fromTopMinPercent + 3}">EYES</text>` : ""}
-    <line x1="0" y1="${top}" x2="100" y2="${top}" class="g-line"/><text x="2" y="${Math.max(3, top - 1)}">TOP OF HEAD</text>
-    <line x1="0" y1="${top + target}" x2="100" y2="${top + target}" class="g-line"/><text x="2" y="${top + target - 1}">CHIN</text>
-    <ellipse cx="50" cy="${top + target / 2}" rx="${target * 0.33}" ry="${target / 2}" class="g-oval"/>`;
+    <line x1="50" y1="0" x2="50" y2="100" stroke="rgba(255,255,255,.4)" stroke-width="1" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"/>
+    ${eye ? `<rect x="0" y="${eye.fromTopMinPercent}" width="100" height="${eye.fromTopMaxPercent - eye.fromTopMinPercent}" fill="rgba(61,220,132,.14)" stroke="none"/>` : ""}
+    <line x1="0" y1="${top}" x2="100" y2="${top}" ${line}/>
+    <line x1="0" y1="${top + target}" x2="100" y2="${top + target}" ${line}/>
+    <ellipse cx="50" cy="${top + target / 2}" rx="${target * 0.33}" ry="${target / 2}" fill="none" stroke="rgba(255,255,255,.6)" stroke-width="1" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>`;
+  $("#ce-labels").innerHTML = `<span style="top:${top}%">Top of head</span>${eye ? `<span class="eye" style="top:${(eye.fromTopMinPercent + eye.fromTopMaxPercent) / 2}%">Eyes</span>` : ""}<span style="top:${top + target}%">Chin</span>`;
 }
 function cropFeedback() {
   const f = state.result && state.result.face, head = state.profile && state.profile.head;

@@ -312,6 +312,18 @@ def resolve_profile(client_profile):
 
 
 app = FastAPI(title="PassportLens")
+@app.middleware("http")
+async def revalidate_code_and_pages(request, call_next):
+    """Make browsers re-check scripts, styles and pages on every visit (a cheap
+    304 when unchanged), so a deploy is never half-applied by a stale cache."""
+    response = await call_next(request)
+    path = request.url.path
+    if path.startswith("/src/") or path.endswith(".html") or "." not in path.rsplit("/", 1)[-1]:
+        if "cache-control" not in response.headers:
+            response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 app.mount("/src", StaticFiles(directory=ROOT / "src"), name="src")
 app.mount("/assets", StaticFiles(directory=ROOT / "assets"), name="assets")
 app.mount("/screenshots", StaticFiles(directory=ROOT / "screenshots"), name="screenshots")
