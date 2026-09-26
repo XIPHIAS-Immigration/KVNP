@@ -217,12 +217,19 @@ function bindGlobal() {
   });
   $("#rotate").addEventListener("input", () => {
     state.options.rotate = Number($("#rotate").value);
-    // head position is measured in the rotated frame, so a new angle resets it
+    // head position / crop are measured in the rotated frame, so a new angle resets them
     state.options.manualFace = null;
+    state.options.manualCrop = null;
     $("#rotate-value").textContent = formatDegrees(state.options.rotate);
   });
   $$("[data-nudge]").forEach((btn) => btn.addEventListener("click", () => nudge(btn.dataset.nudge)));
   $("#adjust-apply").addEventListener("click", () => runProcess({ stay: 4 }));
+  $("#crop-open").addEventListener("click", openCropEditor);
+  $("#ce-cancel").addEventListener("click", closeCropEditor);
+  $("#ce-auto").addEventListener("click", () => { state.options.manualCrop = null; state.options.manualFace = null; closeCropEditor(); runProcess({ stay: 4 }); });
+  $("#ce-apply").addEventListener("click", applyCropEditor);
+  $("#fix-crop-btn").addEventListener("click", () => { goStep(4); setTimeout(openCropEditor, 350); });
+  bindCropEditor();
   $("#adjust-reset").addEventListener("click", () => { resetOptions(); renderAdjustControls(); runProcess({ stay: 4 }); });
 
   // download
@@ -438,6 +445,7 @@ function resetOptions() {
     brightness: 0,
     rotate: 0,
     manualFace: null,
+    manualCrop: null,
   };
 }
 
@@ -584,6 +592,7 @@ function buildOptions() {
     enhanceOutput: false,
   };
   if (state.options.manualFace) options.manualFace = state.options.manualFace;
+  if (state.options.manualCrop) options.manualCrop = state.options.manualCrop;
   return options;
 }
 
@@ -694,9 +703,13 @@ function renderResult(data) {
   const list = $("#verdict-reasons");
   list.innerHTML = uniq(reasons).slice(0, 4).map((r, i) => `<li style="--i:${i}">${escapeHtml(r)}</li>`).join("");
   list.hidden = !reasons.length;
+  const FRAMING = new Set(["top_margin", "shoulder_framing", "head_size", "head_center"]);
+  $("#fix-crop").hidden = level === "ok" || ![...failing, ...warnings].some((c) => FRAMING.has(c.id));
   const confirmBox = $("#verdict-confirm");
   const confirmList = $("#verdict-confirm-list");
-  const humanItems = humans.map((c) => HUMAN_LABELS[c.id] || c.label).filter(Boolean);
+  const sentence = (t) => { t = String(t || "").trim(); return t ? t.charAt(0).toUpperCase() + t.slice(1).toLowerCase() : ""; };
+  let humanItems = uniq(humans.map((c) => HUMAN_LABELS[c.id] || sentence(c.label)).filter(Boolean));
+  humanItems = humanItems.filter((t) => !humanItems.some((o) => o !== t && o.toLowerCase().includes(t.toLowerCase())));
   confirmBox.hidden = !humanItems.length || level === "bad";
   confirmList.innerHTML = humanItems.map((t) => `<li>${escapeHtml(t)}</li>`).join("");
 
@@ -830,7 +843,114 @@ function nudge(direction) {
   if (direction === "bigger") face.headHeight *= 1.04;
   if (direction === "smaller") face.headHeight *= 0.96;
   state.options.manualFace = face;
+  state.options.manualCrop = null;
   runProcess({ stay: 4 });
+}
+
+/* ---------- manual crop editor ---------- */
+const crop = { box: null, scale: 1, src: null, drag: null };
+
+function openCropEditor() {
+  const r = state.result;
+  if (!r || !r.sourcePreviewDataUrl) return;
+  const editor = $("#crop-editor");
+  const img = $("#ce-img");
+  crop.src = { w: r.source.width, h: r.source.height };
+  crop.box = { ...(r.crop || { x: 0, y: 0, width: r.source.width, height: r.source.height }) };
+  editor.hidden = false;
+  $("#adjust-controls").classList.add("dim");
+  img.onload = () => layoutCrop();
+  img.src = r.sourcePreviewDataUrl;
+  if (img.complete) layoutCrop();
+  drawCropGuides();
+}
+function closeCropEditor() {
+  $("#crop-editor").hidden = true;
+  $("#adjust-controls").classList.remove("dim");
+}
+function applyCropEditor() {
+  const b = crop.box;
+  state.options.manualCrop = { x: Math.round(b.x), y: Math.round(b.y), width: Math.round(b.width), height: Math.round(b.height) };
+  state.options.manualFace = null;
+  closeCropEditor();
+  runProcess({ stay: 4 });
+}
+function layoutCrop() {
+  const stage = $("#ce-stage"), img = $("#ce-img");
+  const sw = stage.clientWidth, sh = stage.clientHeight;
+  // leave room around the photo so the box can run past the edges (padded with the background)
+  const s = Math.min((sw * 0.8) / crop.src.w, (sh * 0.8) / crop.src.h);
+  crop.scale = s;
+  crop.ox = (sw - crop.src.w * s) / 2;
+  crop.oy = (sh - crop.src.h * s) / 2;
+  Object.assign(img.style, { left: `${crop.ox}px`, top: `${crop.oy}px`, width: `${crop.src.w * s}px`, height: `${crop.src.h * s}px` });
+  renderCropBox();
+}
+function renderCropBox() {
+  const b = crop.box, s = crop.scale, el = $("#ce-box");
+  Object.assign(el.style, { left: `${crop.ox + b.x * s}px`, top: `${crop.oy + b.y * s}px`, width: `${b.width * s}px`, height: `${b.height * s}px` });
+  cropFeedback();
+}
+function drawCropGuides() {
+  const head = (state.profile && state.profile.head) || {};
+  const top = Number(head.topMarginPercent || 10), target = Number(head.targetPercent || 70);
+  const eye = head.eye;
+  $("#ce-guides").innerHTML = `
+    <line x1="50" y1="0" x2="50" y2="100" class="g-mid"/>
+    ${eye ? `<rect x="0" y="${eye.fromTopMinPercent}" width="100" height="${eye.fromTopMaxPercent - eye.fromTopMinPercent}" class="g-band"/><text x="2" y="${eye.fromTopMinPercent + 3}">EYES</text>` : ""}
+    <line x1="0" y1="${top}" x2="100" y2="${top}" class="g-line"/><text x="2" y="${Math.max(3, top - 1)}">TOP OF HEAD</text>
+    <line x1="0" y1="${top + target}" x2="100" y2="${top + target}" class="g-line"/><text x="2" y="${top + target - 1}">CHIN</text>
+    <ellipse cx="50" cy="${top + target / 2}" rx="${target * 0.33}" ry="${target / 2}" class="g-oval"/>`;
+}
+function cropFeedback() {
+  const f = state.result && state.result.face, head = state.profile && state.profile.head;
+  if (!f || !head) return;
+  const b = crop.box;
+  const headPct = (f.headHeight / b.height) * 100;
+  const topPct = ((f.centerY - f.headHeight / 2 - b.y) / b.height) * 100;
+  const ok = headPct >= head.minPercent && headPct <= head.maxPercent;
+  const topOk = topPct >= 1 && topPct <= (head.eye ? 20 : Number(head.topMarginPercent) + 7);
+  $("#ce-feedback").innerHTML = `<span class="${ok ? "ok" : "bad"}">Head ${headPct.toFixed(0)}% <small>(allowed ${head.minPercent}–${head.maxPercent}%)</small></span><span class="${topOk ? "ok" : "bad"}">Space above head ${Math.max(0, topPct).toFixed(0)}%</span>`;
+}
+function bindCropEditor() {
+  const box = $("#ce-box"), stage = $("#ce-stage");
+  const aspect = () => state.profile.output.widthPx / state.profile.output.heightPx;
+  box.addEventListener("pointerdown", (e) => {
+    const handle = e.target.closest("[data-h]");
+    crop.drag = { mode: handle ? handle.dataset.h : "move", x: e.clientX, y: e.clientY, start: { ...crop.box } };
+    try { box.setPointerCapture(e.pointerId); } catch (err) {}
+    e.preventDefault();
+  });
+  box.addEventListener("pointermove", (e) => {
+    const d = crop.drag;
+    if (!d) return;
+    const dx = (e.clientX - d.x) / crop.scale, dy = (e.clientY - d.y) / crop.scale;
+    const s0 = d.start, b = { ...s0 };
+    if (d.mode === "move") { b.x = s0.x + dx; b.y = s0.y + dy; }
+    else {
+      // resize from a corner, the opposite corner stays put, shape stays locked
+      const sx = d.mode.includes("l") ? -1 : 1, sy = d.mode.includes("t") ? -1 : 1;
+      let w = Math.max(40, s0.width + Math.max(sx * dx, sy * dy * aspect()));
+      const h = w / aspect();
+      b.width = w; b.height = h;
+      b.x = sx < 0 ? s0.x + s0.width - w : s0.x;
+      b.y = sy < 0 ? s0.y + s0.height - h : s0.y;
+    }
+    crop.box = b;
+    renderCropBox();
+  });
+  const end = () => { crop.drag = null; };
+  box.addEventListener("pointerup", end);
+  box.addEventListener("pointercancel", end);
+  stage.addEventListener("wheel", (e) => {
+    if ($("#crop-editor").hidden) return;
+    e.preventDefault();
+    const b = crop.box, k = e.deltaY > 0 ? 1.04 : 0.96;
+    const cx = b.x + b.width / 2, cy = b.y + b.height / 2;
+    b.width *= k; b.height *= k; b.x = cx - b.width / 2; b.y = cy - b.height / 2;
+    renderCropBox();
+  }, { passive: false });
+  addEventListener("resize", () => { if (!$("#crop-editor").hidden) layoutCrop(); });
 }
 
 /* ---------- step 5 ---------- */

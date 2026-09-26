@@ -1708,6 +1708,10 @@ def process_image(image_bytes, profile, options):
     # source; otherwise the crop must fit within the source pixels.
     can_pad = replace_background and matte is not None
     crop = calculate_crop(width, height, face, profile, allow_pad=can_pad)
+    manual_crop = parse_manual_crop(options.get("manualCrop"), profile, width, height, can_pad)
+    if manual_crop:
+        crop = manual_crop
+        corrections.append({"id": "manual_crop", "label": "Crop", "detail": "framed by hand", "applied": True})
 
     if replace_background and matte is not None:
         background_cleanup = str(options.get("backgroundCleanup") or "balanced")
@@ -1844,6 +1848,7 @@ def process_image(image_bytes, profile, options):
         "finalDataUrl": data_url(final_bytes, "image/jpeg"),
         "beforeDataUrl": data_url(before_bytes, "image/jpeg"),
         "overlayDataUrl": data_url(overlay_bytes, "image/jpeg"),
+        "sourcePreviewDataUrl": data_url(encode_jpeg_bytes(preview_downscale(source, 1100), 82), "image/jpeg"),
         "face": face,
         "crop": crop,
         "sourceQuality": source_quality,
@@ -2073,6 +2078,43 @@ def refine_head_from_matte(face, mask, width, height, measure="chin_to_top_of_he
 # Share of the photo that must stay below the chin (neck + tips of the
 # shoulders) when placing the head; see calculate_crop.
 MIN_BELOW_CHIN = 0.14
+
+
+def preview_downscale(image, max_side):
+    image = ensure_bgr(image)
+    h, w = image.shape[:2]
+    scale = min(1.0, max_side / float(max(h, w)))
+    if scale >= 1.0:
+        return image
+    return cv2.resize(image, (int(round(w * scale)), int(round(h * scale))), interpolation=cv2.INTER_AREA)
+
+
+def parse_manual_crop(value, profile, width, height, allow_pad):
+    """Validate a hand-drawn crop box. The aspect ratio is forced to the
+    programme's output, the box must overlap the photo, and it may only run
+    past the photo edges when the background is replaced (padded with it)."""
+    if not isinstance(value, dict):
+        return None
+    try:
+        x, y, w = float(value["x"]), float(value["y"]), float(value["width"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not all(math.isfinite(v) for v in (x, y, w)):
+        return None
+    aspect = profile["output"]["widthPx"] / profile["output"]["heightPx"]
+    w = clamp(w, 24.0, max(width, height) * 2.0)
+    h = w / aspect
+    if not allow_pad:
+        if w > width:
+            w = float(width); h = w / aspect
+        if h > height:
+            h = float(height); w = h * aspect
+        x = clamp(x, 0, width - w)
+        y = clamp(y, 0, height - h)
+    else:
+        x = clamp(x, -w * 0.9, width - w * 0.1)
+        y = clamp(y, -h * 0.9, height - h * 0.1)
+    return {"x": round(x, 2), "y": round(y, 2), "width": round(w, 2), "height": round(h, 2), "padded": bool(allow_pad), "manual": True}
 
 
 def calculate_crop(width, height, face, profile, allow_pad=False):
@@ -4235,6 +4277,8 @@ def build_checks(face, crop, profile, stats, background_stats_result, output_byt
     target_shoulder_room = 100.0 - float(profile["head"]["topMarginPercent"]) - float(profile["head"]["targetPercent"])
     shoulder_delta = shoulder_room - target_shoulder_room
     shoulder_status = threshold_status(abs(shoulder_delta), 8.0, 12.0)
+    if profile["head"].get("eye"):
+        shoulder_status = "pass" if 10.0 <= shoulder_room <= 42.0 else "warning"
     if shoulder_room < 6:
         shoulder_status = "fail"
     if shoulder_delta > 8:
@@ -4260,8 +4304,12 @@ def build_checks(face, crop, profile, stats, background_stats_result, output_byt
     # a derived value (eye line + head size fix it), so a tight-but-legal margin is
     # reported as a warning, never a hard fail. eye_level is the check that governs.
     top_margin_status = threshold_status(abs(top_margin - profile["head"]["topMarginPercent"]), 6, 9)
-    if profile["head"].get("eye") and top_margin_status == "fail":
-        top_margin_status = "warning"
+    if profile["head"].get("eye"):
+        # Eye-height programmes (US): the eye line and head size are the rules;
+        # the space above the head only has to keep the whole head in frame.
+        top_margin_status = "pass" if 1.0 <= top_margin <= 20.0 else ("warning" if top_margin > -2.0 else "fail")
+    elif top_margin < 0:
+        top_margin_status = "fail"  # the top of the head is cut off
     edit_risk_status = "pass"
     edit_risk_value = "crop/format only" if not processed else "processing applied"
     edit_risk_target = "allowed adjustments"
