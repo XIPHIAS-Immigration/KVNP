@@ -1600,11 +1600,26 @@ def process_image(image_bytes, profile, options):
     # Detect on the ORIGINAL capture first. Capture-quality gates (pose, lighting,
     # focus, clipping) must reflect the photo as taken, never the corrected
     # artifact - otherwise a retake-worthy capture could be marked "ready".
-    mp_image, landmarks, face = detect_face(original_source)
+    zoomed = False
+    try:
+        mp_image, landmarks, face = detect_face(original_source)
+    except ValueError as error:
+        if "No face" not in str(error):
+            raise
+        # Face too small to find: the photo was taken from a distance (standing
+        # or sitting). Locate the person, zoom to the head and carry on.
+        cropped, detection = zoom_to_person(original_source)
+        if cropped is None:
+            raise
+        original_source = cropped
+        mp_image, landmarks, face = detection
+        zoomed = True
     original_face = dict(face)
     posture = measure_pose_posture(original_source, original_face)
 
     source = original_source
+    if zoomed:
+        corrections.append({"id": "auto_zoom", "label": "Auto-crop", "detail": "found the face in a distant photo and zoomed in", "applied": True})
     if do_tone:
         source, tone_corrections = auto_tone_correct(source, landmarks=landmarks)
         corrections.extend(tone_corrections)
@@ -2055,6 +2070,11 @@ def refine_head_from_matte(face, mask, width, height, measure="chin_to_top_of_he
     return refined
 
 
+# Share of the photo that must stay below the chin (neck + tips of the
+# shoulders) when placing the head; see calculate_crop.
+MIN_BELOW_CHIN = 0.14
+
+
 def calculate_crop(width, height, face, profile, allow_pad=False):
     aspect = profile["output"]["widthPx"] / profile["output"]["heightPx"]
     target_head_ratio = profile["head"]["targetPercent"] / 100
@@ -2083,8 +2103,21 @@ def calculate_crop(width, height, face, profile, allow_pad=False):
                 # clip: keep at least a sliver of margin above the top of the head.
                 top = min(top, visible_top - ch * 0.015)
             return top
-        top = head_top - ch * (profile["head"]["topMarginPercent"] / 100)
-        return min(top, visible_top - ch * 0.015)
+        margin = profile["head"]["topMarginPercent"] / 100
+        top = head_top - ch * margin
+        # Hair above the crown: keep it in frame when there is room, but never
+        # let it push the chin down so far that the neck and the tips of the
+        # shoulders disappear. Tight formats (35 x 45 mm: head ~74%, margin ~8%)
+        # only have a few percent to spare, so voluminous hair may touch or run
+        # off the top edge - the head itself (chin to crown) is what the rules
+        # measure. Roomy formats (Canada 50 x 70 mm) still show all the hair.
+        head_ratio = face["headHeight"] / max(1.0, ch)
+        spare = max(0.0, 1.0 - margin - head_ratio - MIN_BELOW_CHIN)
+        if spare < 0.2:
+            # tight format: also keep the top margin inside its pass band
+            spare = min(spare, 0.055)
+        hair_top = visible_top - ch * 0.015
+        return min(top, max(hair_top, top - ch * spare))
 
     crop_x = face["centerX"] - crop_width / 2
     crop_y = vertical_top(crop_height)
@@ -2158,6 +2191,52 @@ def detect_face(source_bgr):
     matrices = result.facial_transformation_matrixes or []
     face = measure_face(landmarks, len(faces), matrices[0] if matrices else None)
     return mp_image, landmarks, face
+
+
+def zoom_to_person(source_bgr):
+    """Find a face that is too small to detect (photo taken standing or sitting
+    at a distance) by locating the person first, then cropping around the head.
+
+    Returns ``(cropped_image, detection)`` or ``(None, None)``. The body-pose
+    model finds the nose, ears and shoulders even when the face is tiny; the
+    crop keeps generous room around the head so the normal framing step can
+    still place the head and the tips of the shoulders to the programme's rule.
+    Falls back to a few upper-centre crops when no body is found.
+    """
+    image = ensure_bgr(source_bgr)
+    height, width = image.shape[:2]
+    boxes = []
+    if pose_landmarker is not None:
+        try:
+            with MP_LOCK:
+                result = pose_landmarker.detect(build_mp_image(image))
+            poses = result.pose_landmarks or []
+            if poses:
+                pts = poses[0]
+                nose = pts[0]
+                ear_w = abs(pts[7].x - pts[8].x) * width
+                sh_w = abs(pts[11].x - pts[12].x) * width
+                head = max(ear_w * 2.2, sh_w * 0.75, width * 0.04)
+                box_h = head * 4.2
+                box_w = box_h * 0.78
+                cx, cy = nose.x * width, nose.y * height + head * 0.35
+                boxes.append((cx - box_w / 2, cy - box_h * 0.45, box_w, box_h))
+        except Exception:
+            traceback.print_exc()
+    for fx, fy, fw, fh in ((0.2, 0.0, 0.6, 0.6), (0.3, 0.0, 0.4, 0.42), (0.1, 0.05, 0.8, 0.8)):
+        boxes.append((width * fx, height * fy, width * fw, height * fh))
+    for x, y, w, h in boxes:
+        x1, y1 = int(max(0, x)), int(max(0, y))
+        x2, y2 = int(min(width, x + w)), int(min(height, y + h))
+        if x2 - x1 < 64 or y2 - y1 < 64:
+            continue
+        crop = image[y1:y2, x1:x2].copy()
+        try:
+            detection = detect_face(crop)
+        except ValueError:
+            continue
+        return crop, detection
+    return None, None
 
 
 def measure_pose_posture(source_bgr, face):

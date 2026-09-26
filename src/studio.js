@@ -717,6 +717,7 @@ function renderResult(data) {
   if (edits.lighting) applied.push("lighting evened");
   if ((data.corrections || []).some((c) => c.id === "brightness")) applied.push("brightness adjusted");
   if ((data.corrections || []).some((c) => c.id === "rotate")) applied.push("rotated");
+  if ((data.corrections || []).some((c) => c.id === "auto_zoom")) applied.push("zoomed in on the face");
   $("#edits-note").textContent = applied.length ? `Applied: ${applied.join(", ")}. The face itself was not changed.` : "Only cropped and resized. The face itself was not changed.";
   const downloadButton = $("#to-download");
   downloadButton.disabled = false;
